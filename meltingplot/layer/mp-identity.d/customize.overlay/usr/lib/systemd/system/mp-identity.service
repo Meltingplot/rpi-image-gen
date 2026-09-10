@@ -1,0 +1,16 @@
+[Unit]
+Description=Apply Meltingplot device commissioning from the boot partition
+Documentation=file:///etc/meltingplot/device.conf
+DefaultDependencies=no
+After=persistent.mount machine-id-sync.service
+RequiresMountsFor=/bootfs /persistent /home
+Before=mp-hostname.service sysinit.target
+ConditionPathExists=/persistent/common/etc
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/mp-identity
+
+[Install]
+WantedBy=sysinit.target

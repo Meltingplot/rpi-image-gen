@@ -1,0 +1,118 @@
+# Plugin policy for DuetSoftwareFramework.
+#
+# The printer ships with the plugins Meltingplot put in the image. A plugin
+# installed later may extend Duet Web Control, but it must never run code on
+# the machine: this is a CE-marked printer and everything that executes on it
+# has to be part of a released, documented image.
+#
+# DuetSoftwareFramework has no setting for that. PluginSupport is all or
+# nothing and DisablePluginInstallations blocks web-only plugins too, so the
+# distinction is drawn here instead. An SBC plugin is started by
+# DuetPluginService either directly, or, for Python, as
+#
+#     /bin/bash -c "<plugin>/venv/bin/python <script>"
+#
+# so both paths lead through this profile:
+#
+#   DuetPluginService  may execute nothing that lives on writable storage, and
+#                      reaches a shell only by entering dsf_launcher
+#   dsf_launcher       may execute nothing but a Python interpreter, which
+#                      enters dsf_plugin_py
+#   dsf_plugin_py      may read the plugins the image shipped and nothing
+#                      else, so a plugin installed later cannot read its own
+#                      code, and may execute nothing at all
+#
+# The parent profile is deliberately broad: confining our own .NET service file
+# by file would buy nothing, and the only question this profile answers is what
+# may be executed. The two child profiles carry the policy, and they work by
+# listing what is allowed - anything not named is denied. Blanket deny rules
+# are avoided on purpose, because in AppArmor a deny always beats an allow and
+# would take the exec transitions with it.
+#
+# Denials appear as apparmor="DENIED" in `journalctl -k`. Build with
+# dsf.plugin_policy=complain to log them without acting on them, which is how
+# to widen these lists for a new bundled plugin.
+
+include <tunables/global>
+
+profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnected__MP_MODE__) {
+  include <abstractions/base>
+  include <abstractions/nameservice>
+
+  capability,
+  network,
+  unix,
+  signal,
+  dbus,
+  ptrace,
+  file,
+
+  # Nothing on writable storage is ever executed. Unpacking a plugin is
+  # allowed; running it is not.
+  deny /opt/dsf/** x,
+  deny /persistent/** x,
+  deny /home/** x,
+  deny /tmp/** x,
+  deny /var/** x,
+
+  # The one way to a shell, and only to start a Python plugin.
+  /{usr/,}bin/bash Cx -> dsf_launcher,
+  /{usr/,}bin/sh    Cx -> dsf_launcher,
+  /{usr/,}bin/dash  Cx -> dsf_launcher,
+
+  profile dsf_launcher flags=(attach_disconnected__MP_MODE__) {
+    include <abstractions/base>
+    include <abstractions/nameservice>
+
+    signal,
+    unix,
+
+    /{usr/,}bin/{bash,sh,dash} rm,
+    /usr/lib/@{multiarch}/** mr,
+    /usr/share/** r,
+    /etc/** r,
+    @{PROC}/ r,
+    @{PROC}/** r,
+    /opt/dsf/** r,
+    /persistent/** r,
+    owner /tmp/** rw,
+
+    # The only program a plugin launcher may start.
+    /usr/bin/python3* Cx -> dsf_plugin_py,
+  }
+
+  # The plugin itself. Everything it may touch is listed; anything absent is
+  # denied, which is what stops a plugin the image did not ship. There is no
+  # exec rule at all, so a plugin can never start another program.
+  profile dsf_plugin_py flags=(attach_disconnected__MP_MODE__) {
+    include <abstractions/base>
+    include <abstractions/nameservice>
+
+    signal (receive, send) peer=@{profile_name},
+
+    /usr/bin/python3* rm,
+    /usr/lib/python3*/** mr,
+    /usr/lib/@{multiarch}/** mr,
+    /usr/share/** r,
+    /etc/** r,
+    @{PROC}/ r,
+    @{PROC}/** r,
+    /sys/class/** r,
+    /sys/devices/** r,
+    /sys/firmware/devicetree/** r,
+
+    # Plugins that came with the image. One block per bundled plugin; a plugin
+    # installed later has no block here and cannot read its own files.
+    /opt/dsf/plugins/Vigil.json r,
+    /opt/dsf/plugins/Vigil/** mr,
+
+    # Its own data on the virtual SD card, and the control server socket.
+    /opt/dsf/sd/Vigil/ rw,
+    /opt/dsf/sd/Vigil/** rwk,
+    /run/dsf/ r,
+    /run/dsf/* rw,
+    unix (connect, send, receive) type=stream,
+
+    owner /tmp/** rw,
+  }
+}

@@ -1,0 +1,51 @@
+#!/bin/sh
+# Set the hostname from the printer's display name.
+#
+# /etc/hostname sits on the read-only root, so the hostname is established on
+# every boot instead of being stored. It has to agree with the M550 machine
+# name: DuetControlServer compares the letters and digits of both and refuses
+# the name otherwise. The display name therefore wins, and the hostname is
+# derived from it.
+
+set -eu
+
+MP_TAG=mp-hostname
+. /usr/lib/meltingplot/mp-common.sh
+
+name=$(mp_read_printer_name "$MP_PRINTER_NAME_FILE")
+source=printer-name.g
+
+if [ -z "$name" ] && [ -r "$MP_IDENTITY_FILE" ]; then
+   # shellcheck source=/dev/null
+   . "$MP_IDENTITY_FILE"
+   if [ -n "${PRINTER_NAME:-}" ]; then
+      name=$PRINTER_NAME
+      source=mp-identity
+   elif [ -n "${PRINTER_SERIAL:-}" ]; then
+      name=$(mp_default_name "$PRINTER_SERIAL")
+      source=serial
+   fi
+fi
+
+if [ -z "$name" ]; then
+   name=$(mp_fallback_name)
+   source=fallback
+fi
+
+host=$(mp_slug "$name")
+[ -n "$host" ] || {
+   host=$(mp_slug "$(mp_fallback_name)")
+   source=fallback
+}
+
+hostname "$host"
+mp_log "hostname $host (from $source)"
+
+# Only a convenience copy for anything that reads /etc/hostname style state;
+# nothing derives the hostname from it.
+if [ -d "$(dirname "$MP_HOSTNAME_CACHE")" ]; then
+   printf '%s\n' "$host" > "${MP_HOSTNAME_CACHE}.tmp" 2>/dev/null &&
+      mv -f "${MP_HOSTNAME_CACHE}.tmp" "$MP_HOSTNAME_CACHE" 2>/dev/null || true
+fi
+
+exit 0

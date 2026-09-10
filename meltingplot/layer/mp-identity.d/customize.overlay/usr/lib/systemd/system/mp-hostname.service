@@ -1,0 +1,14 @@
+[Unit]
+Description=Set the hostname from the printer name
+DefaultDependencies=no
+After=persistent.mount mp-identity.service
+RequiresMountsFor=/persistent
+Before=network-pre.target systemd-networkd.service systemd-hostnamed.service avahi-daemon.service sysinit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/mp-hostname
+
+[Install]
+WantedBy=sysinit.target

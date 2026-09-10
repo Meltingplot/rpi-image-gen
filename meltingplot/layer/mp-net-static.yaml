@@ -1,0 +1,85 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-net-static
+# X-Env-Layer-Category: connectivity
+# X-Env-Layer-Desc: Static wired networking for a printer SBC that sits behind
+#  the HMI Pi on a dedicated VLAN. Fixed address on eth0, HMI as gateway, DNS
+#  and NTP source, wifi and bluetooth switched off in firmware.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: systemd-net-min,systemd-timesyncd,rpi-boot-firmware
+# X-Env-Layer-AfterProvider: device
+#
+# X-Env-VarPrefix: mpnet
+#
+# X-Env-Var-address: 10.42.0.2/24
+# X-Env-Var-address-Desc: Address and prefix length of the wired interface, in
+#  CIDR notation, as used by systemd.network Address=.
+# X-Env-Var-address-Required: n
+# X-Env-Var-address-Valid: regex:^[0-9]+(\.[0-9]+){3}/[0-9]{1,2}$
+# X-Env-Var-address-Set: y
+#
+# X-Env-Var-gateway: 10.42.0.1
+# X-Env-Var-gateway-Desc: Default gateway, normally the HMI Pi.
+# X-Env-Var-gateway-Required: n
+# X-Env-Var-gateway-Valid: regex:^[0-9]+(\.[0-9]+){3}$
+# X-Env-Var-gateway-Set: y
+#
+# X-Env-Var-dns: 10.42.0.1
+# X-Env-Var-dns-Desc: DNS server, normally the HMI Pi.
+# X-Env-Var-dns-Required: n
+# X-Env-Var-dns-Valid: regex:^[0-9]+(\.[0-9]+){3}$
+# X-Env-Var-dns-Set: y
+#
+# X-Env-Var-ntp: 10.42.0.1
+# X-Env-Var-ntp-Desc: NTP server for systemd-timesyncd, normally the HMI Pi.
+#  The printer has no RTC, so a reachable time source matters for logs and TLS.
+# X-Env-Var-ntp-Required: n
+# X-Env-Var-ntp-Valid: regex:^[0-9]+(\.[0-9]+){3}$
+# X-Env-Var-ntp-Set: y
+#
+# X-Env-Var-iface: eth0
+# X-Env-Var-iface-Desc: Name of the wired interface to configure.
+# X-Env-Var-iface-Required: n
+# X-Env-Var-iface-Valid: string
+# X-Env-Var-iface-Set: y
+# METAEND
+---
+mmdebstrap:
+  customize-hooks:
+    # rpi-device-base drops a DHCP .network for eth0 and wlan0 via netgen.
+    # AfterProvider: device puts us behind it, so we replace its output.
+    - |-
+      set -eu
+      install -d -m 0755 "$1/etc/systemd/network"
+      rm -f "$1/etc/systemd/network/02-wlan0.network"
+      cat > "$1/etc/systemd/network/01-${IGconf_mpnet_iface}.network" <<-EOF
+      [Match]
+      Name=${IGconf_mpnet_iface}
+
+      [Network]
+      Address=${IGconf_mpnet_address}
+      Gateway=${IGconf_mpnet_gateway}
+      DNS=${IGconf_mpnet_dns}
+      IPv6AcceptRA=no
+      LinkLocalAddressing=no
+
+      [Link]
+      RequiredForOnline=routable
+      EOF
+    - |-
+      set -eu
+      install -d -m 0755 "$1/etc/systemd/timesyncd.conf.d"
+      cat > "$1/etc/systemd/timesyncd.conf.d/mp-net-static.conf" <<-EOF
+      [Time]
+      NTP=${IGconf_mpnet_ntp}
+      EOF
+    # No radios on the printer SBC. The firmware overlays keep the interfaces
+    # from ever appearing, which is stronger than an rfkill at runtime.
+    - |-
+      set -eu
+      cat >> "$1/boot/firmware/config.txt" <<-EOF
+
+      # Meltingplot: printer SBC is wired only
+      [all]
+      dtoverlay=disable-wifi
+      dtoverlay=disable-bt
+      EOF

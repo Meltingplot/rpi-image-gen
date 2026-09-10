@@ -1,0 +1,62 @@
+#!/bin/sh
+# Change the name this printer shows in Duet Web Control and on the PanelDue.
+#
+#   sudo mp-set-printer-name "Halle 2 links"
+#
+# The same name becomes the Linux hostname, because DuetControlServer only
+# accepts an M550 name whose letters and digits match the hostname. The name
+# lives on persistent storage and is never overwritten by an image update.
+
+set -eu
+
+MP_TAG=mp-set-printer-name
+. /usr/lib/meltingplot/mp-common.sh
+
+usage() {
+   cat >&2 <<EOF
+usage: mp-set-printer-name "<name>"
+
+Letters, digits, spaces and dashes, at most 40 characters.
+Currently: $(mp_read_printer_name "$MP_PRINTER_NAME_FILE" || true)
+EOF
+   exit 2
+}
+
+[ $# -eq 1 ] || usage
+name=$1
+
+mp_valid_printer_name "$name" || {
+   mp_log "'$name' is not usable"
+   usage
+}
+
+[ "$(id -u)" -eq 0 ] || mp_die "must run as root"
+
+host=$(mp_slug "$name")
+
+dir=$(dirname "$MP_PRINTER_NAME_FILE")
+[ -d "$(dirname "$dir")" ] || mp_die "$dir is not available: is /persistent mounted?"
+install -d -m 2770 "$dir"
+
+cat > "${MP_PRINTER_NAME_FILE}.tmp" <<EOF
+; Printer name, shown by Duet Web Control and the PanelDue.
+; Also the source of the Linux hostname, which must agree with it.
+; Change it with: sudo mp-set-printer-name "<name>"
+M550 P"$name"
+EOF
+mv -f "${MP_PRINTER_NAME_FILE}.tmp" "$MP_PRINTER_NAME_FILE"
+chown dsf:dsf "$MP_PRINTER_NAME_FILE" 2>/dev/null || true
+chmod 0660 "$MP_PRINTER_NAME_FILE"
+
+hostname "$host"
+
+cat <<EOF
+Printer name set to "$name", hostname is now $host.
+
+The name reaches RepRapFirmware when the machine configuration is read again.
+Restart the Duet Control Server when the printer is idle:
+
+    sudo systemctl restart duetcontrolserver
+
+or simply reboot. Do not do this during a print.
+EOF

@@ -1,0 +1,33 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-duet-hw
+# X-Env-Layer-Category: device
+# X-Env-Layer-Desc: Raspberry Pi side of the SPI link to a Duet 3 mainboard,
+#  as DuetPi configures it: SPI enabled, a spidev buffer large enough for the
+#  DSF transfer size, and an immediate reboot on kernel panic so a printer does
+#  not sit dead. Also turns on AppArmor, which the plugin policy relies on.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: rpi-boot-firmware
+# X-Env-Layer-RequiresProvider: hw:device:rpi:pi5
+# METAEND
+---
+mmdebstrap:
+  packages:
+    # gpioinfo/gpioget, for checking the transfer ready pin on a bench
+    - gpiod
+  customize-hooks:
+    - |-
+      set -eu
+      cfg="$1/boot/firmware/config.txt"
+      sed -i 's/^#dtparam=spi=on/dtparam=spi=on/' "$cfg"
+      grep -qE '^dtparam=spi=on' "$cfg" || printf '\ndtparam=spi=on\n' >> "$cfg"
+    # AppArmor confines DuetPluginService so third party plugins cannot run
+    # code on the printer. The LSM has to be selected on the kernel command
+    # line; the slot post-processing only rewrites root=, so this survives.
+    - |-
+      set -eu
+      cmdline="$1/boot/firmware/cmdline.txt"
+      if ! grep -q 'lsm=apparmor' "$cmdline"; then
+        sed -i 's/\brootwait\b/lsm=apparmor rootwait/' "$cmdline"
+      fi
+      grep -q 'lsm=apparmor' "$cmdline" ||
+        { echo "mp-duet-hw: could not add lsm=apparmor to cmdline.txt" >&2; exit 1; }

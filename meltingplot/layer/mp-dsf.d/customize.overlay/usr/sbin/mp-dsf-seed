@@ -1,0 +1,100 @@
+#!/bin/sh
+# Put the machine-owned part of the DSF configuration in place, once.
+#
+# Everything the image ships below /opt/dsf/sd is pushed over the device's copy
+# on every boot, which is how an update reaches the printer configuration.
+# Files that belong to the machine must not work that way: calibration results,
+# per-material tuning and the printer name have to survive an update and a
+# rollback. Those are kept out of the image and created here if they are
+# missing. Nothing here ever overwrites an existing file.
+#
+# The bundled Vigil plugin is handled the same way, except that it is replaced
+# when the image carries a newer version, because the plugin is part of the
+# release rather than machine state.
+
+set -eu
+
+MP_TAG=mp-dsf-seed
+. /usr/lib/meltingplot/mp-common.sh
+
+SKEL=/usr/share/meltingplot/dsf-skel
+DSF=/opt/dsf
+
+[ -d "$SKEL" ] || { mp_log "no seed skeleton, nothing to do"; exit 0; }
+
+# --- machine-owned configuration -----------------------------------------
+
+if [ -d "$SKEL/sd" ]; then
+   cp -a --no-clobber "$SKEL/sd/." "$DSF/sd/" 2>/dev/null || true
+fi
+if [ -d "$SKEL/conf" ]; then
+   cp -a --no-clobber "$SKEL/conf/." "$DSF/conf/" 2>/dev/null || true
+fi
+
+# --- printer name ---------------------------------------------------------
+# The name shown by Duet Web Control, and the source of the hostname. Created
+# from the commissioning data on first boot, then owned by the customer.
+
+if [ ! -f "$MP_PRINTER_NAME_FILE" ]; then
+   name=""
+   if [ -r "$MP_IDENTITY_FILE" ]; then
+      # shellcheck source=/dev/null
+      . "$MP_IDENTITY_FILE"
+      name=${PRINTER_NAME:-}
+      [ -n "$name" ] || [ -z "${PRINTER_SERIAL:-}" ] || name=$(mp_default_name "$PRINTER_SERIAL")
+   fi
+   [ -n "$name" ] || name=$(mp_fallback_name)
+
+   install -d -m 2770 "$(dirname "$MP_PRINTER_NAME_FILE")"
+   cat > "$MP_PRINTER_NAME_FILE" <<EOF
+; Printer name, shown by Duet Web Control and the PanelDue.
+; Also the source of the Linux hostname, which must agree with it.
+; Change it with: sudo mp-set-printer-name "<name>"
+M550 P"$name"
+EOF
+   chmod 0660 "$MP_PRINTER_NAME_FILE"
+   mp_log "printer name set to '$name'"
+fi
+
+# --- bundled plugin -------------------------------------------------------
+
+seed_plugin() {
+   id=$1
+   manifest="$SKEL/plugins/${id}.json"
+   [ -f "$manifest" ] || return 0
+
+   have=""
+   [ -f "$DSF/plugins/${id}.json" ] &&
+      have=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version",""))' \
+             "$DSF/plugins/${id}.json" 2>/dev/null || true)
+   want=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version",""))' "$manifest")
+
+   [ "$have" = "$want" ] && return 0
+
+   # Counters and history live on the virtual SD card, not in the manifest, so
+   # replacing the plugin wholesale keeps the machine's data.
+   rm -rf "$DSF/plugins/${id}"
+   cp -a "$SKEL/plugins/${id}" "$DSF/plugins/${id}"
+   cp -a "$manifest" "$DSF/plugins/${id}.json"
+   if [ -n "$have" ]; then
+      mp_log "plugin $id updated from $have to $want"
+   else
+      mp_log "plugin $id $want installed"
+   fi
+}
+
+if [ -d "$SKEL/plugins" ]; then
+   for m in "$SKEL"/plugins/*.json; do
+      [ -f "$m" ] || continue
+      seed_plugin "$(basename "$m" .json)"
+   done
+fi
+
+# --- ownership ------------------------------------------------------------
+# DSF runs as dsf with UMask=0002. Only fix what we just created; walking the
+# whole virtual SD card would touch every gcode file on every boot.
+
+chown -R dsf:dsf "$DSF/conf" "$DSF/plugins" 2>/dev/null || true
+chown dsf:dsf "$MP_PRINTER_NAME_FILE" 2>/dev/null || true
+
+exit 0

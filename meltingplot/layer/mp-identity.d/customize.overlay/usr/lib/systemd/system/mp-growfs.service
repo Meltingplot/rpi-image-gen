@@ -1,0 +1,15 @@
+[Unit]
+Description=Grow the persistent partition to fill the medium
+DefaultDependencies=no
+After=persistent.mount
+RequiresMountsFor=/persistent
+ConditionPathExists=!/persistent/common/.growfs-done
+Before=sysinit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/mp-growfs
+
+[Install]
+WantedBy=sysinit.target

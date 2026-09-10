@@ -1,0 +1,184 @@
+#!/bin/bash
+# Lay out DuetSoftwareFramework for an immutable, A/B root filesystem.
+#
+# Runs as a customize hook with the rootfs as $1. Three things happen here that
+# a stock DSF install does not do:
+#
+#   * The virtual SD card is split into what the image owns and what the
+#     machine owns. Image-owned files sit under /opt/dsf/sd and are pushed over
+#     the device's copy on every boot, so an update really updates the printer
+#     configuration. Machine-owned files (protected.list) are moved into a
+#     skeleton and seeded once, so calibration and customer tuning survive.
+#   * Duet Web Control is served from the virtual SD card, not from
+#     /opt/dsf/dwc, because that is where DuetWebServer looks and where plugins
+#     put their web assets.
+#   * The printer configuration from chx350-config is baked in.
+
+set -euo pipefail
+
+ROOT=${1:?rootfs}
+ASSETS=${IGconf_dsf_assetdir:?}
+CONFIG_DIR=${IGconf_dsf_config_dir:?}
+DSF_UID=${IGconf_dsf_uid:?}
+DSF_VERSION=${IGconf_dsf_version:?}
+
+DSF="$ROOT/opt/dsf"
+SD="$DSF/sd"
+SKEL="$ROOT/usr/share/meltingplot/dsf-skel"
+
+say() { echo "mp-dsf: $*" >&2; }
+die() { echo "mp-dsf: $*" >&2; exit 1; }
+
+[[ -d $DSF ]] || die "/opt/dsf missing, did the DSF packages install?"
+
+# --- accounts -------------------------------------------------------------
+
+have_uid=$(chroot "$ROOT" id -u dsf)
+[[ $have_uid == "$DSF_UID" ]] ||
+   die "dsf has uid $have_uid, expected $DSF_UID. Files on the persistent
+partition are owned numerically, so this has to be stable across builds."
+chroot "$ROOT" adduser dsf video >/dev/null
+
+# --- Duet Web Control -----------------------------------------------------
+# DuetWebServer serves the object model's web directory, which resolves to
+# 0:/www -> /opt/dsf/sd/www. /opt/dsf/dwc is only the fallback used when the
+# control server cannot be reached. Make the virtual SD card the real location
+# and leave the fallback as a link to it, so both agree and DWC is stored once.
+
+if [[ -L $SD/www ]]; then
+   rm -f "$SD/www"
+fi
+install -d -m 2770 "$SD/www"
+
+if [[ -d $DSF/dwc && ! -L $DSF/dwc ]]; then
+   if [[ -n $(ls -A "$DSF/dwc") ]]; then
+      cp -a "$DSF/dwc/." "$SD/www/"
+   fi
+   rm -rf "$DSF/dwc"
+fi
+[[ -e $DSF/dwc ]] || ln -s /opt/dsf/sd/www "$DSF/dwc"
+
+[[ -f $SD/www/index.html ]] ||
+   die "no index.html below /opt/dsf/sd/www, Duet Web Control was not installed"
+
+# --- printer configuration ------------------------------------------------
+# Image-owned: replaced by every update, and reset on the next boot if someone
+# edits it on the device.
+
+[[ -d $CONFIG_DIR/sys ]] || die "$CONFIG_DIR does not look like chx350-config"
+
+for d in sys macros filaments; do
+   [[ -d $CONFIG_DIR/$d ]] || continue
+   install -d -m 2770 "$SD/$d"
+   rsync -a --exclude='.git' --exclude='.gitignore' --exclude='CLAUDE.md' \
+      --exclude='LICENSE' --exclude='README*' \
+      "$CONFIG_DIR/$d/" "$SD/$d/"
+done
+
+CONFIG_COMMIT=$(git -C "$CONFIG_DIR" rev-parse HEAD 2>/dev/null || echo unknown)
+say "printer configuration from chx350-config $CONFIG_COMMIT"
+
+# The printer name is a file of its own, so a customer can rename the machine
+# without the change being reverted by the next update, and so the hostname can
+# be derived from the same value. Until chx350-config carries the call itself,
+# add it here; the guard makes this a no-op once it does.
+if ! grep -q 'printer-name.g' "$SD/sys/dsf-config.g"; then
+   cat >> "$SD/sys/dsf-config.g" <<-'EOF'
+
+	; Printer name, owned by the machine and managed by the image. Loaded last so
+	; it wins over any name set above. See mp-set-printer-name(8).
+	if fileexists("0:/sys/meltingplot/printer-name.g")
+	  M98 P"0:/sys/meltingplot/printer-name.g"
+	EOF
+   say "added the printer-name.g call to dsf-config.g"
+fi
+
+# The same name must not also be set in the machine override, or the first M550
+# would be rejected by DuetControlServer before printer-name.g ever runs.
+if [[ -f $SD/sys/meltingplot/dsf-config-override.g ]]; then
+   sed -i '/^[[:space:]]*M550[[:space:]]/d' "$SD/sys/meltingplot/dsf-config-override.g"
+fi
+
+# --- machine-owned files --------------------------------------------------
+# Move everything on the protected list out of the image and into the skeleton.
+# What is not in the image is never pushed over the device's copy.
+
+install -d -m 0755 "$SKEL/sd" "$SKEL/conf"
+
+moved=0
+while read -r pattern; do
+   [[ -z $pattern || $pattern == \#* ]] && continue
+   while IFS= read -r rel; do
+      [[ -f $SD/$rel ]] || continue
+      install -d -m 0755 "$SKEL/sd/$(dirname "$rel")"
+      mv -f "$SD/$rel" "$SKEL/sd/$rel"
+      moved=$((moved + 1))
+   done < <(cd "$SD" && compgen -G "$pattern" || true)
+done < "$ASSETS/protected.list"
+say "$moved machine-owned files moved into the seed skeleton"
+
+# Autostart list for DuetPluginService. Seeded, never overwritten, so a
+# customer can disable a plugin and keep it disabled.
+install -m 0644 "$ASSETS/skel/conf/plugins.txt" "$SKEL/conf/plugins.txt"
+
+# --- mount points ---------------------------------------------------------
+# Every slot-shared path is bind mounted at boot, so the directory has to exist
+# in the read-only image even when the image ships nothing in it.
+
+for d in sys gcodes macros filaments menu www Vigil; do
+   install -d -m 2770 "$SD/$d"
+done
+install -d -m 2770 "$DSF/plugins" "$DSF/conf"
+
+# --- settings we own ------------------------------------------------------
+
+python3 - "$ROOT" <<'PY'
+import json, pathlib, sys
+
+root = pathlib.Path(sys.argv[1])
+
+def patch(path, changes):
+    p = root / path
+    data = {}
+    if p.exists():
+        try:
+            data = json.loads(p.read_text() or "{}")
+        except json.JSONDecodeError:
+            print(f"mp-dsf: {path} is not valid JSON, replacing it", file=sys.stderr)
+    data.update(changes)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2) + "\n")
+
+# DuetControlServer. Plugin support stays on because the image ships Vigil, but
+# a plugin can never gain root and can never install packages.
+patch("opt/dsf/conf/config.json", {
+    "PluginSupport": True,
+    "RootPluginSupport": False,
+})
+
+# DuetPluginService. AppArmor profile generation is off because the profiles
+# would have to be written to /etc/apparmor.d on a read-only root; the image
+# ships a fixed profile chain instead. The package managers are disarmed so a
+# plugin's dependencies can never be installed on the device.
+patch("opt/dsf/conf/plugins.json", {
+    "DisableAppArmor": True,
+    "PreinstallPackageCommand": "/bin/false",
+    "InstallPackageCommand": "/bin/false",
+    "InstallLocalPackageCommand": "/bin/false",
+    "UninstallLocalPackageCommand": "/bin/false",
+    "InstallPythonPackageCommand": "/bin/false",
+})
+PY
+
+# --- ownership ------------------------------------------------------------
+# DSF runs with UMask=0002, so group write and setgid directories are what it
+# expects. /opt/dsf/bin stays root-owned and executable.
+
+for d in "$SD" "$DSF/conf" "$DSF/plugins" "$SKEL"; do
+   [[ -d $d ]] || continue
+   chown -R "$DSF_UID:$DSF_UID" "$d"
+   find "$d" -type d -exec chmod 2770 {} +
+   find "$d" -type f -exec chmod 0660 {} +
+done
+
+say "DSF $DSF_VERSION laid out for an immutable root"

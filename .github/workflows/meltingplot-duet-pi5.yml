@@ -1,0 +1,143 @@
+name: meltingplot duet-pi5
+
+# Builds the printer image and, for a tag, publishes it as a release. The
+# update bundle in that release is what Raspberry Pi Connect hands to a
+# printer, so the release is the record of what a machine received.
+
+on:
+  push:
+    branches: [meltingplot]
+    tags: ['duet-pi5/v*']
+  pull_request:
+    branches: [meltingplot]
+  workflow_dispatch:
+
+concurrency:
+  group: duet-pi5-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        env:
+          # Through the environment rather than an expression: the tag name is
+          # input, and it ends up in shell commands.
+          GITHUB_REF: ${{ github.ref }}
+        run: |
+          if [[ $GITHUB_REF == refs/tags/duet-pi5/v* ]]; then
+            version=${GITHUB_REF#refs/tags/duet-pi5/v}
+            case $version in
+              *[!A-Za-z0-9.+-]*|'')
+                echo "::error::tag $GITHUB_REF does not carry a usable version"; exit 1 ;;
+            esac
+            release=true
+          else
+            version="0.0.0-ci.$(date -u +%Y%m%d%H%M)"
+            release=false
+          fi
+          # A version with a suffix is a prerelease, which is what allows the
+          # image to carry release candidates of its components.
+          if [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            prerelease=false
+          else
+            prerelease=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "Building $version (release=$release prerelease=$prerelease)"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo chmod o+x /home/runner
+          sudo ./install_deps.sh
+
+      - name: Test harness
+        run: ./test/run-all.sh
+
+      # The Duet packages and the .NET runtime are the bulk of the download.
+      - name: Restore apt cache
+        uses: actions/cache@v4
+        with:
+          path: meltingplot/.cache/apt
+          key: duet-pi5-apt-${{ hashFiles('meltingplot/layer/**') }}-${{ github.run_id }}
+          restore-keys: |
+            duet-pi5-apt-${{ hashFiles('meltingplot/layer/**') }}-
+            duet-pi5-apt-
+
+      - name: Build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p meltingplot/.cache/apt
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
+          ./rpi-image-gen build -S ./meltingplot -c duet-pi5.yaml \
+            -B "$RUNNER_TEMP/work" \
+            -- IGconf_artefact_version="$VERSION" \
+               IGconf_sys_apt_cachedir="$PWD/meltingplot/.cache/apt"
+
+      - name: Collect artefacts
+        id: collect
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          version=$VERSION
+          deploy="$RUNNER_TEMP/work/deploy-$version"
+          out="$RUNNER_TEMP/release"
+          mkdir -p "$out"
+          # The image name is stable so a bundle URL is predictable; the
+          # version goes into the file name for the release.
+          for f in "$deploy"/*; do
+            name=$(basename "$f")
+            case $name in
+              mp-duet-pi5.*) cp "$f" "$out/${name/mp-duet-pi5./mp-duet-pi5-$version.}" ;;
+              *)             cp "$f" "$out/$name" ;;
+            esac
+          done
+          ( cd "$out" && rm -f SHA256SUMS && sha256sum * > SHA256SUMS )
+          echo "dir=$out" >> "$GITHUB_OUTPUT"
+          cat "$out/release.json"
+          cat "$out/SHA256SUMS"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mp-duet-pi5-${{ steps.version.outputs.version }}
+          path: ${{ steps.collect.outputs.dir }}
+          retention-days: 14
+
+      - name: Publish release
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          RELEASE_DIR: ${{ steps.collect.outputs.dir }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          notes=$(mktemp)
+          {
+            echo "Image for the Raspberry Pi 5 on the Duet 3 mainboard of a CHX350."
+            echo
+            echo "Deploy \`mp-duet-pi5-$VERSION.update.tar.zst\` through Raspberry Pi"
+            echo "Connect, using the SHA-256 from \`SHA256SUMS\`. See meltingplot/README.md."
+            echo
+            echo '```'
+            cat "$RELEASE_DIR/release.json"
+            echo '```'
+          } > "$notes"
+          args=(--verify-tag --title "duet-pi5 $VERSION" --notes-file "$notes")
+          [ "$PRERELEASE" = "true" ] && args+=(--prerelease)
+          gh release create "$TAG" "${args[@]}" "$RELEASE_DIR"/*

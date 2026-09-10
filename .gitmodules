@@ -1,0 +1,4 @@
+[submodule "meltingplot/chx350-config"]
+	path = meltingplot/chx350-config
+	url = https://github.com/Meltingplot/chx350-config.git
+	branch = 3.7

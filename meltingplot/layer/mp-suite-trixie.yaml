@@ -1,0 +1,18 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-suite-trixie
+# X-Env-Layer-Category: suite
+# X-Env-Layer-Desc: Meltingplot base suite. Debian Trixie with apt, utils, wired
+#  networking and ssh. This is trixie-minbase without wifi
+#  (wireless-regulatory, iwd): the printer SBC is wired to the HMI on a
+#  dedicated VLAN and has its radios disabled by mp-net-static.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: debian-trixie-arm64-multi,
+#  rpi-debian-trixie,
+#  rpi-misc-utils,
+#  rpi-essential-base,
+#  rpi-misc-skel,
+#  systemd-net-min,
+#  openssh-server,
+#  systemd-timesyncd
+# METAEND
+---

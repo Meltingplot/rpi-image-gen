@@ -1,0 +1,11 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-connect
+# X-Env-Layer-Category: service
+# X-Env-Layer-Desc: Raspberry Pi Connect (shell only) with remote update
+#  support, as the delivery channel for OTA images. No auth key is baked into
+#  the image; a device signs in on first boot from the key that mp-identity
+#  drops for it, which rpi-connect-signin.path picks up.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: rpi-connect-lite,rpi-connect-ota
+# METAEND
+---

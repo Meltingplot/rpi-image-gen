@@ -1,0 +1,15 @@
+[Unit]
+Description=Seed machine-owned Duet configuration and bundled plugins
+DefaultDependencies=no
+After=local-fs.target persistent-shared-init.service mp-identity.service mp-hostname.service
+RequiresMountsFor=/opt/dsf/sd /opt/dsf/conf /opt/dsf/plugins
+Before=duetcontrolserver.service duetwebserver.service duetpluginservice.service sysinit.target
+ConditionPathIsDirectory=/usr/share/meltingplot/dsf-skel
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/mp-dsf-seed
+
+[Install]
+WantedBy=sysinit.target

@@ -1,0 +1,110 @@
+#!/bin/bash
+# Check the properties the DSF layout depends on, before an image is built.
+#
+# Most of these are quiet failures on a device: nothing breaks at build time,
+# the printer just loses the customer's calibration on the next boot, or a
+# plugin policy silently does not apply. They are cheap to assert here.
+
+set -euo pipefail
+
+ROOT=${1:?rootfs}
+ASSETS=${IGconf_dsf_assetdir:?}
+DSF_UID=${IGconf_dsf_uid:?}
+
+DSF="$ROOT/opt/dsf"
+SD="$DSF/sd"
+SKEL="$ROOT/usr/share/meltingplot/dsf-skel"
+
+fail=0
+bad() { echo "mp-dsf assert: $*" >&2; fail=1; }
+
+# --- the machine keeps its own files --------------------------------------
+# Anything the image ships below a slot-shared path overwrites the device's
+# copy on every boot. A protected file left in the image would therefore reset
+# a customer's tuning at each start, which is the one failure this whole layout
+# exists to prevent.
+
+while read -r pattern; do
+   [[ -z $pattern || $pattern == \#* ]] && continue
+   while IFS= read -r rel; do
+      bad "$rel is in the image but is machine-owned; it must live in the seed skeleton"
+   done < <(cd "$SD" && compgen -G "$pattern" || true)
+done < "$ASSETS/protected.list"
+
+[[ -d $SKEL/sd ]] || bad "no seed skeleton below $SKEL/sd"
+[[ -f $SKEL/conf/plugins.txt ]] || bad "the plugin autostart list is not in the skeleton"
+
+# Directories that only ever hold what the machine produced.
+for d in sd/gcodes sd/menu sd/Vigil plugins; do
+   [[ -d $DSF/$d ]] || { bad "/opt/dsf/$d is missing; it is a bind mount point"; continue; }
+   [[ -z $(ls -A "$DSF/$d") ]] || bad "/opt/dsf/$d ships files, so the machine's would be overwritten"
+done
+
+# Settings we own, and nothing else, so an update can correct them.
+while IFS= read -r f; do
+   case $(basename "$f") in
+      config.json|plugins.json) ;;
+      *) bad "/opt/dsf/conf/$(basename "$f") is in the image and would overwrite the machine's copy" ;;
+   esac
+done < <(find "$DSF/conf" -maxdepth 1 -type f)
+
+# --- the printer actually works -------------------------------------------
+
+[[ -f $SD/sys/config.g ]] || bad "no config.g: the printer configuration was not baked in"
+[[ -f $SD/www/index.html ]] || bad "no index.html below sd/www: Duet Web Control is not where DuetWebServer looks"
+if ! { [[ -f $SD/sys/dsf-config.g ]] && grep -q 'printer-name.g' "$SD/sys/dsf-config.g"; }; then
+   bad "dsf-config.g does not load printer-name.g, so the printer name would not apply"
+fi
+
+uid=$(awk -F: '$1=="dsf"{print $3}' "$ROOT/etc/passwd")
+[[ $uid == "$DSF_UID" ]] ||
+   bad "dsf has uid ${uid:-none}, expected $DSF_UID; persistent files are owned numerically"
+
+# --- the bundled plugin ---------------------------------------------------
+
+[[ -f $SKEL/plugins/Vigil.json ]] || bad "Vigil was not staged into the skeleton"
+venv_python="$SKEL/plugins/Vigil/venv/bin/python"
+if [[ -L $venv_python ]]; then
+   target=$(readlink "$venv_python")
+   [[ $target == /usr/bin/python3* || $target == python3* ]] ||
+      bad "the Vigil virtual environment points at $target, which will not exist on the device"
+else
+   bad "the Vigil virtual environment has no python"
+fi
+
+# --- boot configuration ---------------------------------------------------
+
+grep -q '^dtparam=spi=on' "$ROOT/boot/firmware/config.txt" ||
+   bad "SPI is not enabled, so DuetControlServer cannot reach the mainboard"
+grep -q 'lsm=apparmor' "$ROOT/boot/firmware/cmdline.txt" ||
+   bad "lsm=apparmor is missing from the kernel command line, so the plugin policy would not load"
+
+# --- plugin policy --------------------------------------------------------
+
+profile="$ROOT/etc/apparmor.d/opt.dsf.bin.DuetPluginService"
+if [[ -f $profile ]]; then
+   if grep -q '__MP_MODE__' "$profile"; then
+      bad "the AppArmor profile still carries its mode placeholder"
+   fi
+
+   # A plugin must not be able to start another program. Everything the child
+   # profile may do is listed explicitly, so any exec permission in it is a
+   # mistake.
+   if awk '/profile dsf_plugin_py/,/^  }$/' "$profile" |
+        grep -v '^[[:space:]]*#' |
+        grep -Eq '[[:space:]][a-zA-Z]*x[a-zA-Z]*,[[:space:]]*$'; then
+      bad "the dsf_plugin_py profile grants an exec permission"
+   fi
+
+   if command -v apparmor_parser >/dev/null 2>&1; then
+      apparmor_parser -Q --base "$ROOT/etc/apparmor.d" "$profile" >/dev/null ||
+         bad "the AppArmor profile does not parse"
+   else
+      echo "mp-dsf assert: apparmor_parser not on the build host, profile syntax unchecked" >&2
+   fi
+else
+   bad "the AppArmor plugin policy is missing"
+fi
+
+[[ $fail -eq 0 ]] || exit 1
+echo "mp-dsf assert: layout, plugin policy and boot configuration are consistent" >&2

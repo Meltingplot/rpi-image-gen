@@ -1,0 +1,12 @@
+# SSH public keys of the Meltingplot administrators.
+#
+# Every key listed here can log in as the `meltingplot` account on every image
+# built from this tree. The account has no password (SSH key authentication
+# only, sudo without password), so a build without a key here produces an image
+# nobody can reach over SSH. Raspberry Pi Connect remote shell still works.
+#
+# Public keys only. Never put a private key or an auth key in this repository -
+# it is public.
+#
+# One key per line, e.g.
+# ssh-ed25519 AAAAC3Nza... tim@meltingplot.net

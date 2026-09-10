@@ -1,0 +1,77 @@
+#!/bin/bash
+# Describe the release next to the artefacts.
+#
+# For a machine placed on the market it has to stay provable, years later, what
+# software a given printer received and when. The image itself carries a
+# software bill of materials; this adds the few facts the SBOM cannot know: the
+# exact commit of the image definition, the commit of the printer
+# configuration, the pinned component versions, and a checksum over every
+# artefact, so a bundle handed to Raspberry Pi Connect can be tied back to the
+# build that produced it.
+
+set -euo pipefail
+
+DEPLOY=${1:?deploy directory}
+
+commit_of() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
+dirty_of() {
+   [[ -n $(git -C "$1" status --porcelain 2>/dev/null) ]] && echo true || echo false
+}
+
+export MP_IMAGE_COMMIT MP_IMAGE_DIRTY MP_CONFIG_COMMIT MP_BUILT
+MP_IMAGE_COMMIT=$(commit_of "${IGTOP:?}")
+MP_IMAGE_DIRTY=$(dirty_of "${IGTOP}")
+MP_CONFIG_COMMIT=$(commit_of "${IGconf_dsf_config_dir:-/nonexistent}")
+MP_BUILT=$(date -u -Iseconds)
+
+cd "$DEPLOY"
+
+python3 - "$DEPLOY" <<'PY'
+import json, os, pathlib, sys
+
+deploy = pathlib.Path(sys.argv[1])
+env = os.environ.get
+
+release = {
+    "version": env("IGconf_artefact_version", ""),
+    "image": env("IGconf_image_name", ""),
+    "built": env("MP_BUILT", ""),
+    "source_date_epoch": env("SOURCE_DATE_EPOCH", ""),
+    "device": {
+        "class": env("IGconf_device_class", ""),
+        "product": env("IGconf_mpid_product", ""),
+        "role": env("IGconf_mpid_role", ""),
+    },
+    "source": {
+        "image_definition": env("MP_IMAGE_COMMIT", ""),
+        "image_definition_dirty": env("MP_IMAGE_DIRTY") == "true",
+        "printer_config": env("MP_CONFIG_COMMIT", ""),
+    },
+    "components": {
+        "dsf": env("IGconf_dsf_version", ""),
+        "dsf_suite": env("IGconf_dsf_suite", ""),
+        "vigil": env("IGconf_dsf_vigil_version", ""),
+        "vigil_sha256": env("IGconf_dsf_vigil_sha256", ""),
+        "dsf_python": env("IGconf_dsf_python_version", ""),
+        "plugin_policy": env("IGconf_dsf_plugin_policy", ""),
+    },
+    "artefacts": [
+        {"name": f.name, "size": f.stat().st_size}
+        for f in sorted(deploy.iterdir())
+        if f.is_file() and f.name not in ("release.json", "SHA256SUMS")
+    ],
+}
+
+(deploy / "release.json").write_text(json.dumps(release, indent=2) + "\n")
+PY
+
+# Checksums over everything this release publishes. Raspberry Pi Connect checks
+# the update bundle against exactly this value before it writes a slot.
+: > SHA256SUMS
+for f in *; do
+   [[ -f $f && $f != SHA256SUMS ]] || continue
+   sha256sum "$f" >> SHA256SUMS
+done
+
+echo "mp-release: $(wc -l < SHA256SUMS) artefacts described in $DEPLOY" >&2
+grep -E '\.update\.tar\.zst$' SHA256SUMS >&2 || true

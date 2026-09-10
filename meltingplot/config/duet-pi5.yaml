@@ -1,0 +1,28 @@
+# The Raspberry Pi 5 attached to the Duet 3 mainboard of a CHX350.
+#
+# Build:
+#   ./rpi-image-gen build -S ./meltingplot -c duet-pi5.yaml
+#
+# On a bench without the HMI Pi, point the network at whatever gateway is
+# there, otherwise the device cannot reach Raspberry Pi Connect:
+#   ... -- IGconf_mpnet_address=192.168.1.50/24 IGconf_mpnet_gateway=192.168.1.1 \
+#          IGconf_mpnet_dns=192.168.1.1 IGconf_mpnet_ntp=192.168.1.1
+
+include:
+  file: mp-base.yaml
+
+image:
+  name: mp-duet-pi5
+
+# The printer's internal network. The HMI Pi is the router, DNS resolver and
+# time source for everything behind it.
+mpnet:
+  address: 10.42.0.2/24
+  gateway: 10.42.0.1
+  dns: 10.42.0.1
+  ntp: 10.42.0.1
+
+layer:
+  net: mp-net-static
+  hw: mp-duet-hw
+  app: mp-dsf

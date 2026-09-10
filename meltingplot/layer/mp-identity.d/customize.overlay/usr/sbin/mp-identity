@@ -1,0 +1,97 @@
+#!/bin/sh
+# Apply the commissioning file from the BOOTCONFIG partition, once.
+#
+# The image is identical on every printer. What makes a device unique arrives
+# on the boot partition as meltingplot/identity.conf, written by whoever
+# flashes the medium. This runs early on every boot, does its work the first
+# time it sees a serial number, and takes the auth key out of the file so the
+# secret does not stay on a FAT partition anyone can read.
+
+set -eu
+
+MP_TAG=mp-identity
+. /usr/lib/meltingplot/mp-common.sh
+
+CONF=/bootfs/meltingplot/identity.conf
+
+[ -f "$CONF" ] || {
+   mp_log "no $CONF, device stays unprovisioned"
+   exit 0
+}
+
+serial=$(mp_conf_get "$CONF" printer_serial)
+name=$(mp_conf_get "$CONF" printer_name)
+authkey=$(mp_conf_get "$CONF" connect_authkey)
+force=$(mp_conf_get "$CONF" force)
+
+# --- identity -------------------------------------------------------------
+
+if [ -n "$serial" ]; then
+   case $serial in
+      *[!A-Za-z0-9-]*|'')
+         mp_die "printer_serial '$serial' has characters other than letters, digits and -" ;;
+   esac
+   [ "${#serial}" -le 32 ] || mp_die "printer_serial is longer than 32 characters"
+   serial=$(printf '%s' "$serial" | tr '[:upper:]' '[:lower:]')
+
+   if [ -e "$MP_IDENTITY_FILE" ] && [ "$force" != "1" ]; then
+      mp_log "identity already set, ignoring printer_serial (use force=1 to reassign)"
+   else
+      if [ -n "$name" ]; then
+         mp_valid_printer_name "$name" ||
+            mp_die "printer_name '$name' is not usable: allowed are letters, digits, space and -, at most 40 characters"
+      else
+         name=$(mp_default_name "$serial")
+      fi
+      install -d -m 0755 "$(dirname "$MP_IDENTITY_FILE")"
+      umask 022
+      cat > "${MP_IDENTITY_FILE}.tmp" <<EOF
+# Written by mp-identity at commissioning. Serial identifies this printer to
+# Meltingplot for the life of the machine; the name belongs to the customer.
+PRINTER_SERIAL=$serial
+PRINTER_NAME=$name
+ROLE=$MP_ROLE
+COMMISSIONED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF
+      mv -f "${MP_IDENTITY_FILE}.tmp" "$MP_IDENTITY_FILE"
+      mp_log "commissioned as serial $serial, name '$name'"
+   fi
+else
+   mp_log "$CONF has no printer_serial"
+fi
+
+# --- Raspberry Pi Connect auth key ----------------------------------------
+
+case $authkey in
+   rpuak_*|rpoak_*)
+      home=$(getent passwd "$MP_USER" | cut -d: -f6)
+      [ -n "$home" ] || mp_die "account $MP_USER does not exist"
+      dir="$home/.config/com.raspberrypi.connect"
+      install -d -o "$MP_USER" -g "$MP_USER" -m 0700 "$home/.config" "$dir"
+      umask 077
+      printf '%s' "$authkey" > "$dir/auth.key.tmp"
+      chown "$MP_USER:$MP_USER" "$dir/auth.key.tmp"
+      mv -f "$dir/auth.key.tmp" "$dir/auth.key"
+      mp_log "Connect auth key installed, rpi-connect-signin.path will sign in"
+
+      # Take the secret off the boot partition, keeping a trace that it was
+      # used. Failing to rewrite is not fatal: the key is single use anyway.
+      if sed -e 's/\r$//' \
+             -e "s|^\([[:space:]]*connect_authkey[[:space:]]*=\).*|\1applied $(date -u +%Y-%m-%d)|" \
+             "$CONF" > "${CONF}.tmp" 2>/dev/null; then
+         mv -f "${CONF}.tmp" "$CONF" || mp_log "warning: could not rewrite $CONF"
+      else
+         rm -f "${CONF}.tmp"
+         mp_log "warning: could not rewrite $CONF, auth key still on the boot partition"
+      fi
+      ;;
+   '')
+      ;;
+   applied*)
+      ;;
+   *)
+      mp_log "ignoring connect_authkey: not an rpuak_/rpoak_ key"
+      ;;
+esac
+
+exit 0

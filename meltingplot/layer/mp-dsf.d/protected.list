@@ -1,0 +1,27 @@
+# Files below /opt/dsf/sd that belong to the machine, not to the image.
+#
+# Everything the image ships under a slot-shared path is pushed back over the
+# device's copy on every boot, which is what keeps the printer configuration in
+# step with the installed version. The paths listed here must not take part in
+# that: they hold per-machine and per-material tuning that a customer or a
+# calibration run produced. They are moved out of the image into
+# /usr/share/meltingplot/dsf-skel and seeded once by mp-dsf-seed, so they are
+# created if missing and never touched again.
+#
+# The list matches the protected files of the MeltingplotConfig DWC plugin,
+# plus the printer name. Paths are relative to /opt/dsf/sd and may contain
+# shell globs.
+#
+# Not listed, because the machine writes them and the image never ships them:
+# sys/meltingplot/nozzle*.g, sys/meltingplot/last-filament-temp.g,
+# sys/meltingplot/z-probe/szp_*_calibration_*.g, sys/heightmap.csv,
+# sys/dwc-settings.json, filaments/*/config-auto-*.g,
+# filaments/*/nozzle-*.g
+
+sys/config-override.g
+sys/meltingplot/machine-override
+sys/meltingplot/dsf-config-override.g
+sys/meltingplot/global-override.g
+sys/meltingplot/printer-name.g
+filaments/*/config-override.g
+filaments/*/temps.g

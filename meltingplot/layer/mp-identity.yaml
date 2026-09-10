@@ -1,0 +1,63 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-identity
+# X-Env-Layer-Category: device
+# X-Env-Layer-Desc: Device commissioning on first boot. Reads
+#  meltingplot/identity.conf from the BOOTCONFIG partition, stores the printer
+#  serial and display name on persistent storage, hands a Raspberry Pi Connect
+#  auth key to the account, derives the hostname from the display name and
+#  grows the persistent partition to the size of the medium.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: rpi-misc-skel,device-user-admin
+# X-Env-Layer-RequiresProvider: systemd
+#
+# X-Env-VarRequires: IGconf_device_user1
+# X-Env-VarRequires-Valid: string
+#
+# X-Env-VarPrefix: mpid
+#
+# X-Env-Var-product: chx-350
+# X-Env-Var-product-Desc: Product slug used in the default hostname
+#  meltingplot-<product>-<serial>-<role>.
+# X-Env-Var-product-Required: n
+# X-Env-Var-product-Valid: regex:^[a-z0-9-]{1,32}$
+# X-Env-Var-product-Set: y
+#
+# X-Env-Var-role: sbc
+# X-Env-Var-role-Desc: Role of this computer within the printer. The Duet
+#  companion board is sbc, the operator panel is hmi. Baked into the image, not
+#  taken from identity.conf.
+# X-Env-Var-role-Required: n
+# X-Env-Var-role-Valid: regex:^[a-z0-9-]{1,16}$
+# X-Env-Var-role-Set: y
+# METAEND
+---
+mmdebstrap:
+  packages:
+    # growpart, for enlarging the persistent partition on first boot
+    - cloud-guest-utils
+    # sgdisk, to move the GPT backup header to the end of a larger medium
+    - gdisk
+    # resolves our own hostname without an /etc/hosts entry, which we cannot
+    # rewrite on a read-only root
+    - libnss-myhostname
+  customize-hooks:
+    # Identity of this image, read by the mp-* scripts at runtime.
+    - |-
+      set -eu
+      install -d -m 0755 "$1/etc/meltingplot"
+      cat > "$1/etc/meltingplot/device.conf" <<-EOF
+      # Written by rpi-image-gen layer mp-identity. Do not edit on the device.
+      MP_USER=${IGconf_device_user1}
+      MP_PRODUCT=${IGconf_mpid_product}
+      MP_ROLE=${IGconf_mpid_role}
+      EOF
+    # rpi-misc-skel pins the build time hostname to 127.0.1.1. The hostname is
+    # a runtime property here and /etc/hosts is read-only, so drop the line and
+    # let nss-myhostname answer instead.
+    - |-
+      set -eu
+      sed -i '/^127\.0\.1\.1[[:space:]]/d' "$1/etc/hosts"
+      if ! grep -qE '^hosts:.*\bmyhostname\b' "$1/etc/nsswitch.conf"; then
+        sed -i -E 's/^(hosts:[[:space:]].*)$/\1 myhostname/' "$1/etc/nsswitch.conf"
+      fi
+    - $BDEBSTRAP_HOOKS/enable-units "$1" mp-identity mp-hostname mp-growfs

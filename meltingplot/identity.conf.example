@@ -1,0 +1,33 @@
+# Meltingplot device identity - commissioning file
+#
+# Copy this file to the BOOTCONFIG partition of a freshly flashed medium as
+#   meltingplot/identity.conf
+# The BOOTCONFIG partition is the first partition of the image (FAT, label
+# BOOTCONFIG, mounted read-write as /bootfs on the running device). It already
+# holds autoboot.txt.
+#
+# The first boot reads this file, stores the values on the persistent partition
+# and removes the auth key from here. Later boots ignore it unless force=1 is
+# set. Lines starting with # are comments, whitespace around = is ignored.
+
+# Meltingplot serial number of the CHX350. Required.
+# Allowed: letters, digits and '-', at most 32 characters.
+printer_serial=0042
+
+# Display name shown by Duet Web Control and PanelDue (M550), and the source of
+# the Linux hostname. Optional - defaults to meltingplot-chx-350-<serial>-sbc.
+# Allowed: ASCII letters, digits, space and '-', at most 40 characters (limit
+# imposed by DuetControlServer). The customer can change this later in DWC or
+# with `sudo mp-set-printer-name "<name>"`.
+#printer_name=Halle 2 links
+
+# Single-use Raspberry Pi Connect auth key for this device, taken from the
+# Connect dashboard or created with the organisations management API. Optional.
+# The device signs in automatically on first boot, then this line is replaced
+# with the date it was applied so the secret does not stay on the FAT
+# partition.
+#connect_authkey=rpoak_XXXXXXXXXXXXXXXX
+
+# Re-apply serial and name even though the device already carries an identity.
+# Only for re-purposing a device; the persistent identity is overwritten.
+#force=1

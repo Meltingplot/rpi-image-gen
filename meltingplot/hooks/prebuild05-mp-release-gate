@@ -1,0 +1,68 @@
+#!/bin/bash
+# Refuse to build a final release out of prereleases.
+#
+# Development and release candidate images may carry a Duet release candidate,
+# a Vigil prerelease and a beta of dsf-python: that is how a new firmware
+# generation gets tested at all. A final image may not, because it is what ends
+# up on a customer's machine and in the technical file.
+#
+# The distinction is the version of the image itself. Anything with a suffix
+# (0.1.0-rc.1, 0.0.0-dev.202609102100) is a prerelease and may use them; a bare
+# 0.1.0 is final and every pin has to be final too.
+
+set -euo pipefail
+
+version=${IGconf_artefact_version:?}
+
+note() { echo "release gate: $*" >&2; }
+
+# --- an image nobody can log in to ----------------------------------------
+# Not fatal: Raspberry Pi Connect still reaches the device. Loud, because the
+# account has no password and this is the only other way in.
+
+keys=${IGconf_ssh_pubkey_user1:-}
+if [[ -f $keys ]] && ! grep -qE '^(ssh|ecdsa|sk-)' "$keys"; then
+   note "WARNING $keys holds no SSH key, so nobody can log in over SSH"
+fi
+
+if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+   note "$version is a prerelease, prerelease components are allowed"
+   exit 0
+fi
+
+# --- final release --------------------------------------------------------
+
+problems=()
+
+[[ ${IGconf_dsf_suite:-} == stable ]] ||
+   problems+=("dsf.suite is '${IGconf_dsf_suite:-}', a final image takes packages from stable")
+
+[[ ${IGconf_dsf_version:-} != *'~'* ]] ||
+   problems+=("dsf.version ${IGconf_dsf_version} is a prerelease")
+
+shopt -s nocasematch
+[[ ! ${IGconf_dsf_vigil_version:-} =~ -(rc|beta|alpha|dev|pre) ]] ||
+   problems+=("dsf.vigil_version ${IGconf_dsf_vigil_version} is a prerelease")
+[[ ! ${IGconf_dsf_python_version:-} =~ (a|b|rc)[0-9]+$ ]] ||
+   problems+=("dsf.python_version ${IGconf_dsf_python_version} is a prerelease")
+shopt -u nocasematch
+
+[[ ${IGconf_dsf_plugin_policy:-enforce} == enforce ]] ||
+   problems+=("dsf.plugin_policy is '${IGconf_dsf_plugin_policy}', a customer image enforces it")
+
+config_dir=${IGconf_dsf_config_dir:-}
+if [[ -d $config_dir ]]; then
+   if ! git -C "$config_dir" describe --tags --exact-match HEAD >/dev/null 2>&1; then
+      commit=$(git -C "$config_dir" rev-parse --short HEAD 2>/dev/null || echo unknown)
+      problems+=("the printer configuration is at $commit, which carries no release tag")
+   fi
+fi
+
+if ((${#problems[@]})); then
+   note "$version is a final release, but:"
+   printf '  - %s\n' "${problems[@]}" >&2
+   note "either release the components first, or build ${version}-rc.1 instead"
+   exit 1
+fi
+
+note "$version is final and every component is a release"

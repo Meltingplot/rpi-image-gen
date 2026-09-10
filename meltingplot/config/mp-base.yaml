@@ -1,0 +1,50 @@
+# Settings every Meltingplot printer computer shares.
+#
+# One image serves every printer of a kind: what makes a device unique arrives
+# at commissioning time in meltingplot/identity.conf on the boot partition, not
+# at build time. See identity.conf.example.
+
+device:
+  layer: rpi5
+  user1: meltingplot
+  user1uid: 1000
+  user1gid: 1000
+  user1groups: adm,dialout,plugdev,spi,i2c,gpio,video,render,dsf
+  # There is no password on these machines and there never will be: access is
+  # by SSH key or through Raspberry Pi Connect, so sudo cannot ask for one.
+  user1sudo: nopasswd
+  # Replaced on every boot by mp-hostname from the printer name.
+  hostname: meltingplot-unconfigured
+  # Only recorded in the provisioning descriptor. The image itself finds its
+  # root by GPT label and runs from an SD card or an NVMe drive unchanged.
+  storage_type: sd
+
+image:
+  layer: image-rota
+  rootfs_type: erofs
+  boot_part_size: 128M
+  # Base system about 400 MB, DSF with its .NET runtime and Duet Web Control
+  # about 200 MB, the rest is headroom for a release to grow into.
+  system_part_size: 1G
+  # Starting size only. mp-growfs expands it to the medium on first boot, and
+  # rpi-sb-provisioner does the same while provisioning.
+  data_part_size: 4G
+
+ssh:
+  pubkey_user1: ${@SRCROOT}/keys/authorized_keys
+  pubkey_only: y
+
+connect:
+  # No auth key in the image. A device signs in on first boot from the key that
+  # commissioning left for it. Quoted because YAML reads a bare on as a boolean.
+  "on": y
+
+artefact:
+  # A local build is always a development build, which is what allows it to
+  # carry prereleases. The release workflow passes a version from the git tag.
+  version: 0.0.0-dev.$(date -u +%Y%m%d%H%M)
+
+layer:
+  suite: mp-suite-trixie
+  connect: mp-connect
+  identity: mp-identity

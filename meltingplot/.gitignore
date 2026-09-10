@@ -1,0 +1,9 @@
+# Never commit device secrets. Auth keys reach a printer at commissioning time
+# via identity.conf on the BOOTCONFIG partition, never through this tree.
+secrets/
+
+# Local apt cache for repeated builds (IGconf_sys_apt_cachedir)
+.cache/
+
+# Build output when -B is not used
+work/

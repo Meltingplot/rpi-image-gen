@@ -1,0 +1,128 @@
+#!/bin/bash
+# Preinstall the Vigil machine monitoring plugin.
+#
+# DuetControlServer is not running at build time, so the install path DSF would
+# take is reproduced here: the manifest and the SBC files go to the plugin
+# directory, the web assets to the virtual SD card, and the Python virtual
+# environment is built at the path it will run from. The plugin directory is
+# slot-shared and therefore not part of the image, so everything lands in the
+# seed skeleton and mp-dsf-seed puts it in place on the device.
+#
+# Only a published release asset is ever used. A prerelease is allowed as long
+# as the image itself is a prerelease; the release gate enforces that.
+
+set -euo pipefail
+
+ROOT=${1:?rootfs}
+VIGIL_VERSION=${IGconf_dsf_vigil_version:?}
+VIGIL_SHA256=${IGconf_dsf_vigil_sha256:?}
+DSF_VERSION=${IGconf_dsf_version:?}
+DSF_PYTHON_VERSION=${IGconf_dsf_python_version:?}
+DSF_UID=${IGconf_dsf_uid:?}
+
+SKEL="$ROOT/usr/share/meltingplot/dsf-skel"
+SD="$ROOT/opt/dsf/sd"
+PLUGIN_DIR=/opt/dsf/plugins/Vigil
+
+say() { echo "mp-dsf-vigil: $*" >&2; }
+die() { echo "mp-dsf-vigil: $*" >&2; exit 1; }
+
+# Duet Web Control generation the plugin has to match: 3.7.0~rc.1 -> 37
+gen=$(printf '%s' "$DSF_VERSION" | sed -n 's/^\([0-9]\{1,\}\)\.\([0-9]\{1,\}\).*/\1\2/p')
+[[ -n $gen ]] || die "cannot derive the DWC generation from dsf version $DSF_VERSION"
+dotted=$(printf '%s' "$DSF_VERSION" | sed -n 's/^\([0-9]\{1,\}\.[0-9]\{1,\}\).*/\1/p')
+
+asset="Vigil-${VIGIL_VERSION}-dwc${gen}.zip"
+url="https://github.com/Meltingplot/dwc-vigil/releases/download/v${VIGIL_VERSION}/${asset}"
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+say "fetching $asset"
+curl -fsSL --retry 3 -o "$tmp/vigil.zip" "$url" || die "\
+Vigil ${VIGIL_VERSION} has no release asset ${asset} for Duet Web Control ${dotted}.
+
+The image only ever installs published release assets, so there is nothing to
+fall back to. Either release a Vigil build for this DWC generation, or point
+dsf.vigil_version at a version that has one:
+  $url"
+
+actual=$(sha256sum "$tmp/vigil.zip" | cut -d' ' -f1)
+[[ $actual == "$VIGIL_SHA256" ]] || die "\
+checksum mismatch for ${asset}
+  expected ${VIGIL_SHA256}
+  got      ${actual}
+Either the pin is stale or the asset was replaced. Do not build past this."
+
+# --- unpack ---------------------------------------------------------------
+
+python3 - "$tmp/vigil.zip" "$tmp/x" "$VIGIL_VERSION" "$dotted" <<'PY'
+import json, pathlib, sys, zipfile
+
+archive, dest, want_version, want_dwc = sys.argv[1], pathlib.Path(sys.argv[2]), sys.argv[3], sys.argv[4]
+
+with zipfile.ZipFile(archive) as z:
+    for name in z.namelist():
+        if name.startswith("/") or ".." in pathlib.PurePosixPath(name).parts:
+            sys.exit(f"mp-dsf-vigil: refusing path {name!r} in the archive")
+    z.extractall(dest)
+
+manifest = json.loads((dest / "plugin.json").read_text())
+problems = []
+if manifest.get("version") != want_version:
+    problems.append(f"manifest version {manifest.get('version')!r}, pinned {want_version!r}")
+for key in ("dwcVersion", "sbcDsfVersion"):
+    value = str(manifest.get(key, ""))
+    if value not in (want_dwc, "auto-major"):
+        problems.append(f"{key} {value!r}, image carries DSF {want_dwc}")
+if problems:
+    sys.exit("mp-dsf-vigil: " + "; ".join(problems))
+PY
+
+mapfile -t dwc_files < <(python3 -c '
+import json, sys
+m = json.load(open(sys.argv[1]))
+print("\n".join(m.get("dwcFiles", [])))
+' "$tmp/x/plugin.json")
+
+# --- SBC side -------------------------------------------------------------
+
+install -d -m 0755 "$SKEL/plugins"
+install -m 0644 "$tmp/x/plugin.json" "$SKEL/plugins/Vigil.json"
+
+install -d -m 2770 "$SKEL/plugins/Vigil/dsf"
+cp -a "$tmp/x/dsf/." "$SKEL/plugins/Vigil/dsf/"
+exe=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sbcExecutable"])' "$tmp/x/plugin.json")
+[[ -f $SKEL/plugins/Vigil/dsf/$exe ]] || die "the archive has no dsf/$exe"
+chmod 0770 "$SKEL/plugins/Vigil/dsf/$exe"
+
+# --- web side -------------------------------------------------------------
+# Image-owned: pushed over the device copy on every boot, so an update also
+# updates the plugin's user interface.
+
+for f in "${dwc_files[@]}"; do
+   [[ -n $f ]] || continue
+   src="$tmp/x/dwc/$f"
+   [[ -f $src ]] || die "plugin.json lists dwc/$f, which the archive does not contain"
+   install -D -m 0660 "$src" "$SD/www/$f"
+done
+say "${#dwc_files[@]} web assets installed"
+
+# --- Python environment ---------------------------------------------------
+# Built at the path it will run from: a virtual environment records absolute
+# paths, and DuetPluginService starts the daemon as <plugin>/venv/bin/python.
+
+say "building the plugin virtual environment (emulated, this takes a while)"
+chroot "$ROOT" python3 -m venv "$PLUGIN_DIR/venv"
+chroot "$ROOT" "$PLUGIN_DIR/venv/bin/pip" install \
+   --no-cache-dir --disable-pip-version-check \
+   "dsf-python==${DSF_PYTHON_VERSION}" ||
+   die "dsf-python ${DSF_PYTHON_VERSION} could not be installed from PyPI"
+
+[[ -x $ROOT$PLUGIN_DIR/venv/bin/python ]] || die "the virtual environment has no python"
+mv "$ROOT$PLUGIN_DIR/venv" "$SKEL/plugins/Vigil/venv"
+rmdir "$ROOT$PLUGIN_DIR" 2>/dev/null || true
+
+chown -R "$DSF_UID:$DSF_UID" "$SKEL/plugins" "$SD/www"
+
+say "Vigil ${VIGIL_VERSION} staged with dsf-python ${DSF_PYTHON_VERSION}"

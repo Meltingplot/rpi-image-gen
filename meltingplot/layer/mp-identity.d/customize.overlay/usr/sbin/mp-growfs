@@ -1,0 +1,63 @@
+#!/bin/sh
+# Grow the persistent partition to the size of the medium, once.
+#
+# The image ships a small persistent partition so the artefact stays small.
+# rpi-sb-provisioner expands it while provisioning (expand-to-fit in the
+# provisioning map), but a medium written with dd or Raspberry Pi Imager keeps
+# the image size, so the last partition is enlarged here on first boot. The A/B
+# slots are never touched: their size is fixed by the update mechanism.
+
+set -eu
+
+MP_TAG=mp-growfs
+. /usr/lib/meltingplot/mp-common.sh
+
+MARKER=/persistent/common/.growfs-done
+PART_LINK=/dev/disk/by-slot/persistent
+
+[ -e "$MARKER" ] && exit 0
+
+part=$(readlink -f "$PART_LINK" 2>/dev/null || true)
+[ -b "$part" ] || {
+   mp_log "$PART_LINK is not a block device, nothing to grow"
+   exit 0
+}
+
+# /dev/mmcblk0p6 -> /dev/mmcblk0 + 6, /dev/nvme0n1p6 -> /dev/nvme0n1 + 6
+name=$(basename "$part")
+sys="/sys/class/block/$name"
+[ -r "$sys/partition" ] || {
+   mp_log "$part is not a partition, nothing to grow"
+   exit 0
+}
+partno=$(cat "$sys/partition")
+disk="/dev/$(basename "$(readlink -f "$sys/..")")"
+[ -b "$disk" ] || mp_die "cannot derive the disk holding $part"
+
+# A dd-written medium keeps the GPT backup header where the image ended. Move
+# it to the real end of the device first, otherwise the partition cannot grow.
+if sgdisk -e "$disk" >/dev/null 2>&1; then
+   partx -u "$disk" >/dev/null 2>&1 || true
+else
+   mp_log "warning: sgdisk -e failed on $disk, trying to grow anyway"
+fi
+
+if growpart "$disk" "$partno" >/dev/null 2>&1; then
+   mp_log "grew $disk partition $partno"
+else
+   # growpart exits non-zero when there is nothing to do, which is the normal
+   # case after provisioning already expanded the partition.
+   mp_log "partition $partno on $disk already fills the medium"
+fi
+
+if resize2fs "$part" >/dev/null 2>&1; then
+   mp_log "resized the filesystem on $part"
+else
+   mp_log "warning: resize2fs on $part failed"
+fi
+
+install -d -m 0755 "$(dirname "$MARKER")"
+: > "$MARKER"
+mp_log "persistent storage: $(df -h --output=size,used,avail /persistent | tail -n1)"
+
+exit 0

@@ -1,0 +1,6 @@
+X-IG-Signed-By: /usr/share/keyrings/duet3d.gpg
+Types: deb
+URIs: https://pkg.duet3d.com/
+Suites: stable
+Components: armv7
+Architectures: arm64

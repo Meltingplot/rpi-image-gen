@@ -1,0 +1,162 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-dsf
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: DuetSoftwareFramework and the CHX350 printer configuration,
+#  laid out for an immutable A/B root: the image owns the machine
+#  configuration and Duet Web Control, the printer owns its calibration, and
+#  only plugins that came with the image may run code.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: mp-duet-hw,mp-identity,device-user-admin,rpi-debian-trixie
+# X-Env-Layer-RequiresProvider: systemd
+#
+# X-Env-VarRequires: IGconf_sys_apt_keydir,IGconf_device_user1
+# X-Env-VarRequires-Valid: string,string
+#
+# X-Env-VarPrefix: dsf
+#
+# X-Env-Var-assetdir: ${DIRECTORY}/${STEM}.d
+# X-Env-Var-assetdir-Desc: Directory holding this layer's apt sources, seed
+#  skeleton and install scripts.
+# X-Env-Var-assetdir-Required: n
+# X-Env-Var-assetdir-Valid: dir
+# X-Env-Var-assetdir-Set: y
+#
+# X-Env-Var-version: 3.7.0~rc.1
+# X-Env-Var-version-Desc: Exact DuetSoftwareFramework version to install. Every
+#  DSF package is pinned to it, and the mainboard firmware follows through the
+#  dependency on reprapfirmware, so an image always carries a known pair of
+#  firmware and control software.
+# X-Env-Var-version-Required: n
+# X-Env-Var-version-Valid: string
+# X-Env-Var-version-Set: y
+#
+# X-Env-Var-suite: unstable
+# X-Env-Var-suite-Desc: Suite of the Duet3D archive. Release candidates are
+#  only published in unstable; a final release image has to use stable, which
+#  the release gate enforces.
+# X-Env-Var-suite-Required: n
+# X-Env-Var-suite-Valid: stable,unstable
+# X-Env-Var-suite-Set: y
+#
+# X-Env-Var-uid: 992
+# X-Env-Var-uid-Desc: Fixed uid and gid of the dsf account. The package would
+#  allocate one dynamically, but the printer's files live on a partition shared
+#  by both slots and are owned numerically, so a change between builds would
+#  make them unreadable after an update.
+# X-Env-Var-uid-Required: n
+# X-Env-Var-uid-Valid: int:100-999
+# X-Env-Var-uid-Set: y
+#
+# X-Env-Var-config_dir: ${DIRECTORY}/../chx350-config
+# X-Env-Var-config_dir-Desc: Checkout of the printer configuration repository,
+#  normally the pinned chx350-config submodule. Its branch tracks the
+#  RepRapFirmware generation.
+# X-Env-Var-config_dir-Required: n
+# X-Env-Var-config_dir-Valid: dir
+# X-Env-Var-config_dir-Set: y
+#
+# X-Env-Var-vigil_version: 1.3.0-beta.1
+# X-Env-Var-vigil_version-Desc: Version of the Vigil machine monitoring plugin.
+#  Only a published release asset is ever installed; there is no local build
+#  fallback. The matching asset is
+#  Vigil-<version>-dwc<generation>.zip on the dwc-vigil releases page.
+# X-Env-Var-vigil_version-Required: n
+# X-Env-Var-vigil_version-Valid: string
+# X-Env-Var-vigil_version-Set: y
+#
+# X-Env-Var-vigil_sha256: acc7e7c16dd851474d4157188e365309de76246de1245ff04144832ea42cca32
+# X-Env-Var-vigil_sha256-Desc: SHA-256 of the Vigil release asset. A mismatch
+#  stops the build rather than shipping an artefact nobody vouched for.
+# X-Env-Var-vigil_sha256-Required: n
+# X-Env-Var-vigil_sha256-Valid: regex:^[0-9a-f]{64}$
+# X-Env-Var-vigil_sha256-Set: y
+#
+# X-Env-Var-python_version: 3.7.0b1
+# X-Env-Var-python_version-Desc: Exact dsf-python version from PyPI for the
+#  bundled plugin's virtual environment. It has to match the DSF generation.
+# X-Env-Var-python_version-Required: n
+# X-Env-Var-python_version-Valid: string
+# X-Env-Var-python_version-Set: y
+#
+# X-Env-Var-plugin_policy: enforce
+# X-Env-Var-plugin_policy-Desc: Mode of the AppArmor plugin policy. enforce
+#  stops a plugin the image did not ship from running code. complain only logs
+#  what it would have stopped, which is how to collect the rules a new bundled
+#  plugin needs before pinning them down. Never ship complain to a customer.
+# X-Env-Var-plugin_policy-Required: n
+# X-Env-Var-plugin_policy-Valid: enforce,complain
+# X-Env-Var-plugin_policy-Set: y
+# METAEND
+---
+mmdebstrap:
+  mirrors:
+    - ${IGconf_dsf_assetdir}/apt/duet3d-${IGconf_dsf_suite}.sources
+  packages:
+    # Duet Web Control discovery on the local link, as DuetPi does it
+    - avahi-daemon
+    # carries the plugin policy
+    - apparmor
+    # the bundled plugin is a Python program in its own virtual environment
+    - python3
+    - python3-venv
+    - ca-certificates
+  setup-hooks:
+    # The archive is signed by a key that is not in the Debian keyring, so both
+    # the build host's apt and the chroot need it before anything is fetched.
+    - install -D -m 0644 "${IGconf_dsf_assetdir}/apt/duet3d.gpg" "$1/usr/share/keyrings/duet3d.gpg"
+    - install -D -m 0644 "${IGconf_dsf_assetdir}/apt/duet3d.gpg" "${IGconf_sys_apt_keydir}/duet3d.gpg"
+  essential-hooks:
+    # Before the DSF packages arrive, so their sysusers definition finds the
+    # account already there and does not allocate an id of its own.
+    - |-
+      set -eu
+      chroot "$1" groupadd -g "$IGconf_dsf_uid" dsf
+      chroot "$1" useradd -r -u "$IGconf_dsf_uid" -g dsf -d /opt/dsf \
+        -s /usr/sbin/nologin -c "Duet Software Framework" dsf
+  customize-hooks:
+    # Pin first: the Duet archive carries several prereleases side by side, and
+    # apt would otherwise be free to pick a different one on the next build.
+    - |-
+      set -eu
+      install -d -m 0755 "$1/etc/apt/preferences.d"
+      cat > "$1/etc/apt/preferences.d/duet3d" <<-EOF
+      Package: duetsoftwareframework duetcontrolserver duetwebserver duetwebcontrol duettools duetruntime duetpluginservice duetsd reprapfirmware
+      Pin: version ${IGconf_dsf_version}*
+      Pin-Priority: 1001
+
+      Package: *
+      Pin: origin pkg.duet3d.com
+      Pin-Priority: 100
+      EOF
+    # Installed here rather than through the package list so the version comes
+    # from one variable. duetpluginservice is only a recommendation of the
+    # framework and the base suite does not install recommendations, so it is
+    # named explicitly. duetpimanagementplugin is deliberately absent: it
+    # manages the network, the hostname and apt updates, none of which apply to
+    # a fleet-managed, read-only device.
+    - |-
+      set -eu
+      v="$IGconf_dsf_version"
+      chroot "$1" apt-get install -y --no-install-recommends \
+        "duetsoftwareframework=$v" \
+        "duetcontrolserver=$v" \
+        "duetwebserver=$v" \
+        "duetwebcontrol=$v" \
+        "duettools=$v" \
+        "duetruntime=$v" \
+        "duetpluginservice=$v" \
+        duetsd reprapfirmware
+    - $BDEBSTRAP_HOOKS/enable-units "$1" duetcontrolserver duetwebserver duetpluginservice duetpluginservice-root mp-dsf-seed avahi-daemon apparmor
+    - ${IGconf_dsf_assetdir}/bin/mp-dsf-configure "$1"
+    - ${IGconf_dsf_assetdir}/bin/mp-dsf-vigil "$1"
+    # The policy ships in enforce mode. complain is for widening the rules on a
+    # bench, never for a customer image.
+    - |-
+      set -eu
+      profile="$1/etc/apparmor.d/opt.dsf.bin.DuetPluginService"
+      if [ "$IGconf_dsf_plugin_policy" = "complain" ]; then
+        sed -i 's/__MP_MODE__/,complain/g' "$profile"
+        echo "mp-dsf: WARNING plugin policy is in complain mode, it only logs" >&2
+      else
+        sed -i 's/__MP_MODE__//g' "$profile"
+      fi
