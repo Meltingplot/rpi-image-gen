@@ -7,7 +7,7 @@
 #  auth key to the account, derives the hostname from the display name and
 #  grows the persistent partition to the size of the medium.
 # X-Env-Layer-Version: 1.0.0
-# X-Env-Layer-Requires: rpi-misc-skel,device-user-admin
+# X-Env-Layer-Requires: device-user-admin
 # X-Env-Layer-RequiresProvider: systemd
 #
 # X-Env-VarRequires: IGconf_device_user1
@@ -51,13 +51,8 @@ mmdebstrap:
       MP_PRODUCT=${IGconf_mpid_product}
       MP_ROLE=${IGconf_mpid_role}
       EOF
-    # rpi-misc-skel pins the build time hostname to 127.0.1.1. The hostname is
-    # a runtime property here and /etc/hosts is read-only, so drop the line and
-    # let nss-myhostname answer instead.
-    - |-
-      set -eu
-      sed -i '/^127\.0\.1\.1[[:space:]]/d' "$1/etc/hosts"
-      if ! grep -qE '^hosts:.*\bmyhostname\b' "$1/etc/nsswitch.conf"; then
-        sed -i -E 's/^(hosts:[[:space:]].*)$/\1 myhostname/' "$1/etc/nsswitch.conf"
-      fi
+    # /etc/hosts comes from this layer's overlay, without a 127.0.1.1 line: the
+    # hostname is a runtime property here and the root is read-only, so
+    # nss-myhostname answers for it instead. Its package registers itself in
+    # nsswitch.conf on installation.
     - $BDEBSTRAP_HOOKS/enable-units "$1" mp-identity mp-hostname mp-growfs

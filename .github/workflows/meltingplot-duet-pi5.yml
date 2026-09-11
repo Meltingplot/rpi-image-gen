@@ -106,33 +106,12 @@ jobs:
           deploy="$RUNNER_TEMP/work/deploy-$version"
           out="$RUNNER_TEMP/release"
           mkdir -p "$out"
-          # The image name is stable so a bundle URL is predictable; the
-          # version goes into the file name for the release.
-          for f in "$deploy"/*; do
-            name=$(basename "$f")
-            case $name in
-              mp-duet-pi5.*) cp "$f" "$out/${name/mp-duet-pi5./mp-duet-pi5-$version.}" ;;
-              *)             cp "$f" "$out/$name" ;;
-            esac
-          done
-          # release.json was written during the build, when the artefacts still
-          # carried their unversioned names. It is the record of what a printer
-          # received, so the names in it have to be the names of the files
-          # published beside it. Sizes and everything else stay as built.
-          python3 - "$out" <<'PY'
-          import json, pathlib, sys
-
-          out = pathlib.Path(sys.argv[1])
-          f = out / "release.json"
-          release = json.loads(f.read_text())
-          release["artefacts"] = [
-              {"name": p.name, "size": p.stat().st_size}
-              for p in sorted(out.iterdir())
-              if p.is_file() and p.name not in ("release.json", "SHA256SUMS")
-          ]
-          f.write_text(json.dumps(release, indent=2) + "\n")
-          PY
-          ( cd "$out" && rm -f SHA256SUMS && sha256sum * > SHA256SUMS )
+          # The artefacts carry their version in the name and release.json and
+          # SHA256SUMS were written beside them by hooks/deploy20-mp-release, so
+          # they are published as built. deployed.json is rpi-image-gen's own
+          # inventory; it is written after our hook and so is not in SHA256SUMS.
+          cp "$deploy"/* "$out"/
+          rm -f "$out/deployed.json"
           echo "dir=$out" >> "$GITHUB_OUTPUT"
           cat "$out/release.json"
           cat "$out/SHA256SUMS"

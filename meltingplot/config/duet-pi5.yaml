@@ -11,8 +11,10 @@
 include:
   file: mp-base.yaml
 
+# Versioned like the upstream default, so the names written into release.json
+# and SHA256SUMS at build time are the names the release publishes.
 image:
-  name: mp-duet-pi5
+  name: mp-duet-pi5-${IGconf_image_version}
 
 # The printer's internal network. The HMI Pi is the router, DNS resolver and
 # time source for everything behind it.

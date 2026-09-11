@@ -13,8 +13,6 @@ device:
   # There is no password on these machines and there never will be: access is
   # by SSH key or through Raspberry Pi Connect, so sudo cannot ask for one.
   user1sudo: nopasswd
-  # Replaced on every boot by mp-hostname from the printer name.
-  hostname: meltingplot-unconfigured
   # Only recorded in the provisioning descriptor. The image itself finds its
   # root by GPT label and runs from an SD card or an NVMe drive unchanged.
   storage_type: sd

@@ -1,0 +1,17 @@
+# Host packages for building the Meltingplot images, on top of the upstream
+# list. Install both with one command from the repository root:
+#
+#   sudo ./install_deps.sh meltingplot/depends
+#
+# Format, as in ../depends: category:program:package
+#
+# The image is arm64. On an x86 host every binary the chroot runs goes through
+# qemu-user-static, which its package registers with the kernel; the
+# registration survives reboots through binfmt-support. Both are what the
+# upstream getting started guide and the upstream x86 CI install. On an arm64
+# host they are not needed but do no harm.
+build:update-binfmts:binfmt-support
+build:qemu-aarch64-static:qemu-user-static
+
+# hooks/deploy20-mp-release records the commits that went into a build
+all:git

@@ -38,21 +38,20 @@ url="https://github.com/Meltingplot/dwc-vigil/releases/download/v${VIGIL_VERSION
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+# vfetch is rpi-image-gen's own downloader: it verifies the checksum and keeps
+# a verified copy in the build cache (IGconf_sys_cachedir), so a second build
+# does not fetch the asset again. rpi-image-gen clean discards that cache.
 say "fetching $asset"
-curl -fsSL --retry 3 -o "$tmp/vigil.zip" "$url" || die "\
-Vigil ${VIGIL_VERSION} has no release asset ${asset} for Duet Web Control ${dotted}.
+printf '%s sha256:%s %s\n' "$asset" "$VIGIL_SHA256" "$url" > "$tmp/vigil.meta"
+vfetch "$tmp/vigil.meta" "$tmp/vigil.zip" || die "\
+could not obtain ${asset} with checksum ${VIGIL_SHA256} from
+  $url
 
-The image only ever installs published release assets, so there is nothing to
-fall back to. Either release a Vigil build for this DWC generation, or point
-dsf.vigil_version at a version that has one:
-  $url"
-
-actual=$(sha256sum "$tmp/vigil.zip" | cut -d' ' -f1)
-[[ $actual == "$VIGIL_SHA256" ]] || die "\
-checksum mismatch for ${asset}
-  expected ${VIGIL_SHA256}
-  got      ${actual}
-Either the pin is stale or the asset was replaced. Do not build past this."
+Either Vigil ${VIGIL_VERSION} has no release asset for Duet Web Control
+${dotted}, or the asset does not match the pin. The image only ever installs
+published release assets, so there is nothing to fall back to: release a Vigil
+build for this DWC generation, or point dsf.vigil_version and dsf.vigil_sha256
+at a version that has one. Do not build past this."
 
 # --- unpack ---------------------------------------------------------------
 

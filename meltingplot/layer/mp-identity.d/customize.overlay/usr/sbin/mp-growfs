@@ -42,19 +42,22 @@ else
    mp_log "warning: sgdisk -e failed on $disk, trying to grow anyway"
 fi
 
-if growpart "$disk" "$partno" >/dev/null 2>&1; then
-   mp_log "grew $disk partition $partno"
-else
-   # growpart exits non-zero when there is nothing to do, which is the normal
-   # case after provisioning already expanded the partition.
-   mp_log "partition $partno on $disk already fills the medium"
-fi
+# growpart exits 0 when it resized, 1 when there was nothing to do (the normal
+# case after provisioning already expanded the partition) and 2 on a real
+# error. Only the first two leave the partition at the right size; anything
+# else must not be stamped, so the next boot tries again. `|| rc=$?` keeps the
+# non-zero exit out of set -e.
+rc=0
+growpart "$disk" "$partno" >/dev/null 2>&1 || rc=$?
+case $rc in
+   0) mp_log "grew $disk partition $partno" ;;
+   1) mp_log "partition $partno on $disk already fills the medium" ;;
+   *) mp_die "growpart $disk $partno failed (exit $rc); will retry on the next boot" ;;
+esac
 
-if resize2fs "$part" >/dev/null 2>&1; then
-   mp_log "resized the filesystem on $part"
-else
-   mp_log "warning: resize2fs on $part failed"
-fi
+resize2fs "$part" >/dev/null 2>&1 ||
+   mp_die "resize2fs on $part failed; will retry on the next boot"
+mp_log "resized the filesystem on $part"
 
 install -d -m 0755 "$(dirname "$MARKER")"
 : > "$MARKER"

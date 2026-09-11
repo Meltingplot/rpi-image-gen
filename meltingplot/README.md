@@ -36,21 +36,42 @@ boot, when it is put back.
 
 ## Building
 
-The build needs a Debian or Ubuntu host with the rpi-image-gen dependencies
-installed (`sudo ./install_deps.sh` in the repository root, plus
-`qemu-user-static` and `binfmt-support` when building on x86).
+The build runs the way rpi-image-gen documents it, on a Debian or Ubuntu host.
+That is also what the release workflow does, on a native arm64 runner, and what
+the upstream CI does on x86, so nothing here is specific to this project. On
+x86 (including WSL2 with systemd) the chroot's arm64 binaries run through
+qemu-user-static, which the Debian package registers with the kernel and keeps
+registered across reboots:
 
 ```bash
-./rpi-image-gen build -S ./meltingplot -c duet-pi5.yaml
+# once per machine: the upstream tool list plus qemu and binfmt from
+# meltingplot/depends, through the upstream installer
+sudo ./install_deps.sh meltingplot/depends
+# apt inside the chroot runs as _apt and has to reach the key directory under
+# work/, so every directory on the way there needs the execute bit
+chmod o+x "$HOME"
 ```
+
+Then, from the repository root:
+
+```bash
+mkdir -p meltingplot/.cache/apt
+./rpi-image-gen build -S ./meltingplot -c duet-pi5.yaml \
+   -- IGconf_sys_apt_cachedir="$PWD/meltingplot/.cache/apt"
+```
+
+The cache directory is optional; with it, a second build does not download the
+Duet packages and the .NET runtime again. rpi-image-gen runs as a regular user
+through rootless podman and never needs root itself. `./rpi-image-gen clean`
+removes the work directory.
 
 Artefacts land in `work/deploy-<version>/`:
 
 | File | Purpose |
 |---|---|
-| `mp-duet-pi5.img.zst` | full image, for writing to an SD card or NVMe drive |
-| `mp-duet-pi5.update.tar.zst` | update bundle, for Raspberry Pi Connect |
-| `mp-duet-pi5.idp.tar.zst` | provisioning archive, for rpi-sb-provisioner |
+| `mp-duet-pi5-<version>.img.zst` | full image, for writing to an SD card or NVMe drive |
+| `mp-duet-pi5-<version>.update.tar.zst` | update bundle, for Raspberry Pi Connect |
+| `mp-duet-pi5-<version>.idp.tar.zst` | provisioning archive, for rpi-sb-provisioner |
 | `filesystem-<version>.sbom.zst` | software bill of materials |
 | `release.json`, `SHA256SUMS` | what went into this build, and its checksums |
 
