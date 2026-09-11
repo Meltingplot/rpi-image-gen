@@ -68,6 +68,11 @@ if ! { [[ -f $SD/sys/dsf-config.g ]] && grep -q 'printer-name.g' "$SD/sys/dsf-co
    bad "dsf-config.g does not load printer-name.g, so the printer name would not apply"
 fi
 
+# duetruntime does not depend on ICU, but DuetPluginService and the duettools
+# abort at startup without it. The package list asks for it; make sure it came.
+compgen -G "$ROOT/usr/lib/*/libicuuc.so.*" >/dev/null ||
+   bad "libicu is not installed, so DuetPluginService and the duettools abort at startup"
+
 uid=$(awk -F: '$1=="dsf"{print $3}' "$ROOT/etc/passwd")
 [[ $uid == "$DSF_UID" ]] ||
    bad "dsf has uid ${uid:-none}, expected $DSF_UID; persistent files are owned numerically"
@@ -118,5 +123,23 @@ else
    bad "the AppArmor plugin policy is missing"
 fi
 
+# --- restarts and firmware ------------------------------------------------
+# An installed update may only restart the printer computer through
+# mp-ota-gate, and the firmware only follows a committed slot. Both rest on
+# the update connector not restarting on its own.
+
+conn="$ROOT/etc/rpi-connect/rpi-ota-connector.config"
+if [[ -f $conn ]]; then
+   grep -qx 'AutoReboot=false' "$conn" ||
+      bad "the update connector would restart the device on its own, bypassing mp-ota-gate"
+else
+   echo "mp-dsf assert: no update connector in this image, mp-ota-gate has nothing to gate" >&2
+fi
+
+for unit in mp-ota-gate.timer mp-dsf-firmware.service; do
+   compgen -G "$ROOT/etc/systemd/system/*.wants/$unit" >/dev/null ||
+      bad "$unit is not enabled"
+done
+
 [[ $fail -eq 0 ]] || exit 1
-echo "mp-dsf assert: layout, plugin policy and boot configuration are consistent" >&2
+echo "mp-dsf assert: layout, plugin policy, boot configuration and update path are consistent" >&2

@@ -4,8 +4,10 @@
 # X-Env-Layer-Desc: DuetSoftwareFramework and the CHX350 printer configuration,
 #  laid out for an immutable A/B root: the image owns the machine
 #  configuration and Duet Web Control, the printer owns its calibration, and
-#  only plugins that came with the image may run code.
-# X-Env-Layer-Version: 1.0.0
+#  only plugins that came with the image may run code. An installed update
+#  restarts the device only once the printer is idle (mp-ota-gate), and the
+#  Duet firmware follows the image once a slot is committed (mp-dsf-firmware).
+# X-Env-Layer-Version: 1.1.0
 # X-Env-Layer-Requires: mp-duet-hw,mp-identity,device-user-admin,rpi-debian-trixie
 # X-Env-Layer-RequiresProvider: systemd
 #
@@ -96,6 +98,12 @@ mmdebstrap:
     - avahi-daemon
     # carries the plugin policy
     - apparmor
+    # The .NET runtime in duetruntime needs ICU from the system and the package
+    # does not depend on it. DuetControlServer and DuetWebServer are built with
+    # invariant globalization and run without it; DuetPluginService and the
+    # duettools (CodeConsole, PluginManager, ...) abort at startup. DuetPi gets
+    # ICU from its base system, this image has to ask for it. Trixie ships 76.
+    - libicu76
     # the bundled plugin is a Python program in its own virtual environment
     - python3
     - python3-venv
@@ -156,7 +164,7 @@ mmdebstrap:
         "duetruntime=$v" \
         "duetpluginservice=$v" \
         duetsd reprapfirmware
-    - $BDEBSTRAP_HOOKS/enable-units "$1" duetcontrolserver duetwebserver duetpluginservice duetpluginservice-root mp-dsf-seed avahi-daemon apparmor
+    - $BDEBSTRAP_HOOKS/enable-units "$1" duetcontrolserver duetwebserver duetpluginservice duetpluginservice-root mp-dsf-seed mp-dsf-firmware mp-ota-gate.timer avahi-daemon apparmor
     - ${IGconf_dsf_assetdir}/bin/mp-dsf-configure "$1"
     - ${IGconf_dsf_assetdir}/bin/mp-dsf-vigil "$1"
     # The policy ships in enforce mode. complain is for widening the rules on a
