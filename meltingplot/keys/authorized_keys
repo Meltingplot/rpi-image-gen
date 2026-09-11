@@ -10,3 +10,4 @@
 #
 # One key per line, e.g.
 # ssh-ed25519 AAAAC3Nza... tim@meltingplot.net
+ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBAEBbxFnUif5H+tB0GVCebAU6c5F5+Kmn60nsaXalg4HCGbJFXUUpMniRcEBOONGo8QV05emllEnC3OvNVpEKOU= tim@meltingplot.net
