@@ -88,7 +88,16 @@ profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnec
     include <abstractions/base>
     include <abstractions/nameservice>
 
-    signal (receive, send) peer=@{profile_name},
+    # A signal is mediated on the receiving side as well, so the senders that
+    # stop this plugin have to be named. abstractions/base already accepts
+    # unconfined ones, which covers systemd on shutdown; DuetPluginService is
+    # confined and is what Stop in Duet Web Control goes through, so without
+    # the rule below a plugin could be started but never stopped again.
+    # Sending stays confined to the plugin itself: it may signal no other
+    # process on the machine.
+    signal (receive) peer=DuetPluginService,
+    signal (receive) peer=DuetPluginService//dsf_launcher,
+    signal (send, receive) peer=@{profile_name},
 
     /usr/bin/python3* rm,
     /usr/lib/python3*/** mr,

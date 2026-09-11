@@ -2,7 +2,9 @@
 Description=Seed machine-owned Duet configuration and bundled plugins
 DefaultDependencies=no
 After=local-fs.target persistent-shared-init.service mp-identity.service mp-hostname.service
-RequiresMountsFor=/opt/dsf/sd /opt/dsf/conf /opt/dsf/plugins
+# The bind mounts the seeded files land in. /opt/dsf/sd itself is part of the
+# read-only root; only its subdirectories come from persistent storage.
+RequiresMountsFor=/opt/dsf/sd/sys /opt/dsf/sd/filaments /opt/dsf/conf /opt/dsf/plugins
 Before=duetcontrolserver.service duetwebserver.service duetpluginservice.service sysinit.target
 ConditionPathIsDirectory=/usr/share/meltingplot/dsf-skel
 

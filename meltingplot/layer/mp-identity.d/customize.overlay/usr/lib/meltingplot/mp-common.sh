@@ -34,6 +34,10 @@ mp_die() {
 # Read one key from a simple key=value file. Comments and CRLF line endings
 # (the commissioning file is written on a FAT partition, often from Windows)
 # are handled. Prints the empty string when the key is absent.
+#
+# This is how the identity file is read too. It is never sourced: a display
+# name contains spaces, so a shell would read PRINTER_NAME=Halle 2 links as an
+# assignment followed by a call to the command 2.
 mp_conf_get() {
    [ -f "$1" ] || return 0
    sed -n -e 's/\r$//' -e "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*//p" "$1" \
@@ -44,11 +48,14 @@ mp_conf_get() {
 # Turn a display name into a DNS label: lower case, every run of characters
 # that is not a letter or digit becomes a single dash, no leading or trailing
 # dash, at most 63 characters. Prints nothing if no letter or digit remains.
+# Truncation happens before the dashes are trimmed, so a cut that lands on a
+# dash cannot leave one at the end, which no DNS label may have.
 mp_slug() {
    printf '%s' "$1" \
       | tr '[:upper:]' '[:lower:]' \
-      | sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-*//' -e 's/-*$//' \
-      | cut -c1-63
+      | sed -e 's/[^a-z0-9]\{1,\}/-/g' \
+      | cut -c1-63 \
+      | sed -e 's/^-*//' -e 's/-*$//'
 }
 
 # The name a device carries when nothing has been commissioned yet. Deliberately

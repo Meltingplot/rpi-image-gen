@@ -32,6 +32,14 @@ check "slug plain"        "halle-2-links"                "$(mp_slug 'Halle 2 lin
 check "slug punctuation"  "werk-1-halle-2"               "$(mp_slug 'Werk 1 / Halle 2!')"
 check "slug trims dashes" "abc"                          "$(mp_slug '  --abc-- ')"
 check "slug no letters"   ""                             "$(mp_slug '!!!')"
+
+# A DNS label is at most 63 characters and may not end in a dash, so the cut
+# must not be able to leave one behind.
+long=$(mp_slug "$(printf 'ab %.0s' $(seq 30))")
+[ "${#long}" -le 63 ] && r=yes || r=no
+check "slug fits a DNS label" yes "$r"
+case $long in *-) r=no ;; *) r=yes ;; esac
+check "slug does not end in a dash" yes "$r"
 check "default name"      "meltingplot-chx-350-0042-sbc" "$(mp_default_name 0042)"
 check "default is a slug" "meltingplot-chx-350-0042-sbc" "$(mp_slug "$(mp_default_name 0042)")"
 
@@ -43,6 +51,23 @@ check "conf name"         "Halle 2 links" "$(mp_conf_get "$tmp/id.conf" printer_
 check "conf commented out is not read" "rpoak_secret" "$(mp_conf_get "$tmp/id.conf" connect_authkey)"
 check "conf absent key"   ""              "$(mp_conf_get "$tmp/id.conf" force)"
 check "conf missing file" ""              "$(mp_conf_get "$tmp/nope" printer_serial)"
+
+# The identity file, written by mp-identity and read back by mp-hostname and
+# mp-dsf-seed. It looks like shell but must never be sourced: a display name
+# contains spaces, and a shell reads the line below as an assignment followed
+# by a call to the command "2".
+cat > "$tmp/mp-identity" <<'EOF'
+# Written by mp-identity at commissioning.
+PRINTER_SERIAL=0042
+PRINTER_NAME=Halle 2 links
+ROLE=sbc
+COMMISSIONED=2026-09-10T20:00:00Z
+EOF
+check "identity name survives spaces" "Halle 2 links" "$(mp_conf_get "$tmp/mp-identity" PRINTER_NAME)"
+check "identity serial"   "0042" "$(mp_conf_get "$tmp/mp-identity" PRINTER_SERIAL)"
+check "identity role"     "sbc"  "$(mp_conf_get "$tmp/mp-identity" ROLE)"
+sh -c 'set -eu; . "$1"' sh "$tmp/mp-identity" 2>/dev/null && r=yes || r=no
+check "identity is not shell" no "$r"
 
 printf '; comment\r\nM550 P"Halle 2 links"   ; name\r\n' > "$tmp/pn.g"
 check "M550 name"         "Halle 2 links" "$(mp_read_printer_name "$tmp/pn.g")"

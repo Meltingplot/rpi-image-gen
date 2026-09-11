@@ -38,10 +38,13 @@ fi
 if [ ! -f "$MP_PRINTER_NAME_FILE" ]; then
    name=""
    if [ -r "$MP_IDENTITY_FILE" ]; then
-      # shellcheck source=/dev/null
-      . "$MP_IDENTITY_FILE"
-      name=${PRINTER_NAME:-}
-      [ -n "$name" ] || [ -z "${PRINTER_SERIAL:-}" ] || name=$(mp_default_name "$PRINTER_SERIAL")
+      # Read as key=value, never sourced: a display name contains spaces, and a
+      # shell would read PRINTER_NAME=Halle 2 links as a call to the command 2.
+      name=$(mp_conf_get "$MP_IDENTITY_FILE" PRINTER_NAME)
+      if [ -z "$name" ]; then
+         serial=$(mp_conf_get "$MP_IDENTITY_FILE" PRINTER_SERIAL)
+         [ -z "$serial" ] || name=$(mp_default_name "$serial")
+      fi
    fi
    [ -n "$name" ] || name=$(mp_fallback_name)
 

@@ -16,14 +16,16 @@ name=$(mp_read_printer_name "$MP_PRINTER_NAME_FILE")
 source=printer-name.g
 
 if [ -z "$name" ] && [ -r "$MP_IDENTITY_FILE" ]; then
-   # shellcheck source=/dev/null
-   . "$MP_IDENTITY_FILE"
-   if [ -n "${PRINTER_NAME:-}" ]; then
-      name=$PRINTER_NAME
-      source=mp-identity
-   elif [ -n "${PRINTER_SERIAL:-}" ]; then
-      name=$(mp_default_name "$PRINTER_SERIAL")
-      source=serial
+   # Read as key=value, never sourced: a display name contains spaces, and a
+   # shell would read PRINTER_NAME=Halle 2 links as a call to the command 2.
+   name=$(mp_conf_get "$MP_IDENTITY_FILE" PRINTER_NAME)
+   source=mp-identity
+   if [ -z "$name" ]; then
+      serial=$(mp_conf_get "$MP_IDENTITY_FILE" PRINTER_SERIAL)
+      if [ -n "$serial" ]; then
+         name=$(mp_default_name "$serial")
+         source=serial
+      fi
    fi
 fi
 
