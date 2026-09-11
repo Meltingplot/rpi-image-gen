@@ -215,9 +215,13 @@ and a systemd sandbox around the plugin service. Refusals show up as
 `apparmor="DENIED"` in `journalctl -k`.
 
 Adding another Meltingplot plugin to an image means adding its files to the
-build and a read rule to the `dsf_plugin_py` profile. Build with
-`-- IGconf_dsf_plugin_policy=complain` to collect what it needs first; never
-ship that.
+build, a read rule for them and one for its endpoint sockets below `/run/dsf`
+to the `dsf_plugin_py` profile, and its id to the Duet Web Control factory
+defaults in `sys/dwc-defaults.json`. That last file is what makes a fresh
+printer load the plugin's web part: DWC keeps its own list of enabled plugins,
+and the SBC autostart list in `plugins.txt` says nothing to it. Build with
+`-- IGconf_dsf_plugin_policy=complain` to collect what a plugin needs first;
+never ship that.
 
 ## What is deliberately missing
 

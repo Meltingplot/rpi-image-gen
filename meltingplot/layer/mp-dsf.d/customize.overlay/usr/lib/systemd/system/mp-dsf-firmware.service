@@ -8,11 +8,18 @@ RequiresMountsFor=/bootfs
 ConditionPathExists=/opt/dsf/bin/DuetControlServer
 
 [Service]
-Type=oneshot
+# Not a oneshot: the script settles for minutes before it does anything, and
+# a oneshot would hold multi-user.target back for as long as it runs. The
+# packaged DuetPluginService units start only after that target, so a
+# oneshot here would keep every plugin from starting until the firmware check
+# was through, and Duet Web Control would report the plugin service as not
+# started in the meantime. With exec the start job is done once the script
+# runs, and the target is reached without it.
+Type=exec
 ExecStart=/usr/sbin/mp-dsf-firmware
 # Three minutes of settling, two waits of up to five minutes, then every
 # board on the CAN bus.
-TimeoutStartSec=30min
+RuntimeMaxSec=30min
 
 [Install]
 WantedBy=multi-user.target

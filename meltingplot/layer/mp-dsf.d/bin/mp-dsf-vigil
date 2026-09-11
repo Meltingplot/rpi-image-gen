@@ -107,6 +107,31 @@ for f in "${dwc_files[@]}"; do
 done
 say "${#dwc_files[@]} web assets installed"
 
+# Duet Web Control loads a plugin's web part only for the plugins in its own
+# list, which lives in the machine-owned 0:/sys/dwc-settings.json. The SBC
+# autostart list in plugins.txt says nothing to it. Without an entry a fresh
+# printer shows the plugin as partially started until someone presses Start
+# once. DWC reads 0:/sys/dwc-defaults.json when it has no settings yet, and
+# that file is image-owned like the rest of sys, so the entry is put there.
+# The list replaces DWC's built-in default, so that default is carried along.
+
+python3 - "$SD/sys/dwc-defaults.json" <<'PY'
+import json, pathlib, sys
+
+p = pathlib.Path(sys.argv[1])
+data = json.loads(p.read_text()) if p.exists() else {}
+plugins = data.get("enabledPlugins")
+if not isinstance(plugins, list):
+    plugins = ["GCodeViewer", "HeightMap", "InputShaping", "ObjectModelBrowser"]
+if "Vigil" not in plugins:
+    plugins.append("Vigil")
+data["enabledPlugins"] = plugins
+p.parent.mkdir(parents=True, exist_ok=True)
+p.write_text(json.dumps(data, indent=2) + "\n")
+PY
+chmod 0660 "$SD/sys/dwc-defaults.json"
+say "Vigil enabled in the Duet Web Control factory defaults"
+
 # --- Python environment ---------------------------------------------------
 # Built at the path it will run from: a virtual environment records absolute
 # paths, and DuetPluginService starts the daemon as <plugin>/venv/bin/python.
@@ -122,6 +147,13 @@ chroot "$ROOT" "$PLUGIN_DIR/venv/bin/pip" install \
 mv "$ROOT$PLUGIN_DIR/venv" "$SKEL/plugins/Vigil/venv"
 rmdir "$ROOT$PLUGIN_DIR" 2>/dev/null || true
 
-chown -R "$DSF_UID:$DSF_UID" "$SKEL/plugins" "$SD/www"
+# Python writes bytecode next to the sources on first import. Done here
+# instead, so the plugin starts from a finished cache and never needs to
+# write into its own directory on the device. The seed copies the tree with
+# its timestamps, which is what keeps the cache valid.
+chroot "$ROOT" python3 -m compileall -q "${SKEL#"$ROOT"}/plugins/Vigil/dsf" ||
+   die "the plugin sources do not compile"
+
+chown -R "$DSF_UID:$DSF_UID" "$SKEL/plugins" "$SD/www" "$SD/sys/dwc-defaults.json"
 
 say "Vigil ${VIGIL_VERSION} staged with dsf-python ${DSF_PYTHON_VERSION}"

@@ -97,6 +97,10 @@ profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnec
     /persistent/** r,
     owner /tmp/** rw,
 
+    # bash probes for a terminal at startup. There is none, and the probe
+    # would otherwise be the one denial that shows up on every plugin start.
+    deny /dev/tty rw,
+
     # The only program a plugin launcher may start. This hop leaves the
     # launcher and enters the plugin profile; DuetPluginService stays stacked
     # on top through its own ix rule, so no_new_privs is satisfied.
@@ -136,17 +140,35 @@ profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnec
     /sys/devices/** r,
     /sys/firmware/devicetree/** r,
 
+    # dsf-python looks up the control server socket in its configuration and
+    # falls back to the default path when it cannot; reading it keeps the two
+    # in step.
+    /opt/dsf/conf/config.json r,
+
     # Plugins that came with the image. One block per bundled plugin; a plugin
     # installed later has no block here and cannot read its own files.
     /opt/dsf/plugins/Vigil.json r,
     /opt/dsf/plugins/Vigil/** mr,
+    # The build precompiles the plugin, so Python has nothing to write here.
+    # Should the cache still be stale, writing it is harmless: the plugin
+    # already runs this code, and the directory is its own.
+    owner /opt/dsf/plugins/Vigil/dsf/__pycache__/ w,
+    owner /opt/dsf/plugins/Vigil/dsf/__pycache__/* rw,
 
-    # Its own data on the virtual SD card, and the control server socket.
+    # Its own data on the virtual SD card.
     /opt/dsf/sd/Vigil/ rw,
     /opt/dsf/sd/Vigil/** rwk,
+
+    # The control server socket, which the plugin connects to, and its own
+    # HTTP endpoints, which it serves: DuetControlServer creates the namespace
+    # directory under /run/dsf and the plugin binds one socket per endpoint in
+    # it, then DuetWebServer connects to those. The namespace is the plugin's
+    # own, so it cannot bind or replace another plugin's sockets.
     /run/dsf/ r,
     /run/dsf/* rw,
-    unix (connect, send, receive) type=stream,
+    /run/dsf/Vigil/ r,
+    /run/dsf/Vigil/* rw,
+    unix (bind, listen, accept, connect, send, receive) type=stream,
 
     owner /tmp/** rw,
   }
