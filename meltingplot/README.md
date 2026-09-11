@@ -60,6 +60,10 @@ mkdir -p meltingplot/.cache/apt
    -- IGconf_sys_apt_cachedir="$PWD/meltingplot/.cache/apt"
 ```
 
+`make build` runs the same command; `VERSION=1.2.0-rc.1` on the make line
+passes a version, `make test` runs the shell library tests. The Makefile in
+the repository root holds nothing but these commands.
+
 The cache directory is optional; with it, a second build does not download the
 Duet packages and the .NET runtime again. rpi-image-gen runs as a regular user
 through rootless podman and never needs root itself. `./rpi-image-gen clean`
