@@ -1,0 +1,37 @@
+#!/bin/sh
+# Let a Raspberry Pi Connect update restart the printer computer, but only
+# while the printer is idle.
+#
+# The update connector installs a new image into the other slot on its own.
+# With AutoReboot switched off (layer mp-connect) it then waits for a call to
+# Reboot on its D-Bus interface instead of restarting at once. This runs every
+# minute from mp-ota-gate.timer: nothing to do unless an update waits, and
+# then only when RepRapFirmware reports the machine idle. A print that is
+# running, paused or being cancelled holds the restart back. So does an
+# unreachable control server, because "unknown" is not "idle"; support can
+# still restart by hand over the Connect shell.
+
+set -eu
+
+MP_TAG=mp-ota-gate
+. /usr/lib/meltingplot/mp-common.sh
+. /usr/lib/meltingplot/mp-dsf.sh
+
+MARKER=/run/meltingplot/ota-gate.held
+
+mp_ota_restart_pending || exit 0
+
+status=$(mp_dcs_status)
+if [ "$status" != idle ]; then
+   # One line per change of status, not one per minute.
+   if [ "$(cat "$MARKER" 2>/dev/null)" != "${status:-unreachable}" ]; then
+      install -d -m 0755 "$(dirname "$MARKER")"
+      printf '%s\n' "${status:-unreachable}" > "$MARKER"
+      mp_log "an update is installed and waits; the printer is ${status:-unreachable}, restart held back"
+   fi
+   exit 0
+fi
+
+rm -f "$MARKER"
+mp_log "an update is installed and the printer is idle, restarting into it"
+exec busctl call com.raspberrypi.ota /com/raspberrypi/ota com.raspberrypi.ota Reboot

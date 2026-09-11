@@ -21,6 +21,7 @@ build:
 
 test:
 	sh meltingplot/test/test-mp-common.sh
+	sh meltingplot/test/test-mp-dsf.sh
 
 clean:
 	./rpi-image-gen clean

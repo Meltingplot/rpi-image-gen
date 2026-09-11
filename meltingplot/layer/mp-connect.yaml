@@ -4,8 +4,24 @@
 # X-Env-Layer-Desc: Raspberry Pi Connect (shell only) with remote update
 #  support, as the delivery channel for OTA images. No auth key is baked into
 #  the image; a device signs in on first boot from the key that mp-identity
-#  drops for it, which rpi-connect-signin.path picks up.
-# X-Env-Layer-Version: 1.0.0
+#  drops for it, which rpi-connect-signin.path picks up. The update connector
+#  is told not to restart the device on its own: an installed update waits
+#  until something calls Reboot on the connector's D-Bus interface, which
+#  mp-ota-gate in mp-dsf does once the printer is idle. An image with this
+#  layer and no such gate never restarts into an update.
+# X-Env-Layer-Version: 1.1.0
 # X-Env-Layer-Requires: rpi-connect-lite,rpi-connect-ota
 # METAEND
 ---
+mmdebstrap:
+  customize-hooks:
+    # The packaged default is AutoReboot=true, a restart the moment the slot is
+    # written, which on a printer means mid-print. AutoCommit stays on: the
+    # connector commits a slot that boots, and the firmware follows from there.
+    - |-
+      set -eu
+      f="$1/etc/rpi-connect/rpi-ota-connector.config"
+      [ -f "$f" ] || { echo "mp-connect: $f is missing, did rpi-connect-ota install?" >&2; exit 1; }
+      sed -i 's/^AutoReboot=.*/AutoReboot=false/' "$f"
+      grep -qx 'AutoReboot=false' "$f" ||
+        { echo "mp-connect: could not turn AutoReboot off in $f" >&2; exit 1; }

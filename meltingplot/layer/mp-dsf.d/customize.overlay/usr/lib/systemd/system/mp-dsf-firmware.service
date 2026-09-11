@@ -1,0 +1,17 @@
+[Unit]
+Description=Bring the Duet firmware to the version this image carries
+# After the control server, which does the flashing on request, and after the
+# update connector, which commits a freshly trybooted slot. The script waits
+# for both on its own; the ordering only spares it the wait.
+After=duetcontrolserver.service rpi-connect-ota.service
+RequiresMountsFor=/bootfs
+ConditionPathExists=/opt/dsf/bin/DuetControlServer
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/mp-dsf-firmware
+# Two waits of up to five minutes, then every board on the CAN bus.
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target

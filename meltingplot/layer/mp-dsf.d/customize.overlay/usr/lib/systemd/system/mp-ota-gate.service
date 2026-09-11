@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart into an installed update once the printer is idle
+RequiresMountsFor=/bootfs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/mp-ota-gate

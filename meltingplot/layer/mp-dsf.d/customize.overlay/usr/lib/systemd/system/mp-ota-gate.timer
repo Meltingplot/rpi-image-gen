@@ -1,0 +1,10 @@
+[Unit]
+Description=Check every minute whether an installed update may restart the printer computer
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

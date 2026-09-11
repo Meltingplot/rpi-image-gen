@@ -1,0 +1,55 @@
+#!/bin/sh
+# Bring the Duet boards to the firmware this image was built with.
+#
+# The mainboard firmware is pinned to the DuetSoftwareFramework version and
+# ships in the slot under /opt/dsf/sd/firmware. Nothing in DSF flashes it by
+# itself: the version comparison only ever runs as `DuetControlServer -u`,
+# which DuetPi triggers from apt and this image triggers here, once per boot.
+# Without a terminal on stdin that command flashes every board whose version
+# differs from the file, without asking.
+#
+# Two conditions, both waited for, neither forced:
+#
+#   * The running slot must be committed. During a tryboot the bootloader
+#     falls back to the other slot on the next reset, and that slot expects
+#     its own firmware. The update connector commits within seconds of a
+#     successful boot, so after an update this is a short wait.
+#   * The printer must be idle. Flashing resets the mainboard.
+#
+# Because every slot does this for itself, a rollback also puts the matching
+# firmware back: DuetControlServer flashes on any difference, not only on a
+# newer version.
+
+set -eu
+
+MP_TAG=mp-dsf-firmware
+. /usr/lib/meltingplot/mp-common.sh
+. /usr/lib/meltingplot/mp-dsf.sh
+
+DCS=/opt/dsf/bin/DuetControlServer
+WAIT=${MP_FIRMWARE_WAIT:-300}
+
+# Poll a condition every few seconds until it holds or the wait is used up.
+wait_for() {
+   _left=$WAIT
+   until "$@"; do
+      [ "$_left" -gt 0 ] || return 1
+      sleep 5
+      _left=$((_left - 5))
+   done
+}
+
+printer_idle() { [ "$(mp_dcs_status)" = idle ]; }
+
+if ! wait_for mp_slot_committed; then
+   mp_log "this slot is not committed, the firmware stays as it is"
+   exit 0
+fi
+
+if ! wait_for printer_idle; then
+   mp_log "the printer is '$(mp_dcs_status)', not idle; the firmware stays as it is"
+   exit 0
+fi
+
+mp_log "comparing the Duet firmware with this image"
+exec "$DCS" -u < /dev/null

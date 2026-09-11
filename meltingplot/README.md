@@ -26,6 +26,7 @@ and a rollback both keep it:
 | `/opt/dsf/sd/{sys,macros,filaments}` | the image | the new printer configuration replaces the old one |
 | `/opt/dsf/sd/www` | the image | the new Duet Web Control replaces the old one |
 | `/opt/dsf/conf/{config,plugins}.json` | the image | corrected by the update |
+| `/opt/dsf/sd/firmware` | the image | flashed to the Duet boards once the new slot is committed |
 | the files in `layer/mp-dsf.d/protected.list` | the machine | never touched |
 | `/opt/dsf/sd/gcodes`, calibration files, `/opt/dsf/sd/Vigil`, `/home` | the machine | never touched |
 
@@ -151,10 +152,37 @@ is recorded in `/persistent/common/etc/mp-identity`.
 3. Deploy it to a device. The device writes the bundle to the root filesystem it
    is not running from, restarts into it once, and keeps it if it comes up.
 
-Roll out to a bench machine first, then to pilot customers. **Never deploy to a
-printer that is printing**: applying an update reboots the machine.
+Roll out to a bench machine first, then to pilot customers.
 
 To go back, deploy the previous artefact again. It stays registered.
+
+### What happens on the device
+
+1. The update connector from `rpi-connect-ota` streams the bundle into the
+   other slot. This happens as soon as the deployment is created, while the
+   printer keeps working.
+2. The connector then waits. The packaged default would restart the device at
+   once; `mp-connect` turns that off, and `mp-ota-gate` checks once a minute
+   whether an update waits and whether RepRapFirmware reports the machine
+   idle. Only then is the restart triggered. A running or paused print holds
+   it back for as long as it takes; the deployment shows as in progress in
+   Connect meanwhile. So does a control server that cannot be asked: support
+   can restart such a machine by hand over the Connect shell.
+3. The bootloader starts the new slot once. If it does not come up, the next
+   reset returns to the old one. If it comes up, the connector commits it
+   within seconds of boot and reports the deployment as succeeded. That is the
+   whole health check: Linux booted far enough to run the connector.
+4. `mp-dsf-firmware` runs on every boot, waits for the slot to be committed and
+   for the printer to be idle, and then runs `DuetControlServer -u`, which
+   flashes every Duet board whose firmware differs from the files under
+   `/opt/dsf/sd/firmware`. Those files belong to the slot, so a rollback
+   flashes the previous firmware back the same way. Until that has happened,
+   Duet Web Control shows a firmware mismatch warning.
+
+The flash comes after the commit, so a firmware that fails to flash is not
+undone by the bootloader. A Duet board keeps its bootloader, so it can be
+recovered over USB, but not remotely. Committing only after a successful flash
+is planned, see the project plan.
 
 ### Rolling back by hand
 
@@ -166,7 +194,9 @@ sudo reboot '0 tryboot'
 This starts the other root filesystem once. Running the same command again
 after it comes up makes the choice permanent. The persistent partition is not
 touched either way, so the machine keeps its data; image-owned configuration
-returns to the version that slot carries.
+returns to the version that slot carries. The firmware follows on the next
+boot after the commit, or right away with
+`sudo systemctl start mp-dsf-firmware`.
 
 ## Plugins
 
@@ -194,7 +224,9 @@ ship that.
   bill of materials has to keep describing what is installed. Updates arrive as
   images.
 - Firmware upload through Duet Web Control: the mainboard firmware belongs to
-  the image, so a rollback puts the matching firmware back. It is flashed
-  automatically when it does not match the control server.
+  the image and is flashed by `mp-dsf-firmware`, so a rollback puts the
+  matching firmware back. Nothing in DSF itself flashes on a version mismatch;
+  the `AutoUpdateFirmware` setting in `config.json` is not read by
+  DuetControlServer 3.7.
 - Wi-Fi and Bluetooth on the printer computer: it is wired to the operator
   panel on its own network segment.
