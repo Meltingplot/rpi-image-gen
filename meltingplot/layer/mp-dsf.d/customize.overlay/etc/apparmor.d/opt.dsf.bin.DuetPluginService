@@ -29,6 +29,23 @@
 # are avoided on purpose, because in AppArmor a deny always beats an allow and
 # would take the exec transitions with it.
 #
+# The service runs with NoNewPrivileges (see the systemd drop-in). Under
+# no_new_privs the kernel refuses any exec that would leave the current
+# profile behind, because a different profile might grant more; a transition
+# is only allowed if the old label stays part of the new one. So the shell is
+# not moved into dsf_launcher, it is stacked: "ix -> &<profile>" keeps
+# DuetPluginService and adds the child, and the process is confined by both.
+# The second hop then replaces the launcher with dsf_plugin_py while the
+# parent still stays, which is what no_new_privs asks for. A plain "Cx"
+# transition is denied with info="no new privs" in the audit log.
+#
+# The child profiles are siblings, so the target of a transition between them
+# is written with its full name. A "Cx -> name" from inside a child would be
+# looked up as "dsf_launcher//name", which does not exist.
+#
+# A process in a stacked label shows up as
+# "DuetPluginService//&DuetPluginService//dsf_plugin_py" in ps -Z and aa-status.
+#
 # Denials appear as apparmor="DENIED" in `journalctl -k`. Build with
 # dsf.plugin_policy=complain to log them without acting on them, which is how
 # to widen these lists for a new bundled plugin.
@@ -55,10 +72,13 @@ profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnec
   deny /tmp/** x,
   deny /var/** x,
 
-  # The one way to a shell, and only to start a Python plugin.
-  /{usr/,}bin/bash Cx -> dsf_launcher,
-  /{usr/,}bin/sh    Cx -> dsf_launcher,
-  /{usr/,}bin/dash  Cx -> dsf_launcher,
+  # The one way to a shell, and only to start a Python plugin. Stacked, not
+  # entered, because of no_new_privs (see above). The kernel first looks for a
+  # top-level profile attached to the shell and would stack onto that instead;
+  # the image ships none.
+  /{usr/,}bin/bash ix -> &DuetPluginService//dsf_launcher,
+  /{usr/,}bin/sh   ix -> &DuetPluginService//dsf_launcher,
+  /{usr/,}bin/dash ix -> &DuetPluginService//dsf_launcher,
 
   profile dsf_launcher flags=(attach_disconnected__MP_MODE__) {
     include <abstractions/base>
@@ -77,8 +97,10 @@ profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnec
     /persistent/** r,
     owner /tmp/** rw,
 
-    # The only program a plugin launcher may start.
-    /usr/bin/python3* Cx -> dsf_plugin_py,
+    # The only program a plugin launcher may start. This hop leaves the
+    # launcher and enters the plugin profile; DuetPluginService stays stacked
+    # on top through its own ix rule, so no_new_privs is satisfied.
+    /usr/bin/python3* Px -> DuetPluginService//dsf_plugin_py,
   }
 
   # The plugin itself. Everything it may touch is listed; anything absent is
@@ -94,10 +116,14 @@ profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnec
     # confined and is what Stop in Duet Web Control goes through, so without
     # the rule below a plugin could be started but never stopped again.
     # Sending stays confined to the plugin itself: it may signal no other
-    # process on the machine.
+    # process on the machine. The plugin's own label is the stack of the
+    # parent and this profile, and a peer rule matches a stacked label as a
+    # whole before it falls back to matching each part. Naming the whole
+    # stack allows the plugin to signal itself without also allowing it to
+    # signal DuetPluginService, whose label is the bare parent.
     signal (receive) peer=DuetPluginService,
     signal (receive) peer=DuetPluginService//dsf_launcher,
-    signal (send, receive) peer=@{profile_name},
+    signal (send, receive) peer=DuetPluginService//&DuetPluginService//dsf_plugin_py,
 
     /usr/bin/python3* rm,
     /usr/lib/python3*/** mr,

@@ -113,6 +113,14 @@ if [[ -f $profile ]]; then
       bad "the dsf_plugin_py profile grants an exec permission"
    fi
 
+   # The service runs with NoNewPrivileges, and under no_new_privs the kernel
+   # denies an exec that leaves the current profile. Only a stacked transition
+   # ("ix -> &profile") gets a plugin started at all; a child transition would
+   # fail with info="no new privs" and nothing would ever run.
+   if grep -v '^[[:space:]]*#' "$profile" | grep -Eq '[[:space:]][Cc]i?u?x[[:space:]]'; then
+      bad "the AppArmor profile uses a child transition, which NoNewPrivileges denies"
+   fi
+
    # -Q: parse only, do not load into the kernel. -K: touch no policy cache,
    # which an unprivileged build host may not write.
    if command -v apparmor_parser >/dev/null 2>&1; then
