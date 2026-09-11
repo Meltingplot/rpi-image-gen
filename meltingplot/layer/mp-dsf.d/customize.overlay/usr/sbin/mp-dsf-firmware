@@ -8,8 +8,14 @@
 # Without a terminal on stdin that command flashes every board whose version
 # differs from the file, without asking.
 #
-# Two conditions, both waited for, neither forced:
+# Three conditions, all waited for, none forced:
 #
+#   * The printer must have finished booting. Flashing an expansion board
+#     takes it off the CAN bus, and a config.g that cannot reach one of its
+#     boards ends in an emergency stop, which cancels the update. RepRap-
+#     Firmware reports idle before config.g has reached every board, so a
+#     fixed settling time is waited first; a check on the object model can
+#     replace it later.
 #   * The running slot must be committed. During a tryboot the bootloader
 #     falls back to the other slot on the next reset, and that slot expects
 #     its own firmware. The update connector commits within seconds of a
@@ -27,6 +33,7 @@ MP_TAG=mp-dsf-firmware
 . /usr/lib/meltingplot/mp-dsf.sh
 
 DCS=/opt/dsf/bin/DuetControlServer
+SETTLE=${MP_FIRMWARE_SETTLE:-180}
 WAIT=${MP_FIRMWARE_WAIT:-300}
 
 # Poll a condition every few seconds until it holds or the wait is used up.
@@ -40,6 +47,9 @@ wait_for() {
 }
 
 printer_idle() { [ "$(mp_dcs_status)" = idle ]; }
+
+mp_log "waiting ${SETTLE}s for the printer to finish booting"
+sleep "$SETTLE"
 
 if ! wait_for mp_slot_committed; then
    mp_log "this slot is not committed, the firmware stays as it is"

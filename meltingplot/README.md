@@ -172,12 +172,16 @@ To go back, deploy the previous artefact again. It stays registered.
    reset returns to the old one. If it comes up, the connector commits it
    within seconds of boot and reports the deployment as succeeded. That is the
    whole health check: Linux booted far enough to run the connector.
-4. `mp-dsf-firmware` runs on every boot, waits for the slot to be committed and
-   for the printer to be idle, and then runs `DuetControlServer -u`, which
+4. `mp-dsf-firmware` runs on every boot, waits three minutes for the printer
+   to finish booting, then for the slot to be committed and for the printer to
+   be idle, and then runs `DuetControlServer -u`, which
    flashes every Duet board whose firmware differs from the files under
    `/opt/dsf/sd/firmware`. Those files belong to the slot, so a rollback
    flashes the previous firmware back the same way. Until that has happened,
-   Duet Web Control shows a firmware mismatch warning.
+   Duet Web Control shows a firmware mismatch warning. The settling time is
+   there because flashing takes a board off the CAN bus, and a `config.g` that
+   cannot reach one of its boards ends in an emergency stop, which cancels the
+   update.
 
 The flash comes after the commit, so a firmware that fails to flash is not
 undone by the bootloader. A Duet board keeps its bootloader, so it can be
@@ -195,7 +199,7 @@ This starts the other root filesystem once. Running the same command again
 after it comes up makes the choice permanent. The persistent partition is not
 touched either way, so the machine keeps its data; image-owned configuration
 returns to the version that slot carries. The firmware follows on the next
-boot after the commit, or right away with
+boot after the commit, or after the three-minute settling time with
 `sudo systemctl start mp-dsf-firmware`.
 
 ## Plugins

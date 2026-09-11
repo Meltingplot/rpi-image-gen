@@ -10,7 +10,8 @@ ConditionPathExists=/opt/dsf/bin/DuetControlServer
 [Service]
 Type=oneshot
 ExecStart=/usr/sbin/mp-dsf-firmware
-# Two waits of up to five minutes, then every board on the CAN bus.
+# Three minutes of settling, two waits of up to five minutes, then every
+# board on the CAN bus.
 TimeoutStartSec=30min
 
 [Install]
