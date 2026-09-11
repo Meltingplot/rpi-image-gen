@@ -90,7 +90,8 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          mkdir -p meltingplot/.cache/apt
+          # rpi-image-gen expects the build directory to exist already.
+          mkdir -p meltingplot/.cache/apt "$RUNNER_TEMP/work"
           SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
           ./rpi-image-gen build -S ./meltingplot -c duet-pi5.yaml \
             -B "$RUNNER_TEMP/work" \
