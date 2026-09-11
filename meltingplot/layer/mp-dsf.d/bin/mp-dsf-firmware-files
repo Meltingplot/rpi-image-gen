@@ -1,0 +1,105 @@
+#!/bin/bash
+# Ship separately published Duet firmware builds in place of the packaged ones.
+#
+# The reprapfirmware package delivers one file per board type below
+# /opt/dsf/sd/firmware, and that is the only place a firmware can come from:
+# RepRapFirmware derives the file name from the type of the board it is asked
+# to flash, M997 takes no path, and the directory is part of the read-only
+# root, deliberately outside the slot-shared paths. A build that did not come
+# from the Duet3D archive, say a patched TOOL1LC firmware, therefore has to be
+# baked into the image under exactly the packaged name.
+#
+# The list names each file, the checksum of the published build and where it
+# is. Only a published build is ever taken, verified against its pin; there is
+# no local path and no fallback. The packaged file is set aside with
+# dpkg-divert, which is how Debian overrides a file another package owns, so
+# dpkg's record stays true and the assert can tell an override from an
+# accident.
+#
+# The device treats the file like any other: mp-dsf-firmware flashes every
+# board whose reported version differs from the version string inside the
+# file, once the slot is committed. A build that keeps the version string of
+# the release it patches is therefore never flashed by the image; see the
+# README.
+
+set -euo pipefail
+
+ROOT=${1:?rootfs}
+LIST=${IGconf_dsf_firmware_list:?}
+
+FIRMWARE_DIR=/opt/dsf/sd/firmware
+DISTRIB_DIR=/usr/share/meltingplot/firmware-distrib
+
+say() { echo "mp-dsf-firmware-files: $*" >&2; }
+die() { echo "mp-dsf-firmware-files: $*" >&2; exit 1; }
+
+[[ -f $LIST ]] || die "no firmware list at $LIST"
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+# --- read and check the whole list first ----------------------------------
+# Nothing is touched until every line is known to be good, so one wrong line
+# cannot leave a half-replaced set behind.
+
+names=() sums=() urls=()
+lineno=0
+while IFS= read -r line || [[ -n $line ]]; do
+   lineno=$((lineno + 1))
+   [[ $line =~ ^[[:space:]]*(#|$) ]] && continue
+   read -r name sum url extra <<< "$line"
+   [[ -n $url && -z ${extra:-} ]] ||
+      die "$LIST:$lineno: expected '<file> sha256:<hex> <https url>', got '$line'"
+   [[ $name =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] ||
+      die "$LIST:$lineno: '$name' is not a plain file name"
+   [[ $sum =~ ^sha256:[0-9a-fA-F]{64}$ ]] ||
+      die "$LIST:$lineno: '$sum' is not sha256:<64 hex digits>"
+   [[ $url == https://* ]] ||
+      die "$LIST:$lineno: $url is not a published https location; only published builds are shipped"
+   [[ -f $ROOT$FIRMWARE_DIR/$name ]] ||
+      die "$LIST:$lineno: the reprapfirmware package delivers no $name, so no board would ever ask for it"
+   for have in "${names[@]}"; do
+      [[ $have != "$name" ]] || die "$LIST:$lineno: $name is listed twice"
+   done
+   ! grep -qx "$FIRMWARE_DIR/$name" "$ROOT/var/lib/dpkg/diversions" 2>/dev/null ||
+      die "$FIRMWARE_DIR/$name is already diverted; this runs once per build"
+   names+=("$name"); sums+=("${sum,,}"); urls+=("$url")
+done < "$LIST"
+
+if ((${#names[@]} == 0)); then
+   say "nothing listed, the image carries the packaged firmware files"
+   exit 0
+fi
+
+# --- fetch ----------------------------------------------------------------
+# vfetch verifies the checksum and keeps a verified copy in the build cache.
+
+for i in "${!names[@]}"; do
+   name=${names[i]} sum=${sums[i]} url=${urls[i]}
+   say "fetching $name"
+   printf '%s %s %s\n' "$name" "$sum" "$url" > "$tmp/$name.meta"
+   vfetch "$tmp/$name.meta" "$tmp/$name" || die "\
+could not obtain $name with checksum ${sum#sha256:} from
+  $url
+
+Either no build is published there, or it does not match the pin. The image
+only ever ships published builds, so there is nothing to fall back to: publish
+the build, or correct the line in $LIST. Do not build past this."
+   [[ -s $tmp/$name ]] || die "$url is an empty file"
+done
+
+# --- replace --------------------------------------------------------------
+
+install -d -m 0755 "$ROOT$DISTRIB_DIR"
+for i in "${!names[@]}"; do
+   name=${names[i]}
+   packaged="$ROOT$FIRMWARE_DIR/$name"
+   owner=$(stat -c '%u:%g' "$packaged")
+   mode=$(stat -c '%a' "$packaged")
+   chroot "$ROOT" dpkg-divert --local --rename --add \
+      --divert "$DISTRIB_DIR/$name" "$FIRMWARE_DIR/$name"
+   [[ ! -e $packaged ]] || die "dpkg-divert left $FIRMWARE_DIR/$name in place"
+   install -o "${owner%:*}" -g "${owner#*:}" -m "$mode" "$tmp/$name" "$packaged"
+   say "$name: ${sums[i]#sha256:} from ${urls[i]}"
+done
+say "${#names[@]} firmware file(s) replaced, the packaged copies are kept below $DISTRIB_DIR"

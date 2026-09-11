@@ -45,6 +45,17 @@ shopt -s nocasematch
    problems+=("dsf.vigil_version ${IGconf_dsf_vigil_version} is a prerelease")
 [[ ! ${IGconf_dsf_python_version:-} =~ (a|b|rc)[0-9]+$ ]] ||
    problems+=("dsf.python_version ${IGconf_dsf_python_version} is a prerelease")
+
+# A replaced firmware file is pinned by its published location; the release it
+# came from is the version segment of that path.
+list=${IGconf_dsf_firmware_list:-}
+if [[ -f $list ]]; then
+   while read -r name _ url || [[ -n $name ]]; do
+      [[ -z $name || $name == \#* ]] && continue
+      [[ ! $url =~ -(rc|beta|alpha|dev|pre) ]] ||
+         problems+=("$name is replaced by a prerelease build from $url")
+   done < "$list"
+fi
 shopt -u nocasematch
 
 [[ ${IGconf_dsf_plugin_policy:-enforce} == enforce ]] ||

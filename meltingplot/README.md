@@ -86,8 +86,8 @@ the version from the git tag.
 ### Versions and prereleases
 
 Everything the image contains is pinned: the DuetSoftwareFramework version, the
-Vigil release and its checksum, the dsf-python version, and the commit of the
-printer configuration. A prerelease of any of them is allowed while the image
+Vigil release and its checksum, the dsf-python version, the commit of the
+printer configuration, and any Duet firmware file that replaces a packaged one. A prerelease of any of them is allowed while the image
 itself is a prerelease, and refused once it is not, so a customer image can
 never quietly contain a release candidate. The check runs before the build
 starts; see `hooks/prebuild05-mp-release-gate`.
@@ -97,6 +97,34 @@ Duet Web Control generation this image targets, the build stops rather than
 falling back to something built locally.
 
 Current pins are the defaults in `layer/mp-dsf.yaml`.
+
+### Replacing a Duet firmware file
+
+The Duet firmware comes from the `reprapfirmware` package, one file per board
+type below `/opt/dsf/sd/firmware`. A build published separately, say a patched
+TOOL1LC firmware, is listed in `layer/mp-dsf.d/firmware.list`:
+
+```
+Duet3Firmware_TOOL1LC.bin sha256:<checksum> https://<where the build is published>
+```
+
+The build fetches the file, checks it against the pin, sets the packaged copy
+aside with `dpkg-divert` and puts the published build under the packaged name.
+That name is the only one that works: RepRapFirmware derives it from the type
+of the board it flashes and `M997` takes no path. The directory is part of the
+read-only root and outside the slot-shared paths, so an image is the only way
+such a file reaches a printer; an upload through Duet Web Control fails. A
+line that names a file the package does not deliver, a location that is not
+`https`, or a build that does not match its checksum stops the build. There is
+no local path and no fallback. What was replaced is recorded in
+`release.json`, and `dpkg-divert --list` shows it on the device.
+
+On the device nothing changes: `mp-dsf-firmware` flashes every board, the
+mainboard and the expansion boards alike, whose reported version differs from
+the version string inside its file. A patched build therefore needs a version
+string of its own, such as `3.7.0-rc.1+mp1`, or the boards keep the firmware
+they have and only a manual `M997 B<address>` puts it on. The same comparison
+puts the packaged firmware back once the line is removed again.
 
 ## Commissioning a printer
 
@@ -231,9 +259,10 @@ never ship that.
 - On-device apt upgrades: the root filesystem is read-only and the software
   bill of materials has to keep describing what is installed. Updates arrive as
   images.
-- Firmware upload through Duet Web Control: the mainboard firmware belongs to
-  the image and is flashed by `mp-dsf-firmware`, so a rollback puts the
-  matching firmware back. Nothing in DSF itself flashes on a version mismatch;
+- Firmware upload through Duet Web Control: the firmware belongs to the image
+  and is flashed by `mp-dsf-firmware`, so a rollback puts the matching
+  firmware back. A build that has to differ from the package goes through
+  `firmware.list`, see above. Nothing in DSF itself flashes on a version mismatch;
   the `AutoUpdateFirmware` setting in `config.json` is not read by
   DuetControlServer 3.7.
 - Wi-Fi and Bluetooth on the printer computer: it is wired to the operator

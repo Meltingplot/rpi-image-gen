@@ -32,6 +32,20 @@ import json, os, pathlib, sys
 deploy = pathlib.Path(sys.argv[1])
 env = os.environ.get
 
+def firmware_pins(path):
+    # The firmware list as the build read it: file, checksum and where the
+    # published build came from. Empty when nothing replaces a packaged file.
+    if not path or not os.path.isfile(path):
+        return []
+    pins = []
+    for line in pathlib.Path(path).read_text().splitlines():
+        parts = line.split()
+        if not parts or parts[0].startswith("#"):
+            continue
+        name, algo_hex, url = parts[:3]
+        pins.append({"file": name, "sha256": algo_hex.split(":", 1)[1].lower(), "url": url})
+    return pins
+
 release = {
     "version": env("IGconf_artefact_version", ""),
     "image": env("IGconf_image_name", ""),
@@ -54,6 +68,7 @@ release = {
         "vigil_sha256": env("IGconf_dsf_vigil_sha256", ""),
         "dsf_python": env("IGconf_dsf_python_version", ""),
         "plugin_policy": env("IGconf_dsf_plugin_policy", ""),
+        "firmware_replaced": firmware_pins(env("IGconf_dsf_firmware_list", "")),
     },
     "artefacts": [
         {"name": f.name, "size": f.stat().st_size}

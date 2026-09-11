@@ -151,5 +151,27 @@ for unit in mp-ota-gate.timer mp-dsf-firmware.service; do
       bad "$unit is not enabled"
 done
 
+# --- replaced firmware files ----------------------------------------------
+# A file from the list has to be the pinned build, and it has to have gone in
+# through dpkg-divert: a copy dropped over the packaged file looks the same
+# to RepRapFirmware but leaves dpkg believing its own file is still there.
+
+list=${IGconf_dsf_firmware_list:-}
+if [[ -f $list ]]; then
+   while read -r name sum _ || [[ -n $name ]]; do
+      [[ -z $name || $name == \#* ]] && continue
+      f="$SD/firmware/$name"
+      if [[ ! -f $f ]]; then
+         bad "$name is listed for replacement but is not in the image"
+         continue
+      fi
+      want=${sum#sha256:}
+      [[ $(sha256sum "$f" | cut -d' ' -f1) == "${want,,}" ]] ||
+         bad "$name is not the pinned build $want"
+      grep -qx "/opt/dsf/sd/firmware/$name" "$ROOT/var/lib/dpkg/diversions" 2>/dev/null ||
+         bad "$name was replaced without dpkg-divert, so dpkg still claims the packaged file"
+   done < "$list"
+fi
+
 [[ $fail -eq 0 ]] || exit 1
 echo "mp-dsf assert: layout, plugin policy, boot configuration and update path are consistent" >&2

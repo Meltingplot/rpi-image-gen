@@ -7,7 +7,7 @@
 #  only plugins that came with the image may run code. An installed update
 #  restarts the device only once the printer is idle (mp-ota-gate), and the
 #  Duet firmware follows the image once a slot is committed (mp-dsf-firmware).
-# X-Env-Layer-Version: 1.1.0
+# X-Env-Layer-Version: 1.2.0
 # X-Env-Layer-Requires: mp-duet-hw,mp-identity,device-user-admin,rpi-debian-trixie
 # X-Env-Layer-RequiresProvider: systemd
 #
@@ -56,6 +56,15 @@
 # X-Env-Var-config_dir-Required: n
 # X-Env-Var-config_dir-Valid: dir
 # X-Env-Var-config_dir-Set: y
+#
+# X-Env-Var-firmware_list: ${DIRECTORY}/${STEM}.d/firmware.list
+# X-Env-Var-firmware_list-Desc: Duet firmware files that a separately published
+#  build replaces, one per line as <file> sha256:<hex> <https url>. Rep-
+#  RapFirmware only ever asks for the packaged file names, so a patched build
+#  ships under the name it replaces. An empty list keeps the package's files.
+# X-Env-Var-firmware_list-Required: n
+# X-Env-Var-firmware_list-Valid: file
+# X-Env-Var-firmware_list-Set: y
 #
 # X-Env-Var-vigil_version: 1.3.0-beta.1
 # X-Env-Var-vigil_version-Desc: Version of the Vigil machine monitoring plugin.
@@ -164,6 +173,9 @@ mmdebstrap:
         "duetruntime=$v" \
         "duetpluginservice=$v" \
         duetsd reprapfirmware
+    # Separately published firmware builds go over the packaged files, under
+    # the packaged names, before anything else looks at the firmware directory.
+    - ${IGconf_dsf_assetdir}/bin/mp-dsf-firmware-files "$1"
     - $BDEBSTRAP_HOOKS/enable-units "$1" duetcontrolserver duetwebserver duetpluginservice duetpluginservice-root mp-dsf-seed mp-dsf-firmware mp-ota-gate.timer avahi-daemon apparmor
     - ${IGconf_dsf_assetdir}/bin/mp-dsf-configure "$1"
     - ${IGconf_dsf_assetdir}/bin/mp-dsf-vigil "$1"

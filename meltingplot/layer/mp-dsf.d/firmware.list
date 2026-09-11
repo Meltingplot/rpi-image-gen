@@ -1,0 +1,17 @@
+# Duet firmware files that a separately published build replaces.
+#
+# One line per file:
+#
+#   <file> sha256:<checksum of the published build> <https location>
+#
+# The file has to be one the reprapfirmware package delivers below
+# /opt/dsf/sd/firmware, because that is the name RepRapFirmware derives from
+# the board type when it flashes; a build under any other name is never used.
+# Only a published build is taken, checked against the pin: no local path, no
+# fallback, a mismatch stops the build. See "Replacing a Duet firmware file"
+# in the README, in particular why the build needs a version string of its
+# own before any board is flashed with it.
+#
+# Example:
+#   Duet3Firmware_TOOL1LC.bin sha256:0123...cdef https://github.com/Meltingplot/RepRapFirmware/releases/download/v3.7.0-rc.1+mp1/Duet3Firmware_TOOL1LC.bin
+Duet3Firmware_TOOL1LC.bin sha256:977a0aa42e7d48b1a7f7f84f1c6c9a0fd6a249ff9406c157cc3cd98a01e499b8 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.1%2B2-mp.1/Duet3Firmware_TOOL1LC.bin
