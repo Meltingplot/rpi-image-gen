@@ -40,16 +40,25 @@ long=$(mp_slug "$(printf 'ab %.0s' $(seq 30))")
 check "slug fits a DNS label" yes "$r"
 case $long in *-) r=no ;; *) r=yes ;; esac
 check "slug does not end in a dash" yes "$r"
-check "default name"      "meltingplot-chx-350-0042-sbc" "$(mp_default_name 0042)"
-check "default is a slug" "meltingplot-chx-350-0042-sbc" "$(mp_slug "$(mp_default_name 0042)")"
+check "default name"      "meltingplot-chx-350-042-sbc" "$(mp_default_name 042)"
+check "default is a slug" "meltingplot-chx-350-042-sbc" "$(mp_slug "$(mp_default_name 042)")"
+
+for s in 042 000 999; do
+   mp_valid_serial "$s" && r=yes || r=no
+   check "serial valid: $s" yes "$r"
+done
+for s in '' 42 0042 '04 2' abc 04a -42; do
+   mp_valid_serial "$s" && r=yes || r=no
+   check "serial invalid: '$s'" no "$r"
+done
 
 # A commissioning file as a Windows machine writes it: CRLF, comments, spacing.
-printf 'printer_serial = 0042\r\n#printer_name=ignored\r\nprinter_name = Halle 2 links  \r\nconnect_authkey=rpoak_secret\r\n' \
+printf 'printer_serial = 042\r\n#printer_name=ignored\r\nprinter_name = Halle 2 links  \r\nconnect_authkey=rpoak_secret\r\n' \
    > "$tmp/id.conf"
-check "conf serial"       "0042"          "$(mp_conf_get "$tmp/id.conf" printer_serial)"
+check "conf serial"       "042"          "$(mp_conf_get "$tmp/id.conf" printer_serial)"
 check "conf name"         "Halle 2 links" "$(mp_conf_get "$tmp/id.conf" printer_name)"
 check "conf commented out is not read" "rpoak_secret" "$(mp_conf_get "$tmp/id.conf" connect_authkey)"
-check "conf absent key"   ""              "$(mp_conf_get "$tmp/id.conf" force)"
+check "conf absent key"   ""              "$(mp_conf_get "$tmp/id.conf" nosuchkey)"
 check "conf missing file" ""              "$(mp_conf_get "$tmp/nope" printer_serial)"
 
 # The identity file, written by mp-identity and read back by mp-hostname and
@@ -58,13 +67,13 @@ check "conf missing file" ""              "$(mp_conf_get "$tmp/nope" printer_ser
 # by a call to the command "2".
 cat > "$tmp/mp-identity" <<'EOF'
 # Written by mp-identity at commissioning.
-PRINTER_SERIAL=0042
+PRINTER_SERIAL=042
 PRINTER_NAME=Halle 2 links
 ROLE=sbc
 COMMISSIONED=2026-09-10T20:00:00Z
 EOF
 check "identity name survives spaces" "Halle 2 links" "$(mp_conf_get "$tmp/mp-identity" PRINTER_NAME)"
-check "identity serial"   "0042" "$(mp_conf_get "$tmp/mp-identity" PRINTER_SERIAL)"
+check "identity serial"   "042" "$(mp_conf_get "$tmp/mp-identity" PRINTER_SERIAL)"
 check "identity role"     "sbc"  "$(mp_conf_get "$tmp/mp-identity" ROLE)"
 sh -c 'set -eu; . "$1"' sh "$tmp/mp-identity" 2>/dev/null && r=yes || r=no
 check "identity is not shell" no "$r"
@@ -88,7 +97,7 @@ check "valid: nothing a hostname can use" no "$r"
 
 # What DuetControlServer compares: letters and digits of the machine name
 # against those of the hostname, ignoring case.
-for name in 'Halle 2 links' 'Werk 1 / Halle 2!' 'CHX350-Nr7' 'meltingplot-chx-350-0042-sbc'; do
+for name in 'Halle 2 links' 'Werk 1 / Halle 2!' 'CHX350-Nr7' 'meltingplot-chx-350-042-sbc'; do
    host=$(mp_slug "$name")
    a=$(printf '%s' "$name" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')
    b=$(printf '%s' "$host" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')

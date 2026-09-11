@@ -22,20 +22,18 @@ CONF=/bootfs/meltingplot/identity.conf
 serial=$(mp_conf_get "$CONF" printer_serial)
 name=$(mp_conf_get "$CONF" printer_name)
 authkey=$(mp_conf_get "$CONF" connect_authkey)
-force=$(mp_conf_get "$CONF" force)
 
 # --- identity -------------------------------------------------------------
 
 if [ -n "$serial" ]; then
-   case $serial in
-      *[!A-Za-z0-9-]*|'')
-         mp_die "printer_serial '$serial' has characters other than letters, digits and -" ;;
-   esac
-   [ "${#serial}" -le 32 ] || mp_die "printer_serial is longer than 32 characters"
-   serial=$(printf '%s' "$serial" | tr '[:upper:]' '[:lower:]')
+   mp_valid_serial "$serial" ||
+      mp_die "printer_serial '$serial' is not a serial number: exactly three digits are allowed"
 
-   if [ -e "$MP_IDENTITY_FILE" ] && [ "$force" != "1" ]; then
-      mp_log "identity already set, ignoring printer_serial (use force=1 to reassign)"
+   # The serial is assigned once, at commissioning. Nothing on the boot
+   # partition can change it afterwards: the customer can write that
+   # partition, and the serial identifies the printer to Meltingplot.
+   if [ -e "$MP_IDENTITY_FILE" ]; then
+      mp_log "identity already set, ignoring printer_serial"
    else
       if [ -n "$name" ]; then
          mp_valid_printer_name "$name" ||

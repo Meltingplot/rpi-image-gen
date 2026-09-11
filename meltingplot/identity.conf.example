@@ -7,12 +7,13 @@
 # holds autoboot.txt.
 #
 # The first boot reads this file, stores the values on the persistent partition
-# and removes the auth key from here. Later boots ignore it unless force=1 is
-# set. Lines starting with # are comments, whitespace around = is ignored.
+# and removes the auth key from here. Once a device carries an identity, the
+# serial cannot be changed from this file; only a new auth key is still
+# applied. Lines starting with # are comments, whitespace around = is ignored.
 
 # Meltingplot serial number of the CHX350. Required.
-# Allowed: letters, digits and '-', at most 32 characters.
-printer_serial=0042
+# Exactly three digits, as printed on the machine.
+printer_serial=042
 
 # Display name shown by Duet Web Control and PanelDue (M550), and the source of
 # the Linux hostname. Optional - defaults to meltingplot-chx-350-<serial>-sbc.
@@ -27,7 +28,3 @@ printer_serial=0042
 # with the date it was applied so the secret does not stay on the FAT
 # partition.
 #connect_authkey=rpoak_XXXXXXXXXXXXXXXX
-
-# Re-apply serial and name even though the device already carries an identity.
-# Only for re-purposing a device; the persistent identity is overwritten.
-#force=1

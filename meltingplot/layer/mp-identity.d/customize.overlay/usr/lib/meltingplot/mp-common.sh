@@ -72,6 +72,15 @@ mp_default_name() {
    printf 'meltingplot-%s-%s-%s' "$MP_PRODUCT" "$1" "$MP_ROLE"
 }
 
+# A Meltingplot serial number is exactly three digits, as printed on the
+# machine and expected by the CHX350 configuration.
+mp_valid_serial() {
+   case $1 in
+      [0-9][0-9][0-9]) return 0 ;;
+      *) return 1 ;;
+   esac
+}
+
 # Extract the machine name from an RRF M550 line.
 mp_read_printer_name() {
    [ -f "$1" ] || return 0
