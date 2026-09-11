@@ -40,10 +40,22 @@ for d in sd/gcodes sd/menu sd/Vigil plugins; do
    [[ -z $(ls -A "$DSF/$d") ]] || bad "/opt/dsf/$d ships files, so the machine's would be overwritten"
 done
 
-# Settings we own, and nothing else, so an update can correct them.
+# /opt/dsf/conf is slot-shared, so whatever the image ships here is pushed over
+# the device's copy on every boot. That is right for these four and wrong for
+# anything else, because none of these is ever written by the machine:
+#
+#   config.json    DuetControlServer, patched by mp-dsf-configure
+#   plugins.json   DuetPluginService, patched by mp-dsf-configure
+#   http.json      DuetWebServer's Kestrel settings, the package default
+#   apparmor.conf  the per-plugin profile template DuetPluginService would
+#                  generate from, unused because plugins.json turns that
+#                  generation off in favour of the fixed profile chain
+#
+# A file that is not one of these is either machine state, which must not be in
+# the image at all, or a new setting nobody has decided about yet.
 while IFS= read -r f; do
    case $(basename "$f") in
-      config.json|plugins.json) ;;
+      config.json|plugins.json|http.json|apparmor.conf) ;;
       *) bad "/opt/dsf/conf/$(basename "$f") is in the image and would overwrite the machine's copy" ;;
    esac
 done < <(find "$DSF/conf" -maxdepth 1 -type f)

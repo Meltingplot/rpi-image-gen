@@ -100,20 +100,30 @@ mmdebstrap:
     - python3
     - python3-venv
     - ca-certificates
+    # groupadd and useradd, for the dsf account created below. device-user-admin
+    # pulls this in as well, but the hook here fails hard without it.
+    - passwd
   setup-hooks:
     # The archive is signed by a key that is not in the Debian keyring, so both
     # the build host's apt and the chroot need it before anything is fetched.
     - install -D -m 0644 "${IGconf_dsf_assetdir}/apt/duet3d.gpg" "$1/usr/share/keyrings/duet3d.gpg"
     - install -D -m 0644 "${IGconf_dsf_assetdir}/apt/duet3d.gpg" "${IGconf_sys_apt_keydir}/duet3d.gpg"
-  essential-hooks:
+  customize-hooks:
     # Before the DSF packages arrive, so their sysusers definition finds the
     # account already there and does not allocate an id of its own.
+    #
+    # This has to be a customize hook, not an essential one: the suite is
+    # bootstrapped with mmdebstrap's apt variant, whose essential set does not
+    # include passwd, so groupadd does not exist yet at that point. The DSF
+    # packages are installed further down this same list, which is what keeps
+    # the account ahead of them.
     - |-
       set -eu
-      chroot "$1" groupadd -g "$IGconf_dsf_uid" dsf
-      chroot "$1" useradd -r -u "$IGconf_dsf_uid" -g dsf -d /opt/dsf \
-        -s /usr/sbin/nologin -c "Duet Software Framework" dsf
-  customize-hooks:
+      chroot "$1" getent group dsf >/dev/null ||
+        chroot "$1" groupadd -g "$IGconf_dsf_uid" dsf
+      chroot "$1" getent passwd dsf >/dev/null ||
+        chroot "$1" useradd -r -u "$IGconf_dsf_uid" -g dsf -d /opt/dsf \
+          -s /usr/sbin/nologin -c "Duet Software Framework" dsf
     # Pin first: the Duet archive carries several prereleases side by side, and
     # apt would otherwise be free to pick a different one on the next build.
     - |-
