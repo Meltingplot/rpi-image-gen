@@ -113,8 +113,10 @@ if [[ -f $profile ]]; then
       bad "the dsf_plugin_py profile grants an exec permission"
    fi
 
+   # -Q: parse only, do not load into the kernel. -K: touch no policy cache,
+   # which an unprivileged build host may not write.
    if command -v apparmor_parser >/dev/null 2>&1; then
-      apparmor_parser -Q --base "$ROOT/etc/apparmor.d" "$profile" >/dev/null ||
+      apparmor_parser -Q -K --base "$ROOT/etc/apparmor.d" "$profile" >/dev/null ||
          bad "the AppArmor profile does not parse"
    else
       echo "mp-dsf assert: apparmor_parser not on the build host, profile syntax unchecked" >&2
