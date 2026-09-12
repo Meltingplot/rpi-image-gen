@@ -37,9 +37,11 @@ Meltingplot software
   https://github.com/Meltingplot/rpi-image-gen
 
 Raspberry Pi Connect (Raspberry Pi Ltd)
-  rpi-connect-lite: BSD-3-Clause, with bundled Go modules under MIT, BSD and
-  Apache-2.0, each listed in /usr/share/doc/rpi-connect-lite/copyright.
-  rpi-connect-ota: Apache-2.0.
+  rpi-connect-lite: distributed in binary form only. Raspberry Pi licenses
+  the binaries under BSD-3-Clause terms and does not publish their source;
+  the bundled Go modules are open source under MIT, BSD and Apache-2.0,
+  each listed in /usr/share/doc/rpi-connect-lite/copyright.
+  rpi-connect-ota: Apache-2.0, from rpi-sb-provisioner.
 
 Raspberry Pi boot firmware
   The boot firmware (raspi-firmware) and the bootloader of the Raspberry Pi 5
@@ -50,7 +52,9 @@ Raspberry Pi boot firmware
 2. Source code
 ------------------------------------------------------------------------------
 
-The complete corresponding source code of this image version is public:
+The corresponding source code of this image version is public for every
+component except the two named above as binary only, Raspberry Pi Connect
+and the Raspberry Pi boot firmware, which carry no source obligation:
 
   Image definition and build
     https://github.com/Meltingplot/rpi-image-gen
