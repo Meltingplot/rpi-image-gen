@@ -207,6 +207,19 @@ jobs:
           output-file: ${{ steps.sbom.outputs.dir }}/grype.sarif
           cache-db: true
 
+      # The Go modules of Raspberry Pi Connect are in the SBOM once per binary,
+      # rpi-connect and rpi-connectd, so grype reports each finding twice and
+      # the two SARIF results are identical down to the fingerprint. GitHub
+      # would open two alerts for them; one is enough. The full report in the
+      # audit artefact keeps both.
+      - name: Fold identical SARIF results
+        env:
+          SARIF: ${{ steps.grype.outputs.sarif }}
+        run: |
+          jq '.runs[].results |= unique' "$SARIF" > "$SARIF.tmp"
+          mv "$SARIF.tmp" "$SARIF"
+          jq -r '"\(.runs[0].results | length) findings for the Security tab"' "$SARIF"
+
       - uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ steps.grype.outputs.sarif }}
