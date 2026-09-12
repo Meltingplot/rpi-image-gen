@@ -183,11 +183,13 @@ jobs:
       # Dependabot knows nothing about Debian packages; grype covers them from
       # the Debian security tracker. The full report goes into the audit
       # artefact. The Security tab only gets what has a fix, which is what a
-      # rebuild can pick up.
+      # rebuild can pick up, minus what meltingplot/vex.openvex.json records
+      # as not affecting the image.
       - name: Scan SBOM for vulnerabilities
         uses: anchore/scan-action@v7
         with:
           sbom: ${{ steps.sbom.outputs.file }}
+          vex: meltingplot/vex.openvex.json
           fail-build: false
           output-format: json
           output-file: ${{ steps.sbom.outputs.dir }}/grype.json
@@ -198,6 +200,7 @@ jobs:
         uses: anchore/scan-action@v7
         with:
           sbom: ${{ steps.sbom.outputs.file }}
+          vex: meltingplot/vex.openvex.json
           fail-build: false
           only-fixed: true
           output-format: sarif
