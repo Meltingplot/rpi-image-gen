@@ -6,15 +6,37 @@
 # Debian based product whose source is offered on request; each pattern is an
 # SPDX identifier or a glob over them, matched case-sensitively.
 #
-# What the list does not cover shows up as denied in the report. That is the
-# review backlog, not a build failure: the check runs without an exit code
-# until the backlog has been gone through. Expected there, from a first run:
-#  - licences syft could not name and reports as a SHA-256 of the text,
+# What the list does not cover shows up as denied in the report and fails the
+# release workflow. A new package with a licence outside the list therefore
+# needs a decision before it ships: extend the list with the full string
+# grant prints, or list the package under ignore-packages with the reason
+# next to it.
+#
+# Reviewed 2026-09-12 (Tim Schneider): everything the first build reported,
+# 101 packages, was accepted, since nothing is non-commercial or proprietary
+# and the image itself is published on GitHub. The reviewed entries are the
+# three blocks after the licence families:
 #  - Debian copyright files that combine known licences with a LicenseRef,
 #    which grant cannot take apart and lists as one string,
-#  - share-alike documentation licences (CC-BY-SA).
-# Once reviewed, a full string can be added here verbatim, or the package can
-# be listed under ignore-packages with the reason next to it.
+#  - single licences outside the families, with their meaning,
+#  - licence texts syft could not name and reports as the SHA-256 of the
+#    text; the comment names the packages and what their copyright file says.
+#
+# Components without licence metadata pass the check unseen, because
+# require-license is off. Their licences, from the upstream repositories:
+#  - DuetSoftwareFramework, Duet Web Control, RepRapFirmware and
+#    Duet3Expansion, the nine duet* Debian packages and the DuetControlServer,
+#    DuetWebServer, DuetPluginService, Code* and ModelObserver assemblies:
+#    GPL-3.0, https://github.com/Duet3D
+#  - dsf-python: LGPL-3.0, https://github.com/Duet3D/dsf-python
+#  - the Microsoft.Extensions.*, Nito.* and MQTTnet assemblies DSF bundles:
+#    MIT, from nuget.org
+#  - rpi-connect-lite and its Go modules: BSD-3-Clause for Connect itself,
+#    MIT, BSD and Apache-2.0 for the modules, per the package's copyright file
+#  - raspi-firmware boot/* and the rpi-eeprom bootloader images: Broadcom
+#    and Raspberry Pi binary redistribution terms, for use on Raspberry Pi
+#    devices only, notice to be reproduced in the product documentation.
+#    grant passes them on the GPL-2 parts of the same copyright file.
 
 allow:
   - MIT
@@ -53,6 +75,47 @@ allow:
   - Dual-MIT-GPL
   - TCP-wrappers
   - SMAIL-GPL
+
+  # Reviewed 2026-09-12: Debian copyright strings grant cannot take apart.
+  - "CC0-1.0 AND LicenseRef-Expat AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-only AND LGPL-2.1-or-later AND LicenseRef-public-domain"
+  - "0BSD AND Apache-2.0 AND Apache-2.0 AND BSD-3-Clause AND LicenseRef-BSD-3-Clause-Variant AND LicenseRef-BSD-4-Clause-CMU AND LicenseRef-Expat AND LicenseRef-GPL AND GPL-2.0-only AND GPL-2.0-or-later AND ISC AND Kazlib AND LGPL-2.0-only AND Latex2e"
+  - "Expat AND LicenseRef-GAP AND LicenseRef-GPL AND GPL-2.0-only AND GPL-2.0-or-later AND GPL-3.0-or-later AND LicenseRef-LGPL AND LGPL-2.0-only AND LGPL-2.0-or-later AND LGPL-3.0-or-later AND LicenseRef-public-domain"
+  - "BSD3 AND ISC"
+  - "Expat AND GPL-2.0-only AND GPL-2.0-or-later AND GPL-3.0-only AND GPL-3.0-or-later AND LGPL-3.0-only AND LGPL-3.0-or-later AND LicenseRef-Unicode"
+  - "Expat AND GPL-2.0-only"
+  - "FDL-1.2- AND GFDL-1.2-only AND GPL-2.0-only AND GPL-2.0-or-later AND GPL-3.0-only AND GPL-3.0-or-later AND LGPL-2.1-only AND LGPL-2.1-or-later"
+  - "Chromium AND MIT AND LicenseRef-gnulib"
+  - "Expat AND LicenseRef-GPL AND GPL-2.0-or-later AND GPL-3.0-or-later AND MPL-1.1 AND X11 AND LicenseRef-public-domain"
+  - "Expat AND LicenseRef-permissive"
+  - "0BSD AND FSFUL AND FSFULLR AND GPL-2.0-only AND GPL-2.0-or-later AND GPL-3.0-only AND LicenseRef-GPL-3.0-or-later-WITH-Autoconf-exception-macro AND LGPL-2.1-only AND LGPL-2.1-or-later AND LicenseRef-PD AND LicenseRef-PD-debian AND LicenseRef-noderivs AND LicenseRef-permissive-nowarranty"
+  - "Expat AND GPL-2.0-only AND GPL-2.0-or-later"
+  - "All-permissive AND GPL-2.0-only AND GPL-2.0-or-later AND LicenseRef-configure AND LicenseRef-installsh"
+  - "ISC AND LicenseRef-MIT-1"
+
+  # Reviewed 2026-09-12: single licences outside the families.
+  - CC-BY-SA-4.0   # documentation of cryptsetup and gpiod
+  - CC-BY-SA-3.0   # documentation of glib
+  - ad-hoc         # media-types, Debian's own terms
+  - Dual-License   # python-dateutil, Apache-2.0 or BSD-3-Clause
+
+  # Reviewed 2026-09-12: licence texts syft could not name, by SHA-256.
+  - 936728f4181718f42951b881c1e8f1386bf6b2723c4fbc533c374d6f42c71816  # krb5-multidev, libgssapi-krb5-2, libgssrpc4t64, libk5crypto3…: BSD | GPL-2 | MIT
+  - 20a9818b14f941467bcc0f459a1b1951e3bfecc1cc259e5004f8b9a80d7dc804  # binutils, binutils-aarch64-linux-gnu, binutils-common, libbinutils…: GPL-3
+  - f1cbf908e1daa8789b389fdcf17811ed36b675d736b39a103591399861350382  # libpython3.13-minimal, libpython3.13-stdlib, python3.13, python3.13-minimal…: BSD | GPL-2 | MIT
+  - 20390f8a6f3b1e4d7cb45dd8652dabb259bbef688cbad839bcdb0b9ba7252f79  # gcc-14-base, libatomic1, libgcc-s1, libgomp1…: BSD | GPL-2 | GPL-3 | LGPL-2 | LGPL-2.1 | MIT | public-domain
+  - a07e99815cf1998f1dabbc21fe199460bfa09b85ead0d56b49a32cac3d1791b5  # libgnutls-dane0t64, libgnutls-openssl27t64, libgnutls28-dev, libgnutls30t64: Apache | BSD | GPL-2 | GPL-3 | LGPL-2.1 | LGPL-3 | MIT | public-domain
+  - 5b274dbb44b28a54b795b9471c07ab045054d6b8a86273cb9feb632b6fd2760d  # libpython3-stdlib, python3, python3-minimal, python3-venv: MIT
+  - 66849d0ab7cbf0d770e40e00276ed8d264ed8974c0e064fb12814c0f80430c5d  # avahi-daemon, libavahi-common-data, libavahi-common3, libavahi-core7: BSD | GPL-2 | LGPL-2 | LGPL-2.1
+  - 9aed29abee9d52d714b393c54a3394dba936694091a984b6d367fbb68cc5547c  # console-setup, console-setup-linux, keyboard-configuration: GPL-2 | MIT | public-domain
+  - 8f918c0bebd1454a084698a95c09d9a03cec8453dad1fc6eab9e6427da9d33a9  # debian-archive-keyring, raspberrypi-archive-keyring: keys: no copyright; support files GPL-2+
+  - d0f580bd7629b15b6bb1b36468b51182545a8002612a030fca39fec2e3203707  # klibc-utils, libklibc: BSD | GPL-2
+  - 5a5e7ca0e9f3f9679977e3a3e9ede45ad92885a3297ea78e766979f9866c5a16  # libcrypt-dev, libcrypt1: public-domain
+  - 4302abcc1ea1b6cbe8d19c79b892acf78878030220210707c19006828866207c  # librtmp-dev, librtmp1: GPL-2 | LGPL-2 | LGPL-2.1
+  - 5f9f7b538d221104bdb561ae80fd794ec5f813eb8fd04650293bddcc0f856e7d  # libtasn1-6, libtasn1-6-dev: GPL-2 | GPL-3 | LGPL-2 | LGPL-2.1 | LGPL-3
+  - 648621d1a2180678818eb393565849bbc8b332cc521c21e009d948ea5541b3c3  # xkb-data: MIT
+  - 289d796794edf8c547691e415ddd7ba3396e6e6d8de03397bd69ce9515914bf8  # wget: GPL-3
+  - bfc258d27d325eaba426c9a68bf4043a5aa1818f7e4aafee4ad65a2656eba6e0  # flashrom: GPL-2 | public-domain
+  - f997ae27f25db0ddac1b8c852720175ca6ef6e624de11f02afd46cb3954d66aa  # libdaemon0: GPL-2 | LGPL-2.1
 
 ignore-packages: []
 

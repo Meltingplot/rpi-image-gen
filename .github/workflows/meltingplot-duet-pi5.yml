@@ -209,11 +209,11 @@ jobs:
           sarif_file: ${{ steps.grype.outputs.sarif }}
           category: duet-pi5-grype
 
-      # grant reports every package whose licence is outside
-      # meltingplot/grant.yaml. It does not fail the build until the backlog
-      # described in that file has been reviewed; --dry-run is what holds it
-      # back. grant complains once per Debian licence name it cannot map to
-      # SPDX, which is expected and filtered from the log.
+      # grant fails the run for any package whose licence is outside
+      # meltingplot/grant.yaml, so a new licence needs a decision before the
+      # image ships; the file says how to record one. grant complains once
+      # per Debian licence name it cannot map to SPDX, which is expected and
+      # filtered from the log.
       - name: Check licences
         env:
           GRANT_VERSION: v0.6.8
@@ -223,9 +223,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           curl -sSfL https://get.anchore.io/grant \
              | sh -s -- -b "$RUNNER_TEMP/bin" "$GRANT_VERSION"
-          "$RUNNER_TEMP/bin/grant" check -c meltingplot/grant.yaml --dry-run \
+          "$RUNNER_TEMP/bin/grant" check -c meltingplot/grant.yaml \
              --no-output -f "$AUDIT/grant.json" "$SBOM" \
-             2> >(grep -v 'no matching spdx id found' >&2)
+             2> >(grep -v 'no matching spdx id found' >&2) || rc=$?
           jq -r '.run.targets[0].evaluation
                  | "## Licences",
                    "",
@@ -234,6 +234,7 @@ jobs:
                    (.findings.packages[] | select(.decision != "allow")
                     | "- \(.name) \(.version): \([.licenses[].id] | join(", "))")' \
              "$AUDIT/grant.json" >> "$GITHUB_STEP_SUMMARY"
+          exit "${rc:-0}"
 
       - uses: actions/upload-artifact@v4
         with:

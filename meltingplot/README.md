@@ -125,11 +125,14 @@ which nothing on the device uses, and the wireless and bluetooth firmware is
 taken out of the image by `mp-net-static`, since the radios it serves are
 switched off in firmware anyway.
 
-grant reports every package whose licence is outside the families listed in
-`grant.yaml`; the file explains what is expected there on a first run and how
-to work the list down. Until that review has happened the check reports and
-does not fail. The grant version is pinned in the workflow, like syft in the
-build; grype comes with the scan action at the version that action ships.
+grant fails the run for any package whose licence is outside `grant.yaml`.
+The file holds the licence families accepted for the image, the entries from
+the review of the first build, and the licences of the components that carry
+no metadata of their own, the Duet stack and Raspberry Pi Connect among them.
+A new licence therefore needs a decision before the image ships; the file
+says how to record one. The grant version is pinned in the workflow, like
+syft in the build; grype comes with the scan action at the version that
+action ships.
 
 `.github/dependabot.yml` also lets Dependabot propose updates for the actions
 the workflows use and for the commit of the printer configuration submodule.
