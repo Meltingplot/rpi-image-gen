@@ -162,12 +162,15 @@ profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnec
     # The control server socket, which the plugin connects to, and its own
     # HTTP endpoints, which it serves: DuetControlServer creates the namespace
     # directory under /run/dsf and the plugin binds one socket per endpoint in
-    # it, then DuetWebServer connects to those. The namespace is the plugin's
-    # own, so it cannot bind or replace another plugin's sockets.
+    # it, then DuetWebServer connects to those. An endpoint path may contain a
+    # slash (Vigil registers service/reset and friends), which becomes a
+    # subdirectory that DuetControlServer also creates, so the whole tree is
+    # the plugin's. The namespace is its own, so it cannot bind or replace
+    # another plugin's sockets.
     /run/dsf/ r,
     /run/dsf/* rw,
-    /run/dsf/Vigil/ r,
-    /run/dsf/Vigil/* rw,
+    /run/dsf/Vigil/{,**/} r,
+    /run/dsf/Vigil/** rw,
     unix (bind, listen, accept, connect, send, receive) type=stream,
 
     owner /tmp/** rw,
