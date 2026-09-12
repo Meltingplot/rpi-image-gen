@@ -83,3 +83,8 @@ mmdebstrap:
       dtoverlay=disable-wifi
       dtoverlay=disable-bt
       EOF
+    # With the radios off, the wireless and bluetooth firmware rpi-device-base
+    # installs is dead weight under vendor licence terms; nothing depends on
+    # it, raspi-firmware only suggests it. Taken out the way upstream removes
+    # sudo, so the SBOM does not list what the machine can never use.
+    - chroot $1 dpkg --purge firmware-brcm80211 bluez-firmware

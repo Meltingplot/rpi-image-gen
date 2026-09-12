@@ -138,12 +138,22 @@ say "Vigil enabled in the Duet Web Control factory defaults"
 
 say "building the plugin virtual environment (emulated, this takes a while)"
 chroot "$ROOT" python3 -m venv "$PLUGIN_DIR/venv"
+# The venv starts with the pip Debian ships, which is older than the fixes
+# the scanners know. The build installs with a current pip and then takes it
+# out again: nothing on the device installs packages, the root is read-only,
+# and a pip that never ships needs no tracking in the SBOM.
+chroot "$ROOT" "$PLUGIN_DIR/venv/bin/pip" install \
+   --no-cache-dir --disable-pip-version-check --upgrade pip ||
+   die "pip could not be updated from PyPI"
 chroot "$ROOT" "$PLUGIN_DIR/venv/bin/pip" install \
    --no-cache-dir --disable-pip-version-check \
    "dsf-python==${DSF_PYTHON_VERSION}" ||
    die "dsf-python ${DSF_PYTHON_VERSION} could not be installed from PyPI"
+chroot "$ROOT" "$PLUGIN_DIR/venv/bin/pip" uninstall -y --disable-pip-version-check pip ||
+   die "pip could not be removed from the virtual environment"
 
 [[ -x $ROOT$PLUGIN_DIR/venv/bin/python ]] || die "the virtual environment has no python"
+[[ -e $ROOT$PLUGIN_DIR/venv/bin/pip ]] && die "pip is still in the virtual environment"
 mv "$ROOT$PLUGIN_DIR/venv" "$SKEL/plugins/Vigil/venv"
 rmdir "$ROOT$PLUGIN_DIR" 2>/dev/null || true
 

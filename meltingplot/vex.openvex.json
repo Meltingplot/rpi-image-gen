@@ -1,0 +1,285 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/Meltingplot/rpi-image-gen/meltingplot/vex.openvex.json",
+  "author": "Meltingplot GmbH",
+  "role": "Image maintainer",
+  "timestamp": "2026-09-12T14:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2026-56864"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.26.5"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The GOSUMDB checksum verification is part of the go tool at build time. Neither binary fetches Go modules.",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. No symbol of the affected code is present; it belongs to the go command's module fetching, not to a program built with Go."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-56865"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.26.5"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The GOPROXY sumdb tile handling is part of the go tool at build time. Neither binary fetches Go modules.",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. No symbol of the affected code is present; it belongs to the go command's module fetching, not to a program built with Go."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5026",
+        "aliases": [
+          "CVE-2026-39821"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.26.5"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. The vulnerable symbols are linked into the binaries. Whether the code path is reachable on the printer has not been established; Raspberry Pi owns the build and the fix is a rebuild with Go 1.26.6. golang.org/x/net/idna via net/http: ASCII-only Punycode labels accepted. Client side of Connect's HTTPS connections."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5942",
+        "aliases": [
+          "CVE-2026-46600"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.26.5"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. The vulnerable symbols are linked into the binaries. Whether the code path is reachable on the printer has not been established; Raspberry Pi owns the build and the fix is a rebuild with Go 1.26.6. dnsmessage: panic on an invalid SVCB or HTTPS record, reachable through net.LookupCNAME. The resolver is the HMI on the printer VLAN."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5972",
+        "aliases": [
+          "CVE-2026-33818"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.26.5"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. The vulnerable symbols are linked into the binaries. Whether the code path is reachable on the printer has not been established; Raspberry Pi owns the build and the fix is a rebuild with Go 1.26.6. encoding/asn1: recursion depth in Unmarshal, reachable through certificate parsing in the TLS client."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-6088",
+        "aliases": [
+          "CVE-2026-56859"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.26.5"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. The vulnerable symbols are linked into the binaries. Whether the code path is reachable on the printer has not been established; Raspberry Pi owns the build and the fix is a rebuild with Go 1.26.6. encoding/xml: recursion depth in Decode. Where Connect decodes XML is not known."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-6089",
+        "aliases": [
+          "CVE-2026-56853"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.26.5"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. The vulnerable symbols are linked into the binaries. Whether the code path is reachable on the printer has not been established; Raspberry Pi owns the build and the fix is a rebuild with Go 1.26.6. net/http server: ReadHeaderTimeout not applied to the h2c preface check. ListenAndServe is linked; whether Connect listens on a TCP port on the printer has to be checked on a device."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-6090",
+        "aliases": [
+          "CVE-2026-56862"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.26.5"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. The vulnerable symbols are linked into the binaries. Whether the code path is reachable on the printer has not been established; Raspberry Pi owns the build and the fix is a rebuild with Go 1.26.6. crypto/tls: post-handshake KeyUpdate flood. Client side linked; the peer would be the Connect service."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-6091",
+        "aliases": [
+          "CVE-2026-56858"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.26.5"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. The vulnerable symbols are linked into the binaries. Whether the code path is reachable on the printer has not been established; Raspberry Pi owns the build and the fix is a rebuild with Go 1.26.6. html/template: JavaScript regexp context. Execute is linked; what Connect renders is not known."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-6218",
+        "aliases": [
+          "CVE-2026-56860"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@1.26.5"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. The vulnerable symbols are linked into the binaries. Whether the code path is reachable on the printer has not been established; Raspberry Pi owns the build and the fix is a rebuild with Go 1.26.6. net/url: quadratic resolvePath. Denial of service only, with attacker-controlled URLs."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-6303",
+        "aliases": [
+          "CVE-2026-56854"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto@v0.54.0"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. The vulnerable symbols are linked into the binaries. Whether the code path is reachable on the printer has not been established; Raspberry Pi owns the build and the fix is a rebuild with Go 1.26.6. x/crypto/ssh server: source-address option not enforced for non-public-key auth callbacks. NewServerConn is linked, this is the remote shell behind the Connect relay."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-6354",
+        "aliases": [
+          "CVE-2026-78662"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto@v0.54.0"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. The vulnerable symbols are linked into the binaries. Whether the code path is reachable on the printer has not been established; Raspberry Pi owns the build and the fix is a rebuild with Go 1.26.6. x/crypto/ssh: deadlock on an undecided channel by a malicious peer. Client and server paths linked; the peer is a Connect session authenticated with a Raspberry Pi ID."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-6355",
+        "aliases": [
+          "CVE-2026-56855"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto@v0.54.0"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. The vulnerable symbols are linked into the binaries. Whether the code path is reachable on the printer has not been established; Raspberry Pi owns the build and the fix is a rebuild with Go 1.26.6. x/crypto/ssh: deadlock on an established channel by a malicious peer. Same exposure as GO-2026-6354."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5932"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/filesystem",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto@v0.54.0"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation",
+      "status_notes": "Both Go binaries of rpi-connect-lite 2.12.2, /usr/bin/rpi-connect and /usr/bin/rpi-connectd, were checked with govulncheck -mode=binary on 2026-09-12. The vulnerable symbols are linked into the binaries. Whether the code path is reachable on the printer has not been established; Raspberry Pi owns the build and the fix is a rebuild with Go 1.26.6. x/crypto/openpgp is unmaintained; no fix exists. Linked for an unknown purpose."
+    }
+  ]
+}

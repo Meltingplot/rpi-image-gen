@@ -42,6 +42,14 @@ artefact:
   # carry prereleases. The release workflow passes a version from the git tag.
   version: 0.0.0-dev.$(date -u +%Y%m%d%H%M)
 
+sbom:
+  # The SBOM describes the filesystem as a product with a version rather than
+  # under a versioned name, so the statements in ../vex.openvex.json apply to
+  # every build through one product identifier, pkg:generic/filesystem. The
+  # file keeps its versioned name.
+  name: ${IGconf_artefact_target_name}
+  filename: ${IGconf_sbom_name}-${IGconf_sbom_version}.sbom
+
 layer:
   suite: mp-suite-trixie
   connect: mp-connect

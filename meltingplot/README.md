@@ -105,6 +105,25 @@ they reflect the last push to `meltingplot`, not the last tag. Most of what
 grype finds in a Debian image has no fix in Debian yet, so only findings with
 one reach the Security tab; a rebuild picks the fix up once it is packaged.
 The unfiltered report, including the unfixed ones, is in the audit artefact.
+The workflow also runs on a weekly schedule, since grype only knows what it
+saw at the last build.
+
+What cannot be fixed by rebuilding is assessed in `vex.openvex.json`, an
+OpenVEX document grype reads before reporting. A statement names the
+vulnerability, the component at the version assessed, and a status: a
+`not_affected` statement with its justification drops the finding from the
+Security tab, an `under_investigation` statement leaves it there and records
+what is known. The statements are bound to the component version, so a
+rebuild with a fixed component makes them moot rather than wrong. The current
+file covers the Go runtime inside Raspberry Pi Connect, which only Raspberry
+Pi can rebuild; the symbol-level check behind it was `govulncheck
+-mode=binary` on the two Connect binaries.
+
+Two findings were removed at the source instead: the Vigil virtual environment
+no longer carries pip, which the build only needs to install dsf-python and
+which nothing on the device uses, and the wireless and bluetooth firmware is
+taken out of the image by `mp-net-static`, since the radios it serves are
+switched off in firmware anyway.
 
 grant reports every package whose licence is outside the families listed in
 `grant.yaml`; the file explains what is expected there on a first run and how

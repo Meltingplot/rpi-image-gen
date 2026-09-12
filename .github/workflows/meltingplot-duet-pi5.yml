@@ -11,6 +11,10 @@ on:
   pull_request:
     branches: [meltingplot]
   workflow_dispatch:
+  # The vulnerability scan below only knows what it saw at the last build.
+  # A weekly build keeps the Security tab current when nothing was pushed.
+  schedule:
+    - cron: '0 3 * * 1'
 
 concurrency:
   group: duet-pi5-${{ github.ref }}

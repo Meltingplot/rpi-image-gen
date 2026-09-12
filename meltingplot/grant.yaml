@@ -12,8 +12,6 @@
 #  - licences syft could not name and reports as a SHA-256 of the text,
 #  - Debian copyright files that combine known licences with a LicenseRef,
 #    which grant cannot take apart and lists as one string,
-#  - the wireless firmware and its vendor terms (bluez-firmware,
-#    firmware-brcm80211),
 #  - share-alike documentation licences (CC-BY-SA).
 # Once reviewed, a full string can be added here verbatim, or the package can
 # be listed under ignore-packages with the reason next to it.
