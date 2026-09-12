@@ -18,6 +18,8 @@ concurrency:
 
 permissions:
   contents: write
+  # For the grype results in the Security tab.
+  security-events: write
 
 jobs:
   build:
@@ -146,3 +148,94 @@ jobs:
           args=(--verify-tag --title "duet-pi5 $VERSION" --notes-file "$notes")
           [ "$PRERELEASE" = "true" ] && args+=(--prerelease)
           gh release create "$TAG" "${args[@]}" "$RELEASE_DIR"/*
+
+      # Everything below checks the SBOM that was just published; the image
+      # itself is not touched. None of it gates the release. A scanner outage
+      # must not hold back an update, and a vulnerability in a Debian package is
+      # fixed by rebuilding once Debian ships the fix, not by failing this run.
+      - name: Unpack SBOM
+        id: sbom
+        env:
+          RELEASE_DIR: ${{ steps.collect.outputs.dir }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          audit="$RUNNER_TEMP/audit"
+          mkdir -p "$audit"
+          zstd -d "$RELEASE_DIR/filesystem-$VERSION.sbom.zst" \
+             -o "$audit/filesystem-$VERSION.spdx.json"
+          echo "dir=$audit" >> "$GITHUB_OUTPUT"
+          echo "file=$audit/filesystem-$VERSION.spdx.json" >> "$GITHUB_OUTPUT"
+
+      # Dependabot raises alerts from the dependency graph of the default
+      # branch, so the push to meltingplot is the submission that counts. A
+      # pull request holds no token that may write the graph.
+      - name: Submit SBOM to the dependency graph
+        if: github.event_name != 'pull_request'
+        uses: advanced-security/spdx-dependency-submission-action@v0.3.2
+        with:
+          filePath: ${{ steps.sbom.outputs.dir }}
+          filePattern: '*.spdx.json'
+
+      # Dependabot knows nothing about Debian packages; grype covers them from
+      # the Debian security tracker. The full report goes into the audit
+      # artefact. The Security tab only gets what has a fix, which is what a
+      # rebuild can pick up.
+      - name: Scan SBOM for vulnerabilities
+        uses: anchore/scan-action@v7
+        with:
+          sbom: ${{ steps.sbom.outputs.file }}
+          fail-build: false
+          output-format: json
+          output-file: ${{ steps.sbom.outputs.dir }}/grype.json
+          cache-db: true
+
+      - name: Scan SBOM for fixable vulnerabilities
+        id: grype
+        uses: anchore/scan-action@v7
+        with:
+          sbom: ${{ steps.sbom.outputs.file }}
+          fail-build: false
+          only-fixed: true
+          output-format: sarif
+          output-file: ${{ steps.sbom.outputs.dir }}/grype.sarif
+          cache-db: true
+
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+          category: duet-pi5-grype
+
+      # grant reports every package whose licence is outside
+      # meltingplot/grant.yaml. It does not fail the build until the backlog
+      # described in that file has been reviewed; --dry-run is what holds it
+      # back. grant complains once per Debian licence name it cannot map to
+      # SPDX, which is expected and filtered from the log.
+      - name: Check licences
+        env:
+          GRANT_VERSION: v0.6.8
+          SBOM: ${{ steps.sbom.outputs.file }}
+          AUDIT: ${{ steps.sbom.outputs.dir }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -sSfL https://get.anchore.io/grant \
+             | sh -s -- -b "$RUNNER_TEMP/bin" "$GRANT_VERSION"
+          "$RUNNER_TEMP/bin/grant" check -c meltingplot/grant.yaml --dry-run \
+             --no-output -f "$AUDIT/grant.json" "$SBOM" \
+             2> >(grep -v 'no matching spdx id found' >&2)
+          jq -r '.run.targets[0].evaluation
+                 | "## Licences",
+                   "",
+                   "\(.summary.packages.denied) of \(.summary.packages.total) packages outside meltingplot/grant.yaml, \(.summary.packages.unlicensed) without licence data.",
+                   "",
+                   (.findings.packages[] | select(.decision != "allow")
+                    | "- \(.name) \(.version): \([.licenses[].id] | join(", "))")' \
+             "$AUDIT/grant.json" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mp-duet-pi5-${{ steps.version.outputs.version }}-audit
+          path: |
+            ${{ steps.sbom.outputs.dir }}/grype.json
+            ${{ steps.sbom.outputs.dir }}/grype.sarif
+            ${{ steps.sbom.outputs.dir }}/grant.json
+          retention-days: 14

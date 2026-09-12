@@ -83,6 +83,49 @@ Artefacts land in `work/deploy-<version>/`:
 A build without a version is a development build. The release workflow passes
 the version from the git tag.
 
+### What is checked after a build
+
+The SBOM is the input for three checks the release workflow runs once the
+artefacts are out. None of them holds a release back, and none of them changes
+the image; they are there so a problem in a shipped image is known, not so the
+image never ships.
+
+| Check | Covers | Result lands in |
+|---|---|---|
+| Dependabot, fed by the SBOM through the dependency submission API | the .NET packages of DuetSoftwareFramework, the Go modules of Raspberry Pi Connect, the Python packages | Security tab, Dependabot alerts |
+| [grype](https://github.com/anchore/grype) | everything above, and the Debian packages from the Debian security tracker | Security tab, code scanning, for what has a fix; the full report in the `-audit` workflow artefact |
+| [grant](https://github.com/anchore/grant) against `grant.yaml` | the licence of every package | job summary, and the `-audit` workflow artefact |
+
+Dependabot is fed rather than left to read the repository because the image
+has no manifest a dependency scanner would recognise; the SBOM syft writes
+during the build is that manifest. GitHub's advisory database has no Debian
+ecosystem, so Dependabot never sees the Debian packages and the kernel; that
+gap is what grype is for. Alerts are only raised for the default branch, so
+they reflect the last push to `meltingplot`, not the last tag. Most of what
+grype finds in a Debian image has no fix in Debian yet, so only findings with
+one reach the Security tab; a rebuild picks the fix up once it is packaged.
+The unfiltered report, including the unfixed ones, is in the audit artefact.
+
+grant reports every package whose licence is outside the families listed in
+`grant.yaml`; the file explains what is expected there on a first run and how
+to work the list down. Until that review has happened the check reports and
+does not fail. The grant version is pinned in the workflow, like syft in the
+build; grype comes with the scan action at the version that action ships.
+
+`.github/dependabot.yml` also lets Dependabot propose updates for the actions
+the workflows use and for the commit of the printer configuration submodule.
+The component pins in `layer/mp-dsf.yaml` are not something Dependabot can
+read and stay manual.
+
+Both scanners run against the published SBOM, so any release can be checked
+again later:
+
+```
+zstd -d filesystem-<version>.sbom.zst -o filesystem.spdx.json
+grype sbom:filesystem.spdx.json
+grant check -c meltingplot/grant.yaml filesystem.spdx.json
+```
+
 ### Versions and prereleases
 
 Everything the image contains is pinned: the DuetSoftwareFramework version, the

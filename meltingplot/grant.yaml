@@ -1,0 +1,66 @@
+# Licence policy for the image, evaluated by grant against the SBOM of every
+# build, see the release workflow and README.md.
+#
+# grant allows a package when one of its licences matches a pattern below and
+# reports everything else. The list holds the licence families expected in a
+# Debian based product whose source is offered on request; each pattern is an
+# SPDX identifier or a glob over them, matched case-sensitively.
+#
+# What the list does not cover shows up as denied in the report. That is the
+# review backlog, not a build failure: the check runs without an exit code
+# until the backlog has been gone through. Expected there, from a first run:
+#  - licences syft could not name and reports as a SHA-256 of the text,
+#  - Debian copyright files that combine known licences with a LicenseRef,
+#    which grant cannot take apart and lists as one string,
+#  - the wireless firmware and its vendor terms (bluez-firmware,
+#    firmware-brcm80211),
+#  - share-alike documentation licences (CC-BY-SA).
+# Once reviewed, a full string can be added here verbatim, or the package can
+# be listed under ignore-packages with the reason next to it.
+
+allow:
+  - MIT
+  - MIT-*
+  - Expat
+  - X11
+  - ISC
+  - 0BSD
+  - BSD-*
+  - BSD3
+  - Apache-*
+  - Zlib
+  - curl
+  - bzip2-*
+  - Beerware
+  - BSL-1.0
+  - MPL-*
+  - AFL-*
+  - Artistic*
+  - Unicode-*
+  - CC0-1.0
+  - CC-BY-3.0
+  - CC-BY-4.0
+  - GFDL*
+  - FSF*
+  - Latex2e
+  - SunPro
+  - RSA-MD
+  - OLDAP-*
+  - Kazlib
+  - public-domain
+  - GPL
+  - GPL-*
+  - LGPL-*
+  - Dual-BSD-GPL
+  - Dual-MIT-GPL
+  - TCP-wrappers
+  - SMAIL-GPL
+
+ignore-packages: []
+
+# Kernel modules and a share of the Debian packages carry no licence field
+# syft can read; requiring one would only repeat that fact per package.
+require-license: false
+# Debian's short names (Expat, LicenseRef-*) are not SPDX identifiers and are
+# matched above as they are.
+require-known-license: false
