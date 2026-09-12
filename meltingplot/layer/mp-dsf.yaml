@@ -66,7 +66,7 @@
 # X-Env-Var-firmware_list-Valid: file
 # X-Env-Var-firmware_list-Set: y
 #
-# X-Env-Var-vigil_version: 1.3.0-beta.1
+# X-Env-Var-vigil_version: 1.3.0-beta.2
 # X-Env-Var-vigil_version-Desc: Version of the Vigil machine monitoring plugin.
 #  Only a published release asset is ever installed; there is no local build
 #  fallback. The matching asset is
@@ -75,7 +75,7 @@
 # X-Env-Var-vigil_version-Valid: string
 # X-Env-Var-vigil_version-Set: y
 #
-# X-Env-Var-vigil_sha256: acc7e7c16dd851474d4157188e365309de76246de1245ff04144832ea42cca32
+# X-Env-Var-vigil_sha256: 412c3f77fa7bfd7907d17a6e4309623012c07337dbf77268980f0efb19b50ea7
 # X-Env-Var-vigil_sha256-Desc: SHA-256 of the Vigil release asset. A mismatch
 #  stops the build rather than shipping an artefact nobody vouched for.
 # X-Env-Var-vigil_sha256-Required: n

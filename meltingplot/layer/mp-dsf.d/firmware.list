@@ -14,4 +14,4 @@
 #
 # Example:
 #   Duet3Firmware_TOOL1LC.bin sha256:0123...cdef https://github.com/Meltingplot/RepRapFirmware/releases/download/v3.7.0-rc.1+mp1/Duet3Firmware_TOOL1LC.bin
-Duet3Firmware_TOOL1LC.bin sha256:977a0aa42e7d48b1a7f7f84f1c6c9a0fd6a249ff9406c157cc3cd98a01e499b8 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.1%2B2-mp.1/Duet3Firmware_TOOL1LC.bin
+Duet3Firmware_TOOL1LC.bin sha256:21209c3b42d0dcaf825aab5ba04ca8be4ba2c338c75c64e031a02b7ebd5bda7b https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.1%2B2-mp.2/Duet3Firmware_TOOL1LC.bin
