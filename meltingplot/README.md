@@ -134,6 +134,20 @@ says how to record one. The grant version is pinned in the workflow, like
 syft in the build; grype comes with the scan action at the version that
 action ships.
 
+What the licences oblige the image to tell its user is in one place on the
+device: `0:/sys/LICENSES.txt`, readable in Duet Web Control next to the
+printer configuration and replaced with every update. It comes from
+`layer/mp-dsf.d/LICENSES.txt` with the image version filled in and the
+paragraph on replaced Duet firmware written from `firmware.list`, so a
+patched board firmware is named together with the release its modified
+source is published in. The file covers who licensed what, where the
+corresponding source of the exact version is, the written offer for it, how
+a modified image gets onto the machine, and the Broadcom and Raspberry Pi
+notices the boot firmware requires to be reproduced. The post-build assert
+refuses an image without it, or one that does not name every replaced
+firmware file. Everything else in the file is static: a new component, pin
+or source repository means editing it.
+
 `.github/dependabot.yml` also lets Dependabot propose updates for the actions
 the workflows use and for the commit of the printer configuration submodule.
 The component pins in `layer/mp-dsf.yaml` are not something Dependabot can

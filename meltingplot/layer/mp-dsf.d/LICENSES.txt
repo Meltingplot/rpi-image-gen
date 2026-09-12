@@ -1,0 +1,159 @@
+Meltingplot printer image mp-duet-pi5, version @VERSION@
+Software licences and source code
+==============================================================================
+
+This file describes the licence terms of the software on this computer and
+where its source code is. It is part of the image and is replaced with every
+update, so it describes the software that is actually installed. The same
+text is at 0:/sys/LICENSES.txt in Duet Web Control.
+
+
+1. What the software is and who licensed it
+------------------------------------------------------------------------------
+
+Operating system
+  Debian 13 (trixie) with the additions of Raspberry Pi OS, including the
+  Raspberry Pi Linux kernel (GPL-2.0). Every Debian package carries its own
+  licence file on this system at /usr/share/doc/<package>/copyright; most are
+  GPL, LGPL, BSD or MIT.
+
+Printer software (Duet3D Ltd)
+  DuetSoftwareFramework, Duet Web Control and RepRapFirmware, the firmware of
+  the Duet mainboard and its expansion boards: GPL-3.0.
+  dsf-python: LGPL-3.0.
+  https://github.com/Duet3D
+
+@FIRMWARE@
+  Bundled .NET libraries (Microsoft.Extensions.*, Nito.AsyncEx, MQTTnet) and
+  the .NET runtime: MIT.
+
+Meltingplot software
+  Printer configuration for the CHX350: MIT.
+  https://github.com/Meltingplot/chx350-config
+  Vigil, the machine monitoring plugin: MIT.
+  https://github.com/Meltingplot/dwc-vigil
+  The image definition and build, based on rpi-image-gen by Raspberry Pi Ltd:
+  BSD-3-Clause.
+  https://github.com/Meltingplot/rpi-image-gen
+
+Raspberry Pi Connect (Raspberry Pi Ltd)
+  rpi-connect-lite: BSD-3-Clause, with bundled Go modules under MIT, BSD and
+  Apache-2.0, each listed in /usr/share/doc/rpi-connect-lite/copyright.
+  rpi-connect-ota: Apache-2.0.
+
+Raspberry Pi boot firmware
+  The boot firmware (raspi-firmware) and the bootloader of the Raspberry Pi 5
+  (rpi-eeprom) are not open source. They may be redistributed in binary form
+  for use on Raspberry Pi devices under the terms in section 4.
+
+
+2. Source code
+------------------------------------------------------------------------------
+
+The complete corresponding source code of this image version is public:
+
+  Image definition and build
+    https://github.com/Meltingplot/rpi-image-gen
+    Release tag duet-pi5/v@VERSION@. The file release.json in that release
+    names the exact commits of the image definition and of the printer
+    configuration that this image was built from, and the checksums of every
+    delivered file.
+
+  Printer configuration
+    https://github.com/Meltingplot/chx350-config
+
+  Duet3D software
+    https://github.com/Duet3D
+
+  Debian packages
+    https://deb.debian.org/debian (source packages, by the version named in
+    the software bill of materials of the release)
+    https://archive.raspberrypi.com/debian and
+    https://github.com/raspberrypi for the Raspberry Pi additions and kernel
+
+The software bill of materials (SBOM) of the release lists every component
+with its exact version.
+
+Written offer
+  For three years from the delivery of this machine, Meltingplot will provide
+  the complete corresponding source code of any component licensed under the
+  GPL or LGPL on a data carrier, for no more than the cost of doing so.
+  Contact: https://meltingplot.net
+
+
+3. Installing modified software
+------------------------------------------------------------------------------
+
+This computer starts only images signed by Meltingplot. To run a modified
+version of the software, build the image from the sources in section 2 and
+write it to a Raspberry Pi 5 that has not been provisioned for secure boot,
+then fit that Raspberry Pi in place of this one. The printer works with it.
+
+Whoever does so is responsible for the modified machine: under the Machinery
+Regulation (EU) 2023/1230, replacing the control software of a machine makes
+the person who does it the manufacturer of the resulting machine.
+
+
+4. Notices to be reproduced
+------------------------------------------------------------------------------
+
+Raspberry Pi boot firmware (package raspi-firmware, files under /boot)
+  Copyright 2006, Broadcom Corporation
+  Copyright 2015, Raspberry Pi (Trading) Ltd
+  All rights reserved.
+
+  Redistribution.  Redistribution and use in binary form, without
+  modification, are permitted provided that the following conditions are
+  met:
+
+  * This software may only be used for the purposes of developing for,
+    running or using a Raspberry Pi device.
+  * Redistributions must reproduce the above copyright notice and the
+    following disclaimer in the documentation and/or other materials
+    provided with the distribution.
+  * Neither the name of Broadcom Corporation nor the names of its suppliers
+    may be used to endorse or promote products derived from this software
+    without specific prior written permission.
+
+  DISCLAIMER.  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+  CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
+  BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+  FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+  DAMAGE.
+
+Raspberry Pi 5 bootloader (package rpi-eeprom, files under firmware-2712)
+  Copyright 2024, Raspberry Pi (Trading) Ltd.
+  All rights reserved.
+
+  Redistribution.  Redistribution and use in binary form, without
+  modification, are permitted provided that the following conditions are
+  met:
+
+  * This software may only be used for the purposes of developing for,
+    running or using a Raspberry Pi device.
+  * Redistributions must reproduce the above copyright notice and the
+    following disclaimer in the documentation and/or other materials
+    provided with the distribution.
+  * Neither the name of the copyright holder nor the names of its
+    contributors may be used to endorse or promote products derived
+    from this software without specific prior written permission.
+
+  DISCLAIMER.  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+  CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
+  BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+  FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+  DAMAGE.

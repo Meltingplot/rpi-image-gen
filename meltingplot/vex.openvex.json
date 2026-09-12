@@ -1,7 +1,7 @@
 {
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/Meltingplot/rpi-image-gen/meltingplot/vex.openvex.json",
-  "author": "Meltingplot GmbH",
+  "author": "Meltingplot",
   "role": "Image maintainer",
   "timestamp": "2026-09-12T14:00:00Z",
   "version": 1,

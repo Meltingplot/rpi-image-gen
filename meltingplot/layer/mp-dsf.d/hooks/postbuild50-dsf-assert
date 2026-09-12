@@ -77,6 +77,20 @@ uid=$(awk -F: '$1=="dsf"{print $3}' "$ROOT/etc/passwd")
 [[ $uid == "$DSF_UID" ]] ||
    bad "dsf has uid ${uid:-none}, expected $DSF_UID; persistent files are owned numerically"
 
+# --- licence notice -------------------------------------------------------
+
+lic="$ROOT/opt/dsf/sd/sys/LICENSES.txt"
+[[ -s $lic ]] || bad "sys/LICENSES.txt is missing, the image would ship without its licence notice"
+grep -q '@[A-Z]*@' "$lic" && bad "sys/LICENSES.txt still carries a placeholder"
+if [[ -f ${IGconf_dsf_firmware_list:-} ]]; then
+   while IFS= read -r line || [[ -n $line ]]; do
+      [[ -z ${line// } || $line == \#* ]] && continue
+      read -r fw _ <<< "$line"
+      grep -q "^    $fw: " "$lic" ||
+         bad "sys/LICENSES.txt does not name the replaced firmware file $fw"
+   done < "$IGconf_dsf_firmware_list"
+fi
+
 # --- the bundled plugin ---------------------------------------------------
 
 [[ -f $SKEL/plugins/Vigil.json ]] || bad "Vigil was not staged into the skeleton"

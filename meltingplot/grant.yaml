@@ -35,8 +35,11 @@
 #    MIT, BSD and Apache-2.0 for the modules, per the package's copyright file
 #  - raspi-firmware boot/* and the rpi-eeprom bootloader images: Broadcom
 #    and Raspberry Pi binary redistribution terms, for use on Raspberry Pi
-#    devices only, notice to be reproduced in the product documentation.
+#    devices only, notice reproduced in the image's licence file.
 #    grant passes them on the GPL-2 parts of the same copyright file.
+# All of this, with the source locations and the written offer, is what the
+# image tells its user in layer/mp-dsf.d/LICENSES.txt, delivered as
+# 0:/sys/LICENSES.txt. Keep the two in step.
 
 allow:
   - MIT
