@@ -1,8 +1,11 @@
 [Unit]
-Description=Check every minute whether an installed update may restart the printer computer
+Description=Check every minute whether the update connector may run
 
 [Timer]
-OnBootSec=2min
+# The connector gets the first minutes after boot to itself: committing a
+# trybooted slot and reporting the deployment to Connect must not wait for a
+# control server that is still starting.
+OnBootSec=5min
 OnUnitActiveSec=1min
 AccuracySec=15s
 

@@ -1,37 +1,71 @@
 #!/bin/sh
-# Let a Raspberry Pi Connect update restart the printer computer, but only
-# while the printer is idle.
+# Let the Raspberry Pi Connect update connector run only while the printer is
+# idle.
 #
-# The update connector installs a new image into the other slot on its own.
-# With AutoReboot switched off (layer mp-connect) it then waits for a call to
-# Reboot on its D-Bus interface instead of restarting at once. This runs every
-# minute from mp-ota-gate.timer: nothing to do unless an update waits, and
-# then only when RepRapFirmware reports the machine idle. A print that is
-# running, paused or being cancelled holds the restart back. So does an
-# unreachable control server, because "unknown" is not "idle"; support can
-# still restart by hand over the Connect shell.
+# The connector installs a deployment the moment it arrives and restarts the
+# machine the moment the install is done. Nothing in the packaged software
+# holds that restart back. With AutoReboot=false the connector asks the
+# Connect daemon for permission over D-Bus (RebootPrompt), the daemon in this
+# image does not implement that method, and a failed call counts as
+# permission (rpi-connect-ota 1.3.14 with rpi-connect 2.12.2, read from the
+# binaries after a restart in the middle of a print on 2026-09-12).
+#
+# So the gate is the connector's service itself. This runs every minute from
+# mp-ota-gate.timer. While RepRapFirmware reports the machine idle the
+# connector runs, and a deployment created in Connect is installed and
+# restarts the machine within minutes. While it reports anything else, or
+# cannot be asked, the connector is stopped and a deployment stays pending in
+# Connect until the print is over. The connector is enabled, so it runs at
+# boot regardless and commits a freshly trybooted slot before this timer
+# fires for the first time; until that commit is through it is left alone
+# whatever the printer does, since the restart this guards against has
+# already happened.
+#
+# Stopping the connector in the middle of an install is fine: nothing it has
+# written is a slot the bootloader would start, and it picks the deployment
+# up again once it runs. What remains is the minute between a print starting
+# and this timer firing: an install that completes within that minute
+# restarts the machine.
+#
+# Support can deploy to a printer whose control server is down by stopping
+# the timer and starting the connector by hand over the Connect shell.
 
 set -eu
 
 MP_TAG=mp-ota-gate
-. /usr/lib/meltingplot/mp-common.sh
-. /usr/lib/meltingplot/mp-dsf.sh
+MP_LIB=${MP_LIB:-/usr/lib/meltingplot}
+# shellcheck source=/dev/null
+. "$MP_LIB/mp-common.sh"
+# shellcheck source=/dev/null
+. "$MP_LIB/mp-dsf.sh"
 
-MARKER=/run/meltingplot/ota-gate.held
-
-mp_ota_restart_pending || exit 0
+SYSTEMCTL=${MP_SYSTEMCTL:-systemctl}
+UNIT=rpi-connect-ota.service
 
 status=$(mp_dcs_status)
-if [ "$status" != idle ]; then
-   # One line per change of status, not one per minute.
-   if [ "$(cat "$MARKER" 2>/dev/null)" != "${status:-unreachable}" ]; then
-      install -d -m 0755 "$(dirname "$MARKER")"
-      printf '%s\n' "${status:-unreachable}" > "$MARKER"
-      mp_log "an update is installed and waits; the printer is ${status:-unreachable}, restart held back"
-   fi
-   exit 0
+active=$("$SYSTEMCTL" is-active "$UNIT" 2>/dev/null || true)
+
+if [ "$status" = idle ]; then
+   want=running
+elif ! mp_slot_committed; then
+   # Not the connector's restart to hold back: this slot was just trybooted
+   # and the connector is the one that commits it.
+   want=running
+else
+   want=stopped
 fi
 
-rm -f "$MARKER"
-mp_log "an update is installed and the printer is idle, restarting into it"
-exec busctl call com.raspberrypi.ota /com/raspberrypi/ota com.raspberrypi.ota Reboot
+case $want:$active in
+   running:active | running:activating)
+      ;;
+   running:*)
+      mp_log "the printer is ${status:-unreachable}; the update connector runs"
+      "$SYSTEMCTL" start "$UNIT"
+      ;;
+   stopped:active | stopped:activating)
+      mp_log "the printer is ${status:-unreachable}; the update connector is stopped until it is idle"
+      "$SYSTEMCTL" stop "$UNIT"
+      ;;
+   stopped:*)
+      ;;
+esac

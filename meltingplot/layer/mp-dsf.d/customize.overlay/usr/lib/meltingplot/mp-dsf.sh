@@ -3,14 +3,13 @@
 #
 # The update path keeps asking two questions: is the printer doing anything,
 # and will the bootloader start the running slot again. Both are answered
-# here and nowhere else, so the restart gate and the firmware update cannot
+# here and nowhere else, so the connector gate and the firmware update cannot
 # disagree about either.
 
 # Overridable so the logic can be exercised on a build host with stubs.
 MP_CODECONSOLE=${MP_CODECONSOLE:-/opt/dsf/bin/CodeConsole}
 MP_SLOT_TRYBOOT=${MP_SLOT_TRYBOOT:-/usr/bin/rpi-slot-tryboot}
 MP_AUTOBOOT=${MP_AUTOBOOT:-/bootfs/autoboot.txt}
-MP_OTA_STATE=${MP_OTA_STATE:-/bootfs/ota_state}
 
 # The machine status as RepRapFirmware reports it: idle, processing, paused,
 # updating and so on. Asked through DuetControlServer with M409, which is what
@@ -50,19 +49,4 @@ mp_slot_committed() {
    _have=$(mp_default_boot_partition < "$MP_AUTOBOOT")
    _want=$("$MP_SLOT_TRYBOOT" 2>/dev/null | mp_default_boot_partition)
    [ -n "$_want" ] && [ "$_have" = "$_want" ]
-}
-
-# State of the Raspberry Pi Connect update connector, from the file it keeps
-# across a reboot. Empty when no update is in flight.
-mp_ota_state() {
-   [ -r "$MP_OTA_STATE" ] || return 0
-   sed -n -e 's/\r$//' -e 's/^state=//p' "$MP_OTA_STATE" | head -n1
-}
-
-# True when an installed update is waiting for permission to restart.
-mp_ota_restart_pending() {
-   case $(mp_ota_state) in
-      *WAIT|*PROMPT) return 0 ;;
-      *) return 1 ;;
-   esac
 }

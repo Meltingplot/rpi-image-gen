@@ -1,5 +1,5 @@
 [Unit]
-Description=Restart into an installed update once the printer is idle
+Description=Run the update connector only while the printer is idle
 RequiresMountsFor=/bootfs
 
 [Service]

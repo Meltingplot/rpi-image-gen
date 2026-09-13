@@ -5,23 +5,29 @@
 #  support, as the delivery channel for OTA images. No auth key is baked into
 #  the image; a device signs in on first boot from the key that mp-identity
 #  drops for it, which rpi-connect-signin.path picks up. The update connector
-#  is told not to restart the device on its own: an installed update waits
-#  until something calls Reboot on the connector's D-Bus interface, which
-#  mp-ota-gate in mp-dsf does once the printer is idle. An image with this
-#  layer and no such gate never restarts into an update.
-# X-Env-Layer-Version: 1.1.0
+#  keeps its packaged behaviour: it installs a deployment as soon as it
+#  arrives, restarts into it at once, and commits the slot once that boots.
+#  Nothing in the packaged software can hold the restart back (AutoReboot=false
+#  makes the connector ask the Connect daemon, which does not implement the
+#  question, and a failed question counts as yes), so a printer image must
+#  keep the connector from running while the machine is busy; mp-ota-gate in
+#  mp-dsf does that. An image with this layer and no such gate restarts the
+#  moment an update is installed.
+# X-Env-Layer-Version: 1.2.0
 # X-Env-Layer-Requires: rpi-connect-lite,rpi-connect-ota
 # METAEND
 ---
 mmdebstrap:
   customize-hooks:
-    # The packaged default is AutoReboot=true, a restart the moment the slot is
-    # written, which on a printer means mid-print. AutoCommit stays on: the
-    # connector commits a slot that boots, and the firmware follows from there.
+    # The gate in mp-dsf relies on both packaged defaults: AutoReboot, so the
+    # restart follows the install within the same idle period the gate allowed
+    # the install in, and AutoCommit, so a trybooted slot is committed without
+    # anyone asking. Fail the build if the package changes either.
     - |-
       set -eu
       f="$1/etc/rpi-connect/rpi-ota-connector.config"
       [ -f "$f" ] || { echo "mp-connect: $f is missing, did rpi-connect-ota install?" >&2; exit 1; }
-      sed -i 's/^AutoReboot=.*/AutoReboot=false/' "$f"
-      grep -qx 'AutoReboot=false' "$f" ||
-        { echo "mp-connect: could not turn AutoReboot off in $f" >&2; exit 1; }
+      for k in AutoReboot AutoCommit; do
+        grep -qx "$k=true" "$f" ||
+          { echo "mp-connect: $f does not say $k=true; mp-ota-gate relies on that default" >&2; exit 1; }
+      done

@@ -1,6 +1,7 @@
 #!/bin/sh
-# Tests for the DSF-side helpers, runnable on the build host with stubs in
-# place of CodeConsole and rpi-slot-tryboot.
+# Tests for the DSF-side helpers and the update connector gate, runnable on
+# the build host with stubs in place of CodeConsole, rpi-slot-tryboot and
+# systemctl.
 #
 # What matters here is the reading of state. A wrong answer either restarts a
 # printing machine, or flashes firmware into a slot the bootloader is about to
@@ -18,7 +19,6 @@ MP_DEVICE_CONF=/nonexistent
 MP_CODECONSOLE="$tmp/CodeConsole"
 MP_SLOT_TRYBOOT="$tmp/rpi-slot-tryboot"
 MP_AUTOBOOT="$tmp/autoboot.txt"
-MP_OTA_STATE="$tmp/ota_state"
 . "$here/../layer/mp-dsf.d/customize.overlay/usr/lib/meltingplot/mp-dsf.sh"
 
 fail=0
@@ -96,25 +96,60 @@ rm -f "$MP_AUTOBOOT"
 mp_slot_committed && r=yes || r=no
 check "committed: no autoboot.txt" no "$r"
 
-# --- update connector state -----------------------------------------------
+# --- update connector gate ------------------------------------------------
+# The gate script itself, with systemctl replaced by a stub that answers
+# is-active from a file and records every other call. The connector runs
+# while the printer is idle, and while the slot is not yet committed; it is
+# stopped for anything else, including a control server that cannot be
+# asked.
 
-rm -f "$MP_OTA_STATE"
-check "ota state absent"       ""             "$(mp_ota_state)"
-mp_ota_restart_pending && r=yes || r=no
-check "pending: no state file" no "$r"
-printf 'state=TRYBOOTWAIT\r\ndeployment=abc\r\n' > "$MP_OTA_STATE"
-check "ota state CRLF"         "TRYBOOTWAIT"  "$(mp_ota_state)"
-mp_ota_restart_pending && r=yes || r=no
-check "pending: tryboot wait"  yes "$r"
-printf 'state=REBOOTPROMPT\n' > "$MP_OTA_STATE"
-mp_ota_restart_pending && r=yes || r=no
-check "pending: reboot prompt" yes "$r"
-printf 'state=FETCHDEPLOYMENT\n' > "$MP_OTA_STATE"
-mp_ota_restart_pending && r=yes || r=no
-check "pending: still downloading" no "$r"
-printf 'deployment=abc\n' > "$MP_OTA_STATE"
-mp_ota_restart_pending && r=yes || r=no
-check "pending: no state line" no "$r"
+export MP_LIB="$tmp/lib"
+mkdir -p "$MP_LIB"
+cp "$here/../layer/mp-identity.d/customize.overlay/usr/lib/meltingplot/mp-common.sh" "$MP_LIB/"
+cp "$here/../layer/mp-dsf.d/customize.overlay/usr/lib/meltingplot/mp-dsf.sh" "$MP_LIB/"
+export MP_DEVICE_CONF MP_CODECONSOLE MP_SLOT_TRYBOOT MP_AUTOBOOT
+export MP_SYSTEMCTL="$tmp/systemctl"
+cat > "$MP_SYSTEMCTL" <<'EOF'
+#!/bin/sh
+case $1 in
+   is-active) cat "$(dirname "$0")/unit.state"; [ "$(cat "$(dirname "$0")/unit.state")" = active ] ;;
+   *) echo "$1 $2" >> "$(dirname "$0")/systemctl.log" ;;
+esac
+EOF
+chmod +x "$MP_SYSTEMCTL"
+gate="$here/../layer/mp-dsf.d/customize.overlay/usr/sbin/mp-ota-gate"
+
+# printer status, unit state, slot committed -> expected systemctl calls
+gate_case() {
+   echo "{\"key\":\"state.status\",\"flags\":\"\",\"result\":$2}" > "$tmp/status.out"
+   echo "$3" > "$tmp/unit.state"
+   if [ "$4" = committed ]; then echo 2 > "$tmp/active"; else echo 3 > "$tmp/active"; fi
+   : > "$tmp/systemctl.log"
+   sh "$gate" 2>>"$tmp/gate.log"
+   check "gate: $1" "$5" "$(paste -sd, "$tmp/systemctl.log")"
+}
+
+cat > "$MP_CODECONSOLE" <<'EOF'
+#!/bin/sh
+cat "$(dirname "$0")/status.out"
+exit "$(cat "$(dirname "$0")/status.rc")"
+EOF
+chmod +x "$MP_CODECONSOLE"
+echo 0 > "$tmp/status.rc"
+printf '[all]\ntryboot_a_b=1\nboot_partition=2\n[tryboot]\nboot_partition=3\n' > "$MP_AUTOBOOT"
+
+gate_case "idle, connector running"        '"idle"'       active     committed   ""
+gate_case "idle, connector stopped"        '"idle"'       inactive   committed   "start rpi-connect-ota.service"
+gate_case "idle, connector failed"         '"idle"'       failed     committed   "start rpi-connect-ota.service"
+gate_case "printing, connector running"    '"processing"' active     committed   "stop rpi-connect-ota.service"
+gate_case "printing, connector starting"   '"processing"' activating committed   "stop rpi-connect-ota.service"
+gate_case "printing, connector stopped"    '"processing"' inactive   committed   ""
+gate_case "paused, connector running"      '"paused"'     active     committed   "stop rpi-connect-ota.service"
+gate_case "unreachable, connector running" 'null'         active     committed   "stop rpi-connect-ota.service"
+gate_case "printing, slot not committed"   '"processing"' active     uncommitted ""
+gate_case "unreachable, not committed"     'null'         inactive   uncommitted "start rpi-connect-ota.service"
+rm -f "$MP_CODECONSOLE"
+gate_case "no control server, running"     '"idle"'       active     committed   "stop rpi-connect-ota.service"
 
 [ "$fail" -eq 0 ] && echo "all tests passed"
 exit "$fail"

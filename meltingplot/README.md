@@ -256,8 +256,9 @@ is recorded in `/persistent/common/etc/mp-identity`.
 2. Register the artefact in the Raspberry Pi Connect dashboard under *Remote
    update*: the URL of `mp-duet-pi5-<version>.update.tar.zst` from the release,
    and its SHA-256 from `SHA256SUMS`.
-3. Deploy it to a device. The device writes the bundle to the root filesystem it
-   is not running from, restarts into it once, and keeps it if it comes up.
+3. Deploy it to a device. Once the printer is idle, the device writes the
+   bundle to the root filesystem it is not running from, restarts into it
+   once, and keeps it if it comes up.
 
 Roll out to a bench machine first, then to pilot customers.
 
@@ -265,16 +266,23 @@ To go back, deploy the previous artefact again. It stays registered.
 
 ### What happens on the device
 
-1. The update connector from `rpi-connect-ota` streams the bundle into the
-   other slot. This happens as soon as the deployment is created, while the
-   printer keeps working.
-2. The connector then waits. The packaged default would restart the device at
-   once; `mp-connect` turns that off, and `mp-ota-gate` checks once a minute
-   whether an update waits and whether RepRapFirmware reports the machine
-   idle. Only then is the restart triggered. A running or paused print holds
-   it back for as long as it takes; the deployment shows as in progress in
-   Connect meanwhile. So does a control server that cannot be asked: support
-   can restart such a machine by hand over the Connect shell.
+1. The update connector from `rpi-connect-ota` runs only while the printer is
+   idle. `mp-ota-gate` checks once a minute what RepRapFirmware reports and
+   stops the connector's service for anything but idle: a running, paused or
+   cancelling print, a firmware update, or a control server that cannot be
+   asked. A deployment created in Connect meanwhile stays pending there, for
+   as long as the print takes.
+2. Once the printer is idle the connector runs, picks the deployment up,
+   streams the bundle into the other slot and restarts the machine at once.
+   That is the packaged behaviour, and it cannot be changed: the connector's
+   `AutoReboot=false` setting makes it ask the Connect daemon over D-Bus, the
+   daemon does not implement the question, and a failed question counts as
+   yes. This was found the hard way, with a print cut short by a restart.
+   What the gate cannot cover is the minute between a print starting and its
+   next check: an install that completes within that minute restarts the
+   machine. Support can deploy to a printer whose control server is down by
+   stopping `mp-ota-gate.timer` and starting `rpi-connect-ota` by hand over
+   the Connect shell.
 3. The bootloader starts the new slot once. If it does not come up, the next
    reset returns to the old one. If it comes up, the connector commits it
    within seconds of boot and reports the deployment as succeeded. That is the

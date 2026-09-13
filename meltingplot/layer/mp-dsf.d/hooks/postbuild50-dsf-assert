@@ -148,14 +148,14 @@ else
 fi
 
 # --- restarts and firmware ------------------------------------------------
-# An installed update may only restart the printer computer through
-# mp-ota-gate, and the firmware only follows a committed slot. Both rest on
-# the update connector not restarting on its own.
+# The update connector may only run while the printer is idle, which is
+# mp-ota-gate's job, and the firmware only follows a committed slot. The gate
+# rests on the connector being enabled, so that it commits a trybooted slot
+# at boot on its own, and on its packaged defaults, which mp-connect asserts.
 
-conn="$ROOT/etc/rpi-connect/rpi-ota-connector.config"
-if [[ -f $conn ]]; then
-   grep -qx 'AutoReboot=false' "$conn" ||
-      bad "the update connector would restart the device on its own, bypassing mp-ota-gate"
+if [[ -f $ROOT/etc/rpi-connect/rpi-ota-connector.config ]]; then
+   compgen -G "$ROOT/etc/systemd/system/*.wants/rpi-connect-ota.service" >/dev/null ||
+      bad "rpi-connect-ota.service is not enabled, a trybooted slot would never be committed"
 else
    echo "mp-dsf assert: no update connector in this image, mp-ota-gate has nothing to gate" >&2
 fi
