@@ -36,6 +36,23 @@
 # X-Env-Var-ntp-Valid: regex:^[0-9]+(\.[0-9]+){3}$
 # X-Env-Var-ntp-Set: y
 #
+# X-Env-Var-ntp_extra: ptbtime1.ptb.de ptbtime2.ptb.de ptbtime3.ptb.de
+# X-Env-Var-ntp_extra-Desc: Space separated list of further servers, appended to
+#  NTP= behind the one above, for an HMI Pi that routes and resolves but has no
+#  time of its own. The default is the PTB in Braunschweig, which keeps the
+#  legal time of Germany, rather than a US operator or the volunteer pool. All
+#  three hosts sit at one institute, so this buys host redundancy, not operator
+#  redundancy; add a second European operator here if that matters.
+#  They go into NTP= and deliberately not into FallbackNTP=:
+#  systemd-timesyncd picks the fallback list only when both the system and the
+#  link list are empty, so with a primary configured the fallback list is never
+#  contacted, however long the primary stays silent. Within NTP= it walks to the
+#  next entry on timeout, which is the behaviour wanted here. Empty leaves the
+#  printer on its primary source alone.
+# X-Env-Var-ntp_extra-Required: n
+# X-Env-Var-ntp_extra-Valid: string-or-empty
+# X-Env-Var-ntp_extra-Set: y
+#
 # X-Env-Var-iface: eth0
 # X-Env-Var-iface-Desc: Name of the wired interface to configure.
 # X-Env-Var-iface-Required: n
@@ -65,12 +82,16 @@ mmdebstrap:
       [Link]
       RequiredForOnline=routable
       EOF
+    # PollIntervalMinSec raises systemd's 32s floor: a fleet of printers should
+    # not poll a public institute's servers that often. Courtesy on our part,
+    # not a condition read off the PTB terms.
     - |-
       set -eu
       install -d -m 0755 "$1/etc/systemd/timesyncd.conf.d"
       cat > "$1/etc/systemd/timesyncd.conf.d/mp-net-static.conf" <<-EOF
       [Time]
-      NTP=${IGconf_mpnet_ntp}
+      NTP=${IGconf_mpnet_ntp} ${IGconf_mpnet_ntp_extra}
+      PollIntervalMinSec=64
       EOF
     # No radios on the printer SBC. The firmware overlays keep the interfaces
     # from ever appearing, which is stronger than an rfkill at runtime.

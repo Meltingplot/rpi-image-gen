@@ -17,7 +17,11 @@ image:
   name: mp-duet-pi5-${IGconf_image_version}
 
 # The printer's internal network. The HMI Pi is the router, DNS resolver and
-# time source for everything behind it.
+# time source for everything behind it. It does not run an NTP server today, so
+# the time comes from the public servers the layer appends to NTP=, over the
+# route the HMI provides. The HMI stays first in the list: a printer network cut
+# off from the internet then converges on one clock as soon as the HMI serves
+# time, at the price of one timeout per sync cycle until it does.
 mpnet:
   address: 10.42.0.2/24
   gateway: 10.42.0.1
