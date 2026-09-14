@@ -109,6 +109,8 @@ grep -q '^dtparam=spi=on' "$ROOT/boot/firmware/config.txt" ||
    bad "SPI is not enabled, so DuetControlServer cannot reach the mainboard"
 grep -q 'lsm=apparmor' "$ROOT/boot/firmware/cmdline.txt" ||
    bad "lsm=apparmor is missing from the kernel command line, so the plugin policy would not load"
+grep -q 'cgroup_enable=memory' "$ROOT/boot/firmware/cmdline.txt" ||
+   bad "cgroup_enable=memory is missing from the kernel command line, so MemoryMin in duetcontrolserver.service would be a no-op"
 
 # --- plugin policy --------------------------------------------------------
 
