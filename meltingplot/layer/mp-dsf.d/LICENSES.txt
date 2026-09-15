@@ -24,6 +24,7 @@ Printer software (Duet3D Ltd)
   https://github.com/Duet3D
 
 @FIRMWARE@
+@PACKAGES@
   Bundled .NET libraries (Microsoft.Extensions.*, Nito.AsyncEx, MQTTnet) and
   the .NET runtime: MIT.
 

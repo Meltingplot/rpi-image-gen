@@ -1,0 +1,28 @@
+# DuetSoftwareFramework packages from a separately published build of our
+# own, installed in place of the Duet3D archive's.
+#
+# One line per package:
+#
+#   <package> sha256:<checksum of the published .deb> <https location>
+#
+# The DSF packages pin each other to one exact version and check it again at
+# runtime, so a build of our own is installed as a whole: every package that
+# pkg/build.sh --packages=progs,meta produces in the fork, at a version
+# <dsf.version>+<suffix> (3.7.0~rc.1+mp.1 for a modified 3.7.0~rc.1). Only
+# these packages are taken from the build; duetsd, duetwebcontrol and
+# reprapfirmware come from the archive, where the build's meta package pins
+# them. An empty list installs the archive's packages. Only a published build
+# is taken, checked against the pin: no local path, no fallback, a mismatch
+# stops the build. See "Installing a DuetSoftwareFramework build of our own"
+# in the README.
+#
+# A board firmware file is not a package of the build; it goes through
+# firmware.list.
+
+# 3.7.0-rc.1+mp.1: DuetControlServer waits for TfrRdy before an SPI transfer.
+duetsoftwareframework sha256:25d31d82968995930404db34be48400393959c4ee5409ae5eb0f4d707264d2c5 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.1/duetsoftwareframework_3.7.0.rc.1%2Bmp.1_arm64.deb
+duetcontrolserver sha256:c43e48ba6e7494a40818453198e2fae2549b9bb8d99b92a4eeaa7a2124c31395 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.1/duetcontrolserver_3.7.0.rc.1%2Bmp.1_arm64.deb
+duetwebserver sha256:4ac4678b8d459939d009c76f5465233884faba78680028b7c98540941373cfcb https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.1/duetwebserver_3.7.0.rc.1%2Bmp.1_arm64.deb
+duetpluginservice sha256:2c0cf44243bd831f08ff2aa8df52604e016da7388f6de71dd440321fecbfa256 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.1/duetpluginservice_3.7.0.rc.1%2Bmp.1_arm64.deb
+duettools sha256:0c0353ed862e08b72deb0a9981fa7b8bb9a236fe51caef3a3a49ee994022a7a7 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.1/duettools_3.7.0.rc.1%2Bmp.1_arm64.deb
+duetruntime sha256:d3b3768d87ef777dccc6a9de800cde4245fa8a147e712130d9ecd3f7a8f015ff https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.1/duetruntime_3.7.0.rc.1%2Bmp.1_arm64.deb

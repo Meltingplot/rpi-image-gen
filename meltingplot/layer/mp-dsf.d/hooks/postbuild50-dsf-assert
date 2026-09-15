@@ -90,6 +90,14 @@ if [[ -f ${IGconf_dsf_firmware_list:-} ]]; then
          bad "sys/LICENSES.txt does not name the replaced firmware file $fw"
    done < "$IGconf_dsf_firmware_list"
 fi
+if [[ -f ${IGconf_dsf_packages_list:-} ]]; then
+   while IFS= read -r line || [[ -n $line ]]; do
+      [[ -z ${line// } || $line == \#* ]] && continue
+      read -r pkg _ <<< "$line"
+      grep -Eq "^    $pkg [^:]+: " "$lic" ||
+         bad "sys/LICENSES.txt does not name the package $pkg from our own build with its version"
+   done < "$IGconf_dsf_packages_list"
+fi
 
 # --- the bundled plugin ---------------------------------------------------
 
@@ -186,6 +194,47 @@ if [[ -f $list ]]; then
          bad "$name is not the pinned build $want"
       grep -qx "/opt/dsf/sd/firmware/$name" "$ROOT/var/lib/dpkg/diversions" 2>/dev/null ||
          bad "$name was replaced without dpkg-divert, so dpkg still claims the packaged file"
+   done < "$list"
+fi
+
+# --- packages from a build of our own -------------------------------------
+# A package from the packages list has to be installed at the version of the
+# pinned build, and its files on disk have to be the build's, file for file.
+# The Duet packages carry no md5sums, so the pinned .deb itself is the
+# reference; it is taken from the build cache, where vfetch left it verified.
+# Conffiles are left out: the image configures the packages itself.
+
+list=${IGconf_dsf_packages_list:-}
+if [[ -f $list ]]; then
+   tmp=$(mktemp -d)
+   trap 'rm -rf "$tmp"' EXIT
+   while read -r pkg sum url || [[ -n $pkg ]]; do
+      [[ -z $pkg || $pkg == \#* ]] && continue
+      deb=$tmp/$pkg.deb
+      printf '%s %s %s\n' "$pkg.deb" "$sum" "$url" > "$tmp/$pkg.meta"
+      if ! vfetch "$tmp/$pkg.meta" "$deb" >/dev/null 2>&1; then
+         bad "the pinned build of $pkg (${sum#sha256:}) is not in the build cache, so the image cannot be checked against it"
+         continue
+      fi
+      ver=$(dpkg-deb -f "$deb" Version)
+      have=$(dpkg-query --admindir="$ROOT/var/lib/dpkg" -W -f '${Version}' "$pkg" 2>/dev/null || true)
+      if [[ $have != "$ver" ]]; then
+         bad "$pkg is installed at ${have:-no version}, the pinned build is $ver"
+         continue
+      fi
+      conffiles=$(dpkg-deb --ctrl-tarfile "$deb" | tar -xOf - ./conffiles 2>/dev/null || true)
+      stage=$tmp/$pkg.files
+      mkdir -p "$stage"
+      dpkg-deb --fsys-tarfile "$deb" | tar -C "$stage" -xf -
+      while IFS= read -r path; do
+         grep -qx "$path" <<< "$conffiles" && continue
+         if [[ -L $stage$path ]]; then
+            [[ -L $ROOT$path && $(readlink "$stage$path") == $(readlink "$ROOT$path") ]] ||
+               bad "$path is not the link the pinned build of $pkg ships"
+         elif ! cmp -s "$stage$path" "$ROOT$path"; then
+            bad "$path is not the pinned build of $pkg $ver"
+         fi
+      done < <(cd "$stage" && find . -type f -o -type l | sed 's|^\.||')
    done < "$list"
 fi
 

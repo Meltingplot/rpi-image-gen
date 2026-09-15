@@ -8,7 +8,7 @@
 #  runs only while the printer is idle (mp-ota-gate), so an update is
 #  installed and restarted into between prints, and the Duet firmware follows
 #  the image once a slot is committed (mp-dsf-firmware).
-# X-Env-Layer-Version: 1.3.0
+# X-Env-Layer-Version: 1.4.0
 # X-Env-Layer-Requires: mp-duet-hw,mp-identity,device-user-admin,rpi-debian-trixie
 # X-Env-Layer-RequiresProvider: systemd
 #
@@ -28,7 +28,8 @@
 # X-Env-Var-version-Desc: Exact DuetSoftwareFramework version to install. Every
 #  DSF package is pinned to it, and the mainboard firmware follows through the
 #  dependency on reprapfirmware, so an image always carries a known pair of
-#  firmware and control software.
+#  firmware and control software. A build of our own in packages.list is of
+#  this generation and carries this version plus a suffix.
 # X-Env-Var-version-Required: n
 # X-Env-Var-version-Valid: string
 # X-Env-Var-version-Set: y
@@ -66,6 +67,19 @@
 # X-Env-Var-firmware_list-Required: n
 # X-Env-Var-firmware_list-Valid: file
 # X-Env-Var-firmware_list-Set: y
+#
+# X-Env-Var-packages_list: ${DIRECTORY}/${STEM}.d/packages.list
+# X-Env-Var-packages_list-Desc: DuetSoftwareFramework packages from a
+#  separately published build of our own, one per line as <package>
+#  sha256:<hex> <https url of the .deb>, installed in place of the archive's.
+#  The packages pin each other to one exact version and check it at runtime,
+#  so the build is installed as a whole, every package the upstream packaging
+#  produces for it, versioned <dsf.version>+<suffix>. Packages it leaves out
+#  come from the archive at dsf.version. An empty list installs the archive's
+#  packages only.
+# X-Env-Var-packages_list-Required: n
+# X-Env-Var-packages_list-Valid: file
+# X-Env-Var-packages_list-Set: y
 #
 # X-Env-Var-vigil_version: 1.3.0-beta.2
 # X-Env-Var-vigil_version-Desc: Version of the Vigil machine monitoring plugin.
@@ -156,24 +170,14 @@ mmdebstrap:
       Pin: origin pkg.duet3d.com
       Pin-Priority: 100
       EOF
-    # Installed here rather than through the package list so the version comes
-    # from one variable. duetpluginservice is only a recommendation of the
-    # framework and the base suite does not install recommendations, so it is
-    # named explicitly. duetpimanagementplugin is deliberately absent: it
-    # manages the network, the hostname and apt updates, none of which apply to
-    # a fleet-managed, read-only device.
-    - |-
-      set -eu
-      v="$IGconf_dsf_version"
-      chroot "$1" apt-get install -y --no-install-recommends \
-        "duetsoftwareframework=$v" \
-        "duetcontrolserver=$v" \
-        "duetwebserver=$v" \
-        "duetwebcontrol=$v" \
-        "duettools=$v" \
-        "duetruntime=$v" \
-        "duetpluginservice=$v" \
-        duetsd reprapfirmware
+    # The DSF packages: from the archive at dsf.version, or as a whole from a
+    # published build of our own (packages.list). Installed by a script rather
+    # than through the package list so the version comes from one variable
+    # and duetpluginservice, only a recommendation of the framework, is named
+    # explicitly. duetpimanagementplugin is deliberately absent: it manages
+    # the network, the hostname and apt updates, none of which apply to a
+    # fleet-managed, read-only device.
+    - ${IGconf_dsf_assetdir}/bin/mp-dsf-packages "$1"
     # Separately published firmware builds go over the packaged files, under
     # the packaged names, before anything else looks at the firmware directory.
     - ${IGconf_dsf_assetdir}/bin/mp-dsf-firmware-files "$1"

@@ -174,15 +174,46 @@ firmware_notice() {
       echo "  reprapfirmware package."
    fi
 }
+# The same for DSF packages from a build of our own, from packages.list. The
+# version is the one dpkg installed, which is the one the build declares.
+package_notice() {
+   local list=${IGconf_dsf_packages_list:-}
+   local line pkg sum url extra ver n=0
+   if [[ -f $list ]]; then
+      while IFS= read -r line || [[ -n $line ]]; do
+         [[ -z ${line// } || $line == \#* ]] && continue
+         read -r pkg sum url extra <<< "$line"
+         if (( n == 0 )); then
+            echo "  Modified DuetSoftwareFramework packages (Meltingplot, from"
+            echo "  DuetSoftwareFramework): GPL-3.0. These are installed in place of the"
+            echo "  packages of the Duet3D archive; the modified source is published where"
+            echo "  each build is:"
+         fi
+         n=$((n + 1))
+         ver=$(chroot "$ROOT" dpkg-query -W -f '${Version}' "$pkg" 2>/dev/null || true)
+         if [[ $url =~ ^(https://github\.com/[^/]+/[^/]+)/releases/download/([^/]+)/ ]]; then
+            echo "    $pkg ${ver:-?}: ${BASH_REMATCH[1]}/releases/tag/${BASH_REMATCH[2]}"
+         else
+            echo "    $pkg ${ver:-?}: $url"
+         fi
+      done < "$list"
+   fi
+   if (( n == 0 )); then
+      echo "  No DuetSoftwareFramework package comes from a build of our own; the"
+      echo "  printer runs the packages of the Duet3D archive."
+   fi
+}
 python3 - "$ASSETS/LICENSES.txt" "$SD/sys/LICENSES.txt" \
-   "${IGconf_artefact_version:?}" "$(firmware_notice)" <<'PY'
+   "${IGconf_artefact_version:?}" "$(firmware_notice)" "$(package_notice)" <<'PY'
 import pathlib, sys
-src, dst, version, firmware = sys.argv[1:5]
+src, dst, version, firmware, packages = sys.argv[1:6]
 text = pathlib.Path(src).read_text()
-for tag in ("@VERSION@", "@FIRMWARE@"):
+for tag in ("@VERSION@", "@FIRMWARE@", "@PACKAGES@"):
     if tag not in text:
         sys.exit(f"mp-dsf: LICENSES.txt has no {tag} placeholder")
-text = text.replace("@VERSION@", version).replace("@FIRMWARE@", firmware + "\n")
+text = (text.replace("@VERSION@", version)
+            .replace("@FIRMWARE@", firmware + "\n")
+            .replace("@PACKAGES@", packages + "\n"))
 pathlib.Path(dst).write_text(text)
 PY
 chmod 0644 "$SD/sys/LICENSES.txt"

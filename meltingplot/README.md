@@ -138,15 +138,16 @@ What the licences oblige the image to tell its user is in one place on the
 device: `0:/sys/LICENSES.txt`, readable in Duet Web Control next to the
 printer configuration and replaced with every update. It comes from
 `layer/mp-dsf.d/LICENSES.txt` with the image version filled in and the
-paragraph on replaced Duet firmware written from `firmware.list`, so a
-patched board firmware is named together with the release its modified
-source is published in. The file covers who licensed what, where the
-corresponding source of the exact version is, the written offer for it, how
-a modified image gets onto the machine, and the Broadcom and Raspberry Pi
-notices the boot firmware requires to be reproduced. The post-build assert
-refuses an image without it, or one that does not name every replaced
-firmware file. Everything else in the file is static: a new component, pin
-or source repository means editing it.
+paragraphs on replaced Duet firmware and on DuetSoftwareFramework packages
+from a build of our own written from `firmware.list` and `packages.list`, so
+a patched board firmware or control server is named together with the
+release its modified source is published in. The file covers who licensed what, where
+the corresponding source of the exact version is, the written offer for it,
+how a modified image gets onto the machine, and the Broadcom and Raspberry
+Pi notices the boot firmware requires to be reproduced. The post-build
+assert refuses an image without it, or one that does not name every
+replaced firmware file and package. Everything else in the file is static: a
+new component, pin or source repository means editing it.
 
 `.github/dependabot.yml` also lets Dependabot propose updates for the actions
 the workflows use and for the commit of the printer configuration submodule.
@@ -166,7 +167,9 @@ grant check -c meltingplot/grant.yaml filesystem.spdx.json
 
 Everything the image contains is pinned: the DuetSoftwareFramework version, the
 Vigil release and its checksum, the dsf-python version, the commit of the
-printer configuration, and any Duet firmware file that replaces a packaged one. A prerelease of any of them is allowed while the image
+printer configuration, any Duet firmware file a build of our own replaces,
+and any DuetSoftwareFramework package that comes from a build of our own. A
+prerelease of any of them is allowed while the image
 itself is a prerelease, and refused once it is not, so a customer image can
 never quietly contain a release candidate. The check runs before the build
 starts; see `hooks/prebuild05-mp-release-gate`.
@@ -204,6 +207,59 @@ the version string inside its file. A patched build therefore needs a version
 string of its own, such as `3.7.0-rc.1+mp1`, or the boards keep the firmware
 they have and only a manual `M997 B<address>` puts it on. The same comparison
 puts the packaged firmware back once the line is removed again.
+
+### Installing a DuetSoftwareFramework build of our own
+
+The DSF packages form one generation. `duetcontrolserver` needs
+`duetruntime` at exactly its own version, `duetpluginservice` needs
+`duetcontrolserver` at exactly its own version, the `duetsoftwareframework`
+meta package needs all of them at that version, and the programs check each
+other's version again when they connect. A modified DuetControlServer is
+therefore never a single package: the whole set the fork builds is installed
+in place of the archive's set. It is listed in `layer/mp-dsf.d/packages.list`,
+one line per package:
+
+```
+duetsoftwareframework sha256:<checksum> https://<where the .deb is published>
+duetcontrolserver     sha256:<checksum> https://...
+duetwebserver         sha256:<checksum> https://...
+duetpluginservice     sha256:<checksum> https://...
+duettools             sha256:<checksum> https://...
+duetruntime           sha256:<checksum> https://...
+```
+
+The artefacts are the `.deb` files that the upstream packaging in the fork
+builds from the modified source, what Duet3D would have put in its archive:
+
+```bash
+# in the fork, on the branch of the pinned generation (v3.7-dev for 3.7.0-rc.1)
+# Directory.Build.props: <Version>3.7.0-rc.1+mp.1</Version>
+pkg/build.sh --target-arch=aarch64 --packages=progs,meta deb
+```
+
+The build fetches every listed package, checks it against the pin, and
+installs the set in one apt transaction together with what the archive
+still provides: `duetsd`, `duetwebcontrol` and `reprapfirmware`, which the
+build's meta package pins to the archive's versions, and any package of the
+generation the list leaves out, at `dsf.version`. apt checks the
+exact-version chain over all of them, so a set that does not close, say a
+build without its meta package, stops the build instead of leaving a mixed
+installation. dpkg, the SBOM, `M122` and Duet Web Control then all report
+the build's version.
+
+The build has to be of the pinned generation and carry a version of the form
+`<dsf.version>+<suffix>`, `3.7.0~rc.1+mp.1` for a modified `3.7.0~rc.1`. The
+suffix is what tells it apart from the archive's package; a package that
+keeps the archive's version is the archive's package and is left out of the
+list. A line that names a package outside the generation, a location that is
+not `https`, a build of a different package, architecture or version, or a
+list without the meta package stops the build. There is no local path and no
+fallback. `release.json` records what came from the build, and
+`0:/sys/LICENSES.txt` names each package with its version and the release
+its modified source is published in.
+
+A board firmware file is not part of this: it belongs to `reprapfirmware`,
+which is versioned separately, and goes through `firmware.list`.
 
 ## Commissioning a printer
 

@@ -1,0 +1,157 @@
+#!/bin/bash
+# Install the DuetSoftwareFramework packages, from the Duet3D archive or from
+# a separately published build of our own.
+#
+# The DSF packages are one generation: duetcontrolserver needs duetruntime at
+# exactly its own version, duetpluginservice needs duetcontrolserver at exactly
+# its own version, the duetsoftwareframework meta package needs every one of
+# them at that version, and the programs check each other's version again at
+# runtime. A build of our own is therefore never a single package. It is the
+# whole set the upstream packaging in pkg/build.sh produces from the modified
+# source, progs and meta, installed in place of the archive's set at a version
+# of its own, <dsf.version>+<suffix>. The suffix is what tells the build apart
+# from the archive's on the device, in dpkg, M122 and Duet Web Control alike.
+# Packages the build leaves alone, duetsd, duetwebcontrol and reprapfirmware,
+# still come from the archive: the meta package of the build pins them to the
+# archive's versions, so apt takes them from there.
+#
+# The list names each package of the build, the checksum of its published
+# .deb and where it is. Only a published build is ever taken, verified against
+# its pin; there is no local path and no fallback. apt resolves the set as a
+# whole, so an inconsistent one, say a build without its meta package, stops
+# the build instead of leaving a mixed installation behind.
+
+set -euo pipefail
+
+ROOT=${1:?rootfs}
+LIST=${IGconf_dsf_packages_list:?}
+BASE=${IGconf_dsf_version:?}
+
+# The packages pinned to dsf.version. Whichever the list does not name is
+# installed from the archive at exactly that version.
+PINNED=(duetsoftwareframework duetcontrolserver duetwebserver duetwebcontrol
+        duettools duetruntime duetpluginservice)
+# Versioned on their own; always from the archive, at whatever the meta
+# package asks for.
+ARCHIVE_ONLY=(duetsd reprapfirmware)
+
+STAGE=/tmp/mp-dsf-packages
+
+say() { echo "mp-dsf-packages: $*" >&2; }
+die() { echo "mp-dsf-packages: $*" >&2; exit 1; }
+
+[[ -f $LIST ]] || die "no packages list at $LIST"
+for tool in dpkg-deb vfetch; do
+   command -v "$tool" >/dev/null || die "$tool is not on the build host"
+done
+
+is_pinned() {
+   local p
+   for p in "${PINNED[@]}"; do [[ $p == "$1" ]] && return 0; done
+   return 1
+}
+
+# --- read and check the whole list first ----------------------------------
+
+pkgs=() sums=() urls=()
+lineno=0
+while IFS= read -r line || [[ -n $line ]]; do
+   lineno=$((lineno + 1))
+   [[ $line =~ ^[[:space:]]*(#|$) ]] && continue
+   read -r pkg sum url extra <<< "$line"
+   [[ -n $url && -z ${extra:-} ]] ||
+      die "$LIST:$lineno: expected '<package> sha256:<hex> <https url>', got '$line'"
+   is_pinned "$pkg" ||
+      die "$LIST:$lineno: $pkg is not one of the packages pinned to dsf.version (${PINNED[*]}); a board firmware file goes through firmware.list"
+   [[ $sum =~ ^sha256:[0-9a-fA-F]{64}$ ]] ||
+      die "$LIST:$lineno: '$sum' is not sha256:<64 hex digits>"
+   [[ $url == https://* ]] ||
+      die "$LIST:$lineno: $url is not a published https location; only published builds are shipped"
+   for seen in "${pkgs[@]}"; do
+      [[ $seen != "$pkg" ]] || die "$LIST:$lineno: $pkg is listed twice"
+   done
+   pkgs+=("$pkg"); sums+=("${sum,,}"); urls+=("$url")
+done < "$LIST"
+
+listed() {
+   local p
+   for p in "${pkgs[@]}"; do [[ $p == "$1" ]] && return 0; done
+   return 1
+}
+
+# Whatever the list leaves out comes from the archive, pinned to dsf.version.
+from_archive=()
+for p in "${PINNED[@]}"; do
+   listed "$p" || from_archive+=("$p=$BASE")
+done
+
+if ((${#pkgs[@]} == 0)); then
+   say "installing DuetSoftwareFramework $BASE from the Duet3D archive"
+   chroot "$ROOT" apt-get install -y --no-install-recommends \
+      "${from_archive[@]}" "${ARCHIVE_ONLY[@]}"
+   exit 0
+fi
+
+listed duetsoftwareframework || die "\
+$LIST names ${pkgs[*]} but not duetsoftwareframework.
+
+The meta package pins every other DSF package to its exact version, and the
+programs check each other's version at runtime, so a build of our own is
+installed as a whole: list every package that pkg/build.sh --packages=progs,meta
+produces for it."
+
+# --- fetch and check the builds -------------------------------------------
+# vfetch verifies the checksum and keeps a verified copy in the build cache.
+# The files are staged inside the root, where apt in the chroot can read them.
+
+rm -rf "$ROOT$STAGE"
+install -d -m 0755 "$ROOT$STAGE"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp" "$ROOT$STAGE"' EXIT
+
+target_arch=$(chroot "$ROOT" dpkg --print-architecture)
+for i in "${!pkgs[@]}"; do
+   pkg=${pkgs[i]} sum=${sums[i]} url=${urls[i]}
+   say "fetching $pkg"
+   printf '%s %s %s\n' "$pkg.deb" "$sum" "$url" > "$tmp/$pkg.meta"
+   vfetch "$tmp/$pkg.meta" "$ROOT$STAGE/$pkg.deb" || die "\
+could not obtain $pkg with checksum ${sum#sha256:} from
+  $url
+
+Either no build is published there, or it does not match the pin. The image
+only ever ships published builds, so there is nothing to fall back to: publish
+the build, or correct the line in $LIST. Do not build past this."
+   chmod 0644 "$ROOT$STAGE/$pkg.deb"
+
+   deb=$ROOT$STAGE/$pkg.deb
+   deb_pkg=$(dpkg-deb -f "$deb" Package)
+   deb_ver=$(dpkg-deb -f "$deb" Version)
+   deb_arch=$(dpkg-deb -f "$deb" Architecture)
+   [[ $deb_pkg == "$pkg" ]] ||
+      die "the build at $url is package '${deb_pkg:-?}', not $pkg"
+   [[ $deb_arch == "$target_arch" || $deb_arch == all ]] ||
+      die "$pkg $deb_ver is built for $deb_arch, the image is $target_arch"
+   [[ $deb_ver == "$BASE"+?* ]] || die "\
+$pkg from $url has version $deb_ver, expected $BASE+<suffix>.
+
+A build of our own is of the pinned DuetSoftwareFramework generation $BASE
+and carries a suffix that tells it apart from the archive's package on the
+device: set Version in Directory.Build.props to $(sed 's/~/-/' <<< "$BASE")+<suffix>
+before packaging. A package that keeps the archive's version is the archive's
+package; leave it out of the list and it is installed from there."
+done
+
+# --- install --------------------------------------------------------------
+# One apt transaction over the build's packages, the archive's remainder and
+# the packages versioned on their own. apt checks the exact-version chain
+# between all of them; a set that does not close fails here.
+
+staged=()
+for pkg in "${pkgs[@]}"; do staged+=("$STAGE/$pkg.deb"); done
+say "installing ${pkgs[*]} from the published build, ${from_archive[*]:-nothing} from the archive"
+chroot "$ROOT" apt-get install -y --no-install-recommends \
+   "${staged[@]}" "${from_archive[@]}" "${ARCHIVE_ONLY[@]}"
+
+for i in "${!pkgs[@]}"; do
+   say "${pkgs[i]} $(chroot "$ROOT" dpkg-query -W -f '${Version}' "${pkgs[i]}") from ${urls[i]}"
+done

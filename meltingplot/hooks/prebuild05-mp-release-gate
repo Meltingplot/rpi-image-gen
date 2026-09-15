@@ -56,6 +56,16 @@ if [[ -f $list ]]; then
          problems+=("$name is replaced by a prerelease build from $url")
    done < "$list"
 fi
+
+# The same for a DuetSoftwareFramework package from a build of our own.
+list=${IGconf_dsf_packages_list:-}
+if [[ -f $list ]]; then
+   while read -r pkg _ url || [[ -n $pkg ]]; do
+      [[ -z $pkg || $pkg == \#* ]] && continue
+      [[ ! $url =~ -(rc|beta|alpha|dev|pre) ]] ||
+         problems+=("$pkg comes from a prerelease build at $url")
+   done < "$list"
+fi
 shopt -u nocasematch
 
 [[ ${IGconf_dsf_plugin_policy:-enforce} == enforce ]] ||
