@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
@@ -84,7 +84,7 @@ jobs:
 
       # The Duet packages and the .NET runtime are the bulk of the download.
       - name: Restore apt cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: meltingplot/.cache/apt
           key: duet-pi5-apt-${{ hashFiles('meltingplot/layer/**') }}-${{ github.run_id }}
@@ -103,6 +103,12 @@ jobs:
             -B "$RUNNER_TEMP/work" \
             -- IGconf_artefact_version="$VERSION" \
                IGconf_sys_apt_cachedir="$PWD/meltingplot/.cache/apt"
+
+      # apt downloads as _apt inside the build's user namespace and leaves a
+      # partial/ directory only _apt may enter. The cache is saved as the
+      # runner user and would fail on it; apt recreates it on the next build.
+      - name: Drop apt's partial directory
+        run: sudo rm -rf meltingplot/.cache/apt/partial
 
       - name: Collect artefacts
         id: collect
@@ -123,7 +129,7 @@ jobs:
           cat "$out/release.json"
           cat "$out/SHA256SUMS"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: mp-duet-pi5-${{ steps.version.outputs.version }}
           path: ${{ steps.collect.outputs.dir }}
@@ -169,43 +175,50 @@ jobs:
              -o "$audit/filesystem-$VERSION.spdx.json"
           echo "dir=$audit" >> "$GITHUB_OUTPUT"
           echo "file=$audit/filesystem-$VERSION.spdx.json" >> "$GITHUB_OUTPUT"
+          # syft percent-encodes the "+" of a Debian revision in the purl
+          # version, as the purl spec allows. The purl parser bundled with the
+          # submission action accepts a literal "+" there but rejects "%2B",
+          # and drops the package. The copy for the submission has it decoded
+          # in the version only; names and qualifiers are left as they are.
+          mkdir -p "$audit/submit"
+          jq '(.packages[].externalRefs[]? | select(.referenceType == "purl") | .referenceLocator)
+              |= (capture("^(?<head>[^@?#]*@?)(?<version>[^?#]*)(?<rest>.*)$")
+                  | .head + (.version | gsub("%2B"; "+")) + .rest)' \
+             "$audit/filesystem-$VERSION.spdx.json" \
+             > "$audit/submit/filesystem-$VERSION.spdx.json"
 
       # Dependabot raises alerts from the dependency graph of the default
       # branch, so the push to meltingplot is the submission that counts. A
       # pull request holds no token that may write the graph.
       - name: Submit SBOM to the dependency graph
         if: github.event_name != 'pull_request'
-        uses: advanced-security/spdx-dependency-submission-action@v0.3.2
+        uses: advanced-security/spdx-dependency-submission-action@v0.4.0
         with:
-          filePath: ${{ steps.sbom.outputs.dir }}
+          filePath: ${{ steps.sbom.outputs.dir }}/submit
           filePattern: '*.spdx.json'
 
       # Dependabot knows nothing about Debian packages; grype covers them from
       # the Debian security tracker. The full report goes into the audit
       # artefact. The Security tab only gets what has a fix, which is what a
       # rebuild can pick up, minus what meltingplot/vex.openvex.json records
-      # as not affecting the image.
-      - name: Scan SBOM for vulnerabilities
-        uses: anchore/scan-action@v7
-        with:
-          sbom: ${{ steps.sbom.outputs.file }}
-          vex: meltingplot/vex.openvex.json
-          fail-build: false
-          output-format: json
-          output-file: ${{ steps.sbom.outputs.dir }}/grype.json
-          cache-db: true
-
-      - name: Scan SBOM for fixable vulnerabilities
+      # as not affecting the image. grype is run directly rather than through
+      # anchore/scan-action: the action always passes --fail-on and turns a
+      # finding into a warning on the run, which is not a verdict anyone acts
+      # on here. The database is downloaded once and shared by both runs.
+      - uses: anchore/scan-action/download-grype@v7
         id: grype
-        uses: anchore/scan-action@v7
-        with:
-          sbom: ${{ steps.sbom.outputs.file }}
-          vex: meltingplot/vex.openvex.json
-          fail-build: false
-          only-fixed: true
-          output-format: sarif
-          output-file: ${{ steps.sbom.outputs.dir }}/grype.sarif
-          cache-db: true
+
+      - name: Scan SBOM for vulnerabilities
+        env:
+          GRYPE: ${{ steps.grype.outputs.cmd }}
+          GRYPE_CHECK_FOR_APP_UPDATE: 'false'
+          SBOM: ${{ steps.sbom.outputs.file }}
+          AUDIT: ${{ steps.sbom.outputs.dir }}
+        run: |
+          "$GRYPE" -v --vex meltingplot/vex.openvex.json \
+             -o json --file "$AUDIT/grype.json" "sbom:$SBOM"
+          "$GRYPE" -v --vex meltingplot/vex.openvex.json --only-fixed \
+             -o sarif --file "$AUDIT/grype.sarif" "sbom:$SBOM"
 
       # The Go modules of Raspberry Pi Connect are in the SBOM once per binary,
       # rpi-connect and rpi-connectd, so grype reports each finding twice and
@@ -214,7 +227,7 @@ jobs:
       # audit artefact keeps both.
       - name: Fold identical SARIF results
         env:
-          SARIF: ${{ steps.grype.outputs.sarif }}
+          SARIF: ${{ steps.sbom.outputs.dir }}/grype.sarif
         run: |
           jq '.runs[].results |= unique' "$SARIF" > "$SARIF.tmp"
           mv "$SARIF.tmp" "$SARIF"
@@ -222,7 +235,7 @@ jobs:
 
       - uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: ${{ steps.grype.outputs.sarif }}
+          sarif_file: ${{ steps.sbom.outputs.dir }}/grype.sarif
           category: duet-pi5-grype
 
       # grant fails the run for any package whose licence is outside
@@ -252,7 +265,7 @@ jobs:
              "$AUDIT/grant.json" >> "$GITHUB_STEP_SUMMARY"
           exit "${rc:-0}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: mp-duet-pi5-${{ steps.version.outputs.version }}-audit
           path: |
