@@ -12,7 +12,7 @@
 MP_CODECONSOLE=${MP_CODECONSOLE:-/opt/dsf/bin/CodeConsole}
 MP_SLOT_TRYBOOT=${MP_SLOT_TRYBOOT:-/usr/bin/rpi-slot-tryboot}
 MP_AUTOBOOT=${MP_AUTOBOOT:-/bootfs/autoboot.txt}
-MP_BUSCTL=${MP_BUSCTL:-busctl}
+MP_OTA_STATE_FILE=${MP_OTA_STATE_FILE:-/bootfs/ota_state}
 MP_TRYBOOT_FLAG=${MP_TRYBOOT_FLAG:-/proc/device-tree/chosen/bootloader/tryboot}
 
 # Ask DuetControlServer for one key of the object model with M409, which is
@@ -80,12 +80,18 @@ mp_boot_trybooted() {
    [ -n "$_flag" ] && [ "$_flag" -eq 1 ]
 }
 
-# The state the update connector reports over D-Bus: IDLE, DOWNLOAD, INSTALL,
-# TRYBOOT and so on (rpi-ota-connector 1.3.14). Prints nothing when the
-# connector is not running.
+# The state of the update connector: IDLE, DOWNLOAD, INSTALL, TRYBOOT and so
+# on (rpi-ota-connector 1.3.14), read from the file the connector rewrites
+# on every transition, next to autoboot.txt on the boot partition. The
+# connector also answers the same over D-Bus (GetStatus), but not while it
+# streams an install, which is the one time the answer matters: the call
+# then hangs for busctl's 25 s timeout and fails (lab printer, 2026-09-16).
+# The file is only as current as the connector that wrote it, so callers
+# must check that the connector is running before believing it. Prints
+# nothing when the file is missing or has no state line.
 mp_ota_state() {
-   "$MP_BUSCTL" call com.raspberrypi.ota /com/raspberrypi/ota com.raspberrypi.ota GetStatus 2>/dev/null \
-      | sed -n 's/^s "\(.*\)"$/\1/p'
+   [ -r "$MP_OTA_STATE_FILE" ] || return 0
+   sed -n -e 's/\r$//' -e 's/^state=//p' "$MP_OTA_STATE_FILE" | head -n1
 }
 
 # True for the connector states between picking a deployment up and restarting

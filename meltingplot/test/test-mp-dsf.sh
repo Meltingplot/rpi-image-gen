@@ -19,7 +19,7 @@ MP_DEVICE_CONF=/nonexistent
 MP_CODECONSOLE="$tmp/CodeConsole"
 MP_SLOT_TRYBOOT="$tmp/rpi-slot-tryboot"
 MP_AUTOBOOT="$tmp/autoboot.txt"
-MP_BUSCTL="$tmp/busctl"
+MP_OTA_STATE_FILE="$tmp/ota_state"
 MP_TRYBOOT_FLAG="$tmp/tryboot"
 . "$here/../layer/mp-dsf.d/customize.overlay/usr/lib/meltingplot/mp-dsf.sh"
 
@@ -100,25 +100,17 @@ mp_boot_trybooted && r=yes || r=no
 check "trybooted: no flag"     no  "$r"
 
 # --- the update connector's state ------------------------------------------
-# busctl prints the D-Bus reply as a typed value, and fails when the
-# connector is not running to own the name.
+# The connector keeps a small key=value file on the boot partition (FAT, so
+# CRLF is possible) and rewrites it on every transition.
 
-cat > "$MP_BUSCTL" <<'EOF'
-#!/bin/sh
-[ "$*" = "call com.raspberrypi.ota /com/raspberrypi/ota com.raspberrypi.ota GetStatus" ] || { echo "unexpected: $*" >&2; exit 2; }
-cat "$(dirname "$0")/ota.out"
-exit "$(cat "$(dirname "$0")/ota.rc")"
-EOF
-chmod +x "$MP_BUSCTL"
-echo 0 > "$tmp/ota.rc"
-echo 's "INSTALL"' > "$tmp/ota.out"
+printf 'state=INSTALL\nbootid=8b4d9a8288c9869e95087366c977aa9a\ntrybooktoken=3\ndepid=da9b2312\n' > "$MP_OTA_STATE_FILE"
 check "ota state"              "INSTALL" "$(mp_ota_state)"
-echo 's "IDLE"' > "$tmp/ota.out"
-check "ota state idle"         "IDLE"    "$(mp_ota_state)"
-echo 1 > "$tmp/ota.rc"
-echo 'Call failed: The name com.raspberrypi.ota was not provided by any .service files' > "$tmp/ota.out"
-check "ota state no connector" ""        "$(mp_ota_state)"
-echo 0 > "$tmp/ota.rc"
+printf 'state=IDLE\r\nbootid=8b4d9a8288c9869e95087366c977aa9a\r\n' > "$MP_OTA_STATE_FILE"
+check "ota state CRLF"         "IDLE"    "$(mp_ota_state)"
+printf 'bootid=8b4d9a8288c9869e95087366c977aa9a\n' > "$MP_OTA_STATE_FILE"
+check "ota state no line"      ""        "$(mp_ota_state)"
+rm -f "$MP_OTA_STATE_FILE"
+check "ota state no file"      ""        "$(mp_ota_state)"
 
 for st in DOWNLOAD PREINSTALL INSTALL REBOOT TRYBOOT REBOOTWAIT; do
    mp_ota_installing "$st" && r=yes || r=no
@@ -221,7 +213,7 @@ export MP_LIB="$tmp/lib"
 mkdir -p "$MP_LIB"
 cp "$here/../layer/mp-identity.d/customize.overlay/usr/lib/meltingplot/mp-common.sh" "$MP_LIB/"
 cp "$here/../layer/mp-dsf.d/customize.overlay/usr/lib/meltingplot/mp-dsf.sh" "$MP_LIB/"
-export MP_DEVICE_CONF MP_CODECONSOLE MP_SLOT_TRYBOOT MP_AUTOBOOT MP_BUSCTL MP_TRYBOOT_FLAG
+export MP_DEVICE_CONF MP_CODECONSOLE MP_SLOT_TRYBOOT MP_AUTOBOOT MP_OTA_STATE_FILE MP_TRYBOOT_FLAG
 export MP_SYSTEMCTL="$tmp/systemctl"
 export MP_NOTICE_FLAG="$tmp/notice.flag"
 cat > "$MP_SYSTEMCTL" <<'EOF'
@@ -234,13 +226,13 @@ EOF
 chmod +x "$MP_SYSTEMCTL"
 gate="$here/../layer/mp-dsf.d/customize.overlay/usr/sbin/mp-ota-gate"
 
-# printer status, unit state, slot committed, connector state
+# printer status, unit state, slot committed, connector state (its file)
 #   -> expected systemctl calls, expected codes sent (other than the status)
 gate_case() {
    echo "{\"key\":\"state.status\",\"flags\":\"\",\"result\":$2}" > "$tmp/query.state.status"
    echo "$3" > "$tmp/unit.state"
    if [ "$4" = committed ]; then echo 2 > "$tmp/active"; else echo 3 > "$tmp/active"; fi
-   echo "s \"$5\"" > "$tmp/ota.out"
+   if [ -n "$5" ]; then printf 'state=%s\nbootid=0\n' "$5" > "$MP_OTA_STATE_FILE"; else rm -f "$MP_OTA_STATE_FILE"; fi
    : > "$tmp/systemctl.log"
    : > "$tmp/codes.log"
    sh "$gate" 2>>"$tmp/gate.log"
@@ -285,12 +277,12 @@ gate_case "idle, install failed"           '"idle"'       active     committed  
 [ -e "$MP_NOTICE_FLAG" ] && r=yes || r=no
 check "gate: notice flag after closing" no "$r"
 gate_case "idle, install over, nothing shown" '"idle"'    active     committed   IDLE "" ""
+gate_case "idle, stale file, connector off" '"idle"'      inactive   committed   INSTALL "start rpi-connect-ota.service" ""
 gate_case "idle, installing again"         '"idle"'       active     committed   INSTALL  "" "$notice"
-# The print that starts during an install stops the connector; the notice
-# comes down once the connector is gone, not while it is being stopped.
-echo 1 > "$tmp/ota.rc"
-gate_case "printing, install interrupted"  '"processing"' active     committed   "" "stop rpi-connect-ota.service" 'M409 K"state.messageBox.title",M292'
-echo 0 > "$tmp/ota.rc"
+# The print that starts during an install stops the connector. Its file is
+# left saying INSTALL, which counts for nothing once the connector is gone,
+# and the notice comes down.
+gate_case "printing, install interrupted"  '"processing"' inactive   committed   INSTALL "" 'M409 K"state.messageBox.title",M292'
 # The notice of a message box that is not ours is left alone.
 gate_case "idle, installing, flag reset"   '"idle"'       active     committed   INSTALL  "" "$notice"
 echo '{"key":"state.messageBox.title","flags":"","result":"Nozzle diameter"}' > "$tmp/query.state.messageBox.title"
