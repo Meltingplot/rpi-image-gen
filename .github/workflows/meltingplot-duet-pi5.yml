@@ -153,8 +153,17 @@ jobs:
           RELEASE_DIR: ${{ steps.collect.outputs.dir }}
           TAG: ${{ github.ref_name }}
         run: |
+          # The printer shows this page as the changelog after an update, so
+          # the pull requests since the previous release come first (GitHub's
+          # generated notes, fetched here so they can lead rather than trail),
+          # and the technical record of the build follows.
           notes=$(mktemp)
           {
+            gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" --jq .body
+            echo
+            echo "## Image"
+            echo
             echo "Image for the Raspberry Pi 5 on the Duet 3 mainboard of a CHX350."
             echo
             echo "Deploy \`mp-duet-pi5-$VERSION.update.tar.zst\` through Raspberry Pi"
@@ -164,10 +173,7 @@ jobs:
             cat "$RELEASE_DIR/release.json"
             echo '```'
           } > "$notes"
-          # The generated notes list the commits since the previous release,
-          # below ours; the printer shows this page as the changelog after an
-          # update.
-          args=(--verify-tag --title "duet-pi5 $VERSION" --notes-file "$notes" --generate-notes)
+          args=(--verify-tag --title "duet-pi5 $VERSION" --notes-file "$notes")
           [ "$PRERELEASE" = "true" ] && args+=(--prerelease)
           gh release create "$TAG" "${args[@]}" "$RELEASE_DIR"/*
 
