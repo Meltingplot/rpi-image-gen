@@ -358,11 +358,14 @@ To go back, deploy the previous artefact again. It stays registered.
    Duet Web Control shows a firmware mismatch warning. The settling time is
    there because flashing takes a board off the CAN bus, and a `config.g` that
    cannot reach one of its boards ends in an emergency stop, which cancels the
-   update. On a boot the bootloader started as a tryboot, which is every boot
-   that follows an update, `mp-dsf-firmware` shows the *OTA Update* message
-   box from the start and closes it when it is through, whether it flashed or
-   not. A message box left over from before the restart is closed with it;
-   any other message box, such as a macro's dialog, is left alone.
+   update. The message box from before the restart does not survive it. On a
+   boot the bootloader started as a tryboot, which is every boot that follows
+   an update, `mp-dsf-firmware` instead shows an *OTA Update* message box
+   saying the update is complete, with a Close button and no timeout (`M291
+   S1 T0`), so whoever next stands at the printer sees that the update
+   happened. A firmware flash resets the mainboard and takes the box with
+   it, so after a flash it is shown once more. Any other message box, such as
+   a macro's dialog, is left alone.
 
 The flash comes after the commit, so a firmware that fails to flash is not
 undone by the bootloader. A Duet board keeps its bootloader, so it can be

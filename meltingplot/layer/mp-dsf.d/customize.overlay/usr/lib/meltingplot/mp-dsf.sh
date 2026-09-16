@@ -103,9 +103,10 @@ mp_ota_installing() {
 # The message box that tells whoever stands at the printer that an update is
 # in progress. Shown as a plain notice without buttons (M291 S0) on the
 # PanelDue and in Duet Web Control; it goes away when it is closed, when the
-# mainboard resets (a firmware flash does that), or after the timeout, which
-# is generous because the install, the restart and the firmware update
-# together take several minutes and a refresh only restarts it. Only a
+# control server restarts (it does not survive the restart into an update),
+# when the mainboard resets (a firmware flash does that), or after the
+# timeout, which is generous so that a refresh once a minute never lets it
+# lapse while an install runs. Only a
 # message box with this title is ever closed, so a dialog of a macro or of
 # the operator is left alone.
 MP_OTA_NOTICE_TITLE="OTA Update"
@@ -125,4 +126,16 @@ mp_ota_notice_open() {
 mp_ota_notice_close() {
    mp_ota_notice_open || return 0
    mp_dcs_code M292
+}
+
+# The message box that stays once the machine has restarted into an update: a
+# Close button and no timeout (M291 S1 T0), so whoever next stands at the
+# printer sees that the update happened and dismisses it. RepRapFirmware
+# queues message boxes, so one of ours still on display is closed first; this
+# one carries the same title and is closed by the same helper.
+MP_OTA_DONE_TEXT="OTA update completed successfully. The machine is ready for use."
+
+mp_ota_done_show() {
+   mp_ota_notice_close || return 1
+   mp_dcs_code "M291 S1 T0 R\"$MP_OTA_NOTICE_TITLE\" P\"$MP_OTA_DONE_TEXT\""
 }

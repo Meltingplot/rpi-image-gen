@@ -148,9 +148,15 @@ check "notice close: a dialog" 'M409 K"state.messageBox.title"' "$(paste -sd, "$
 echo '{"key":"state.messageBox.title","flags":"","result":null}' > "$tmp/query.state.messageBox.title"
 mp_ota_notice_close
 check "notice close: none open" 'M409 K"state.messageBox.title"' "$(paste -sd, "$tmp/codes.log")"
+: > "$tmp/codes.log"
+echo '{"key":"state.messageBox.title","flags":"","result":"OTA Update"}' > "$tmp/query.state.messageBox.title"
+mp_ota_done_show
+check "done: replaces the notice" 'M409 K"state.messageBox.title",M292,M291 S1 T0 R"OTA Update" P"OTA update completed successfully. The machine is ready for use."' "$(paste -sd, "$tmp/codes.log")"
 rm -f "$MP_CODECONSOLE"
 mp_ota_notice_show && r=yes || r=no
 check "notice show: no control server" no "$r"
+mp_ota_done_show && r=yes || r=no
+check "done show: no control server" no "$r"
 
 # --- slot commit ----------------------------------------------------------
 # rpi-slot-tryboot prints the configuration that makes the running slot the

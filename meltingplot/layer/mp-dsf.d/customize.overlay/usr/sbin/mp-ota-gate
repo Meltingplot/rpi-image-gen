@@ -29,12 +29,12 @@
 #
 # While the connector reports an install in progress, the printer shows the
 # update notice, refreshed on every run so its timeout never expires ahead of
-# the restart. The restart itself leaves the notice to RepRapFirmware, which
-# keeps it while the control server is away, and to mp-dsf-firmware, which
-# closes it once the firmware is in step after the boot. An install that ends
-# without a restart (it failed, or the connector was stopped) closes the
-# notice on the next run. The flag under /run remembers that this gate put
-# the notice up, so it never closes one that a later boot put up.
+# the restart. The restart takes the notice down with the control server;
+# mp-dsf-firmware then tells the printer that the update is complete. An
+# install that ends without a restart (it failed, or the connector was
+# stopped) closes the notice on the next run. The flag under /run remembers
+# that this gate put the notice up, so it never closes a message box that a
+# later boot put up.
 #
 # Support can deploy to a printer whose control server is down by stopping
 # the timer and starting the connector by hand over the Connect shell.

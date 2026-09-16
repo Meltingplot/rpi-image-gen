@@ -27,11 +27,12 @@
 # newer version.
 #
 # A boot the bootloader started as a tryboot follows an update (or a rollback
-# by hand), and the update is not over until the firmware is in step. For
-# that boot the printer shows the update notice from the start, and the
-# notice comes down when this script is through, whatever the outcome. On
-# any other boot the notice is left alone, except that one left over from
-# before the restart is closed at the end all the same.
+# by hand). The update notice the gate put up before the restart does not
+# survive it, so this boot tells the printer that the update is complete
+# instead, as early as the control server can be reached, with a message
+# that stays until someone closes it. A firmware flash resets the mainboard
+# and takes the message with it, so after a flash it is shown once more. On
+# any other boot the message boxes are left alone.
 
 set -eu
 
@@ -56,37 +57,41 @@ wait_for() {
 printer_idle() { [ "$(mp_dcs_status)" = idle ]; }
 
 # The control server may still be connecting to the mainboard when this
-# starts, so a notice that cannot be shown is tried again after settling.
-notice=no
+# starts, so a message that cannot be shown is tried again after settling.
+updated=no
+shown=no
 if mp_boot_trybooted; then
-   notice=yes
-   mp_log "this boot follows an update; the printer shows the update notice"
-   mp_ota_notice_show || true
+   updated=yes
+   mp_log "this boot follows an update; the printer shows that it is complete"
+   mp_ota_done_show && shown=yes || true
 fi
-
-finish() {
-   mp_ota_notice_close || mp_log "the printer cannot be told that the update is over"
-   exit "${1:-0}"
-}
 
 mp_log "waiting ${SETTLE}s for the printer to finish booting"
 sleep "$SETTLE"
 
-if [ "$notice" = yes ]; then
-   mp_ota_notice_show || mp_log "the printer cannot be told about the update in progress"
+if [ "$updated" = yes ] && [ "$shown" = no ]; then
+   mp_ota_done_show || mp_log "the printer cannot be told that the update is complete"
 fi
 
 if ! wait_for mp_slot_committed; then
    mp_log "this slot is not committed, the firmware stays as it is"
-   finish
+   exit 0
 fi
 
 if ! wait_for printer_idle; then
    mp_log "the printer is '$(mp_dcs_status)', not idle; the firmware stays as it is"
-   finish
+   exit 0
 fi
 
 mp_log "comparing the Duet firmware with this image"
+out=$(mktemp)
+trap 'rm -f "$out"' EXIT
 rc=0
-"$DCS" -u < /dev/null || rc=$?
-finish "$rc"
+"$DCS" -u < /dev/null > "$out" 2>&1 || rc=$?
+cat "$out" >&2
+
+if [ "$updated" = yes ] && [ "$rc" -eq 0 ] && ! grep -q 'up-to-date' "$out"; then
+   # A flash resets the mainboard and closes every message box with it.
+   mp_ota_done_show || mp_log "the printer cannot be told that the update is complete"
+fi
+exit "$rc"
