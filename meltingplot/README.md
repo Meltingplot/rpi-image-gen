@@ -339,6 +339,12 @@ To go back, deploy the previous artefact again. It stays registered.
    machine. Support can deploy to a printer whose control server is down by
    stopping `mp-ota-gate.timer` and starting `rpi-connect-ota` by hand over
    the Connect shell.
+   While the connector reports an install in progress, the gate puts a
+   message box titled *OTA Update* on the PanelDue and in Duet Web Control
+   (`M291 S0`, no buttons) asking not to shut the machine down until the
+   message is gone. The gate learns of the install on its next check, so the
+   message can appear up to a minute after the download has started, and it
+   takes it down again when an install ends without a restart.
 3. The bootloader starts the new slot once. If it does not come up, the next
    reset returns to the old one. If it comes up, the connector commits it
    within seconds of boot and reports the deployment as succeeded. That is the
@@ -352,7 +358,11 @@ To go back, deploy the previous artefact again. It stays registered.
    Duet Web Control shows a firmware mismatch warning. The settling time is
    there because flashing takes a board off the CAN bus, and a `config.g` that
    cannot reach one of its boards ends in an emergency stop, which cancels the
-   update.
+   update. On a boot the bootloader started as a tryboot, which is every boot
+   that follows an update, `mp-dsf-firmware` shows the *OTA Update* message
+   box from the start and closes it when it is through, whether it flashed or
+   not. A message box left over from before the restart is closed with it;
+   any other message box, such as a macro's dialog, is left alone.
 
 The flash comes after the commit, so a firmware that fails to flash is not
 undone by the bootloader. A Duet board keeps its bootloader, so it can be

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Let the Raspberry Pi Connect update connector run only while the printer is
-# idle.
+# idle, and tell whoever stands at the printer while it installs an update.
 #
 # The connector installs a deployment the moment it arrives and restarts the
 # machine the moment the install is done. Nothing in the packaged software
@@ -27,6 +27,15 @@
 # and this timer firing: an install that completes within that minute
 # restarts the machine.
 #
+# While the connector reports an install in progress, the printer shows the
+# update notice, refreshed on every run so its timeout never expires ahead of
+# the restart. The restart itself leaves the notice to RepRapFirmware, which
+# keeps it while the control server is away, and to mp-dsf-firmware, which
+# closes it once the firmware is in step after the boot. An install that ends
+# without a restart (it failed, or the connector was stopped) closes the
+# notice on the next run. The flag under /run remembers that this gate put
+# the notice up, so it never closes one that a later boot put up.
+#
 # Support can deploy to a printer whose control server is down by stopping
 # the timer and starting the connector by hand over the Connect shell.
 
@@ -41,6 +50,7 @@ MP_LIB=${MP_LIB:-/usr/lib/meltingplot}
 
 SYSTEMCTL=${MP_SYSTEMCTL:-systemctl}
 UNIT=rpi-connect-ota.service
+NOTICE_FLAG=${MP_NOTICE_FLAG:-/run/mp-ota-gate.notice}
 
 status=$(mp_dcs_status)
 active=$("$SYSTEMCTL" is-active "$UNIT" 2>/dev/null || true)
@@ -69,3 +79,19 @@ case $want:$active in
    stopped:*)
       ;;
 esac
+
+# Asked after the start or stop above, so a connector stopped this minute
+# reads as not installing and its notice comes down right away.
+ota=$(mp_ota_state)
+if mp_ota_installing "$ota"; then
+   [ -e "$NOTICE_FLAG" ] || mp_log "the update connector is in state $ota; the printer shows the update notice"
+   if mp_ota_notice_show; then
+      : > "$NOTICE_FLAG"
+   else
+      mp_log "the printer cannot be told about the update in progress"
+   fi
+elif [ -e "$NOTICE_FLAG" ]; then
+   mp_log "the update connector is ${ota:-not running}; the update notice comes down"
+   mp_ota_notice_close || mp_log "the printer cannot be told that the update is over"
+   rm -f "$NOTICE_FLAG"
+fi
