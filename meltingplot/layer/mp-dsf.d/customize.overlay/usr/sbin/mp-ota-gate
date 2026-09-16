@@ -80,9 +80,16 @@ case $want:$active in
       ;;
 esac
 
-# Asked after the start or stop above, so a connector stopped this minute
-# reads as not installing and its notice comes down right away.
-ota=$(mp_ota_state)
+# The connector's state is read from the file it keeps, which is only
+# current while it runs. It counts only for a connector that was running
+# before this run and still is: one stopped this minute reads as not
+# installing and its notice comes down right away, and one started this
+# minute has not rewritten the file yet, so what it was left saying stays
+# out of it.
+ota=
+case $want:$active in
+   running:active | running:activating) ota=$(mp_ota_state) ;;
+esac
 if mp_ota_installing "$ota"; then
    [ -e "$NOTICE_FLAG" ] || mp_log "the update connector is in state $ota; the printer shows the update notice"
    if mp_ota_notice_show; then
