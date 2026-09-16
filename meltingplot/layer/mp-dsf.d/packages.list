@@ -19,15 +19,16 @@
 # A board firmware file is not a package of the build; it goes through
 # firmware.list.
 
-# 3.7.0-rc.1+mp.5: upstream v3.7-dev merged up to 46886f5, whose TfrRdy fix
-# lets the SPI worker consume the kernel GPIO edge events itself again as in
-# v3.6 instead of a monitor thread that could report an edge with the pin
-# level from before it. This replaces the level-based wait and the lost
-# wake-up counter in M122 of mp.4; the motorStallEncoder endstop type is
-# upstream's, the object model discard after a transfer timeout stays.
-duetsoftwareframework sha256:c7c3f73e7f6e43a5ba981d0cf24ca34f80549b020183dd0711322ad36364b09f https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.5/duetsoftwareframework_3.7.0.rc.1%2Bmp.5_arm64.deb
-duetcontrolserver sha256:cc8d28f31b519e397031e82b58b85266f0c63f412bcf30374eb11d9b260ed5d7 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.5/duetcontrolserver_3.7.0.rc.1%2Bmp.5_arm64.deb
-duetwebserver sha256:ea94dec3e961f9ab91e8f68114a219c259ba86af4c626d361b6e197503785684 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.5/duetwebserver_3.7.0.rc.1%2Bmp.5_arm64.deb
-duetpluginservice sha256:c63b7121169fe830e1f4c152aa24e350af43f9c7f2a641d5da636def4004a7f5 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.5/duetpluginservice_3.7.0.rc.1%2Bmp.5_arm64.deb
-duettools sha256:7ea3ef17fc7ce44965bffe41263acb33b44e0e17b71a08029d40f9ec6a38989b https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.5/duettools_3.7.0.rc.1%2Bmp.5_arm64.deb
-duetruntime sha256:ae24d5ea932bd011f3f01d36389e180ec811b497ca317580e40f9a323ac38a96 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.5/duetruntime_3.7.0.rc.1%2Bmp.5_arm64.deb
+# 3.7.0-rc.1+mp.6: upstream v3.7-dev merged up to 4a1ec34, which invalidates
+# pending link requests after every SPI reconnect and only dequeues an object
+# model query for a response if the query was actually sent, so a transfer
+# timeout no longer desynchronises the object model. Our key comparison stays
+# on top: a late response whose echoed key differs from the head query is
+# discarded instead of shifting the queue. mp.5 brought the upstream TfrRdy
+# fix that lets the SPI worker consume the kernel GPIO edge events itself.
+duetsoftwareframework sha256:10cad2a4748d5a48d82d837904ae8259e0e3c382f7a535dbb512666b0cf16430 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.6/duetsoftwareframework_3.7.0.rc.1%2Bmp.6_arm64.deb
+duetcontrolserver sha256:b809e55b2f68f457c4a05d296704782e35774f65c20e36387bd525959e1d2b13 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.6/duetcontrolserver_3.7.0.rc.1%2Bmp.6_arm64.deb
+duetwebserver sha256:fad7e989bbb846cf275dcda7858da4195f036d197c268cd3aa65500c37451295 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.6/duetwebserver_3.7.0.rc.1%2Bmp.6_arm64.deb
+duetpluginservice sha256:838334fd85aa3a826642786539896c4a31466be9548e2c84593315e45ee861c4 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.6/duetpluginservice_3.7.0.rc.1%2Bmp.6_arm64.deb
+duettools sha256:387f49ca8dded942448a8abbd19aca11dab9f616082545595f6b3a5641a0b17f https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.6/duettools_3.7.0.rc.1%2Bmp.6_arm64.deb
+duetruntime sha256:1842bc658520ce7c554cf889d4c1344955edb373f4cbe8b97ed3978347b875c1 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.6/duetruntime_3.7.0.rc.1%2Bmp.6_arm64.deb
