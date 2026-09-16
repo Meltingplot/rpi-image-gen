@@ -1,7 +1,8 @@
 # Shared helpers for the Meltingplot device scripts. POSIX sh, sourced.
 #
 # The identity of a printer computer lives in three places:
-#   /etc/meltingplot/device.conf              baked into the image (user, role)
+#   /etc/meltingplot/device.conf              baked into the image (user, role,
+#                                             version and release page)
 #   /persistent/common/etc/mp-identity        written at commissioning
 #   <printer name file>                       the customer's display name
 # Everything below reads those and nothing else.
@@ -19,6 +20,8 @@ MP_PRINTER_NAME_FILE=/persistent/shared/opt/dsf/sd/sys/meltingplot/printer-name.
 MP_USER=root
 MP_PRODUCT=unknown
 MP_ROLE=sbc
+MP_VERSION=
+MP_RELEASE_URL=
 # shellcheck source=/dev/null
 [ -r "$MP_DEVICE_CONF" ] && . "$MP_DEVICE_CONF"
 

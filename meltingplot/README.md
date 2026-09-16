@@ -308,7 +308,9 @@ is recorded in `/persistent/common/etc/mp-identity`.
 ## Updating a fleet
 
 1. Tag the repository `duet-pi5/v<version>`. The workflow builds the image and
-   publishes a release; a version with a suffix becomes a prerelease.
+   publishes a release; a version with a suffix becomes a prerelease. The
+   release notes carry the commits since the previous release as the
+   changelog, which the printer points its operator to after the update.
 2. Register the artefact in the Raspberry Pi Connect dashboard under *Remote
    update*: the URL of `mp-duet-pi5-<version>.update.tar.zst` from the release,
    and its SHA-256 from `SHA256SUMS`.
@@ -361,11 +363,14 @@ To go back, deploy the previous artefact again. It stays registered.
    update. The message box from before the restart does not survive it. On a
    boot the bootloader started as a tryboot, which is every boot that follows
    an update, `mp-dsf-firmware` instead shows an *OTA Update* message box
-   saying the update is complete, with a Close button and no timeout (`M291
-   S1 T0`), so whoever next stands at the printer sees that the update
-   happened. A firmware flash resets the mainboard and takes the box with
-   it, so after a flash it is shown once more. Any other message box, such as
-   a macro's dialog, is left alone.
+   saying the update to this version is complete, with the address of the
+   release page as the changelog, a Close button and no timeout (`M291 S1
+   T0`), so whoever next stands at the printer sees what happened. The
+   version and the page come from `/etc/meltingplot/device.conf`, which the
+   release workflow fills in; a local build names its development version and
+   no page. A firmware flash resets the mainboard and takes the box with it,
+   so after a flash it is shown once more. Any other message box, such as a
+   macro's dialog, is left alone.
 
 The flash comes after the commit, so a firmware that fails to flash is not
 undone by the bootloader. A Duet board keeps its bootloader, so it can be

@@ -95,13 +95,22 @@ jobs:
       - name: Build
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          RELEASE: ${{ steps.version.outputs.release }}
+          TAG: ${{ github.ref_name }}
         run: |
           # rpi-image-gen expects the build directory to exist already.
           mkdir -p meltingplot/.cache/apt "$RUNNER_TEMP/work"
+          # The page the printer points its operator to after an update. The
+          # tag carries a slash, which GitHub wants encoded in the URL.
+          release_url=
+          if [ "$RELEASE" = true ]; then
+            release_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/${TAG//\//%2F}"
+          fi
           SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
           ./rpi-image-gen build -S ./meltingplot -c duet-pi5.yaml \
             -B "$RUNNER_TEMP/work" \
             -- IGconf_artefact_version="$VERSION" \
+               IGconf_mpid_release="$release_url" \
                IGconf_sys_apt_cachedir="$PWD/meltingplot/.cache/apt"
 
       # apt downloads as _apt inside the build's user namespace and leaves a
@@ -155,7 +164,10 @@ jobs:
             cat "$RELEASE_DIR/release.json"
             echo '```'
           } > "$notes"
-          args=(--verify-tag --title "duet-pi5 $VERSION" --notes-file "$notes")
+          # The generated notes list the commits since the previous release,
+          # below ours; the printer shows this page as the changelog after an
+          # update.
+          args=(--verify-tag --title "duet-pi5 $VERSION" --notes-file "$notes" --generate-notes)
           [ "$PRERELEASE" = "true" ] && args+=(--prerelease)
           gh release create "$TAG" "${args[@]}" "$RELEASE_DIR"/*
 

@@ -6,7 +6,7 @@
 #  serial and display name on persistent storage, hands a Raspberry Pi Connect
 #  auth key to the account, derives the hostname from the display name and
 #  grows the persistent partition to the size of the medium.
-# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Version: 1.1.0
 # X-Env-Layer-Requires: device-user-admin
 # X-Env-Layer-RequiresProvider: systemd
 #
@@ -29,6 +29,15 @@
 # X-Env-Var-role-Required: n
 # X-Env-Var-role-Valid: regex:^[a-z0-9-]{1,16}$
 # X-Env-Var-role-Set: y
+#
+# X-Env-Var-release:
+# X-Env-Var-release-Desc: Web page of the release this image is published as,
+#  shown to the operator once a printer has restarted into it. The release
+#  workflow passes the GitHub release page; a local build has no release and
+#  leaves it empty.
+# X-Env-Var-release-Required: n
+# X-Env-Var-release-Valid: regex:^(https://[^\s"']+)?$
+# X-Env-Var-release-Set: n
 # METAEND
 ---
 mmdebstrap:
@@ -50,6 +59,8 @@ mmdebstrap:
       MP_USER=${IGconf_device_user1}
       MP_PRODUCT=${IGconf_mpid_product}
       MP_ROLE=${IGconf_mpid_role}
+      MP_VERSION=${IGconf_artefact_version:-}
+      MP_RELEASE_URL=${IGconf_mpid_release:-}
       EOF
     # /etc/hosts comes from this layer's overlay, without a 127.0.1.1 line: the
     # hostname is a runtime property here and the root is read-only, so
