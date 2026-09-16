@@ -163,10 +163,25 @@ jobs:
             echo '```'
             cat "$RELEASE_DIR/release.json"
             echo '```'
+            # The printer shows this page as the changelog after an update, so
+            # the commits since the previous printer release are listed here.
+            # GitHub's own generated notes only list pull requests, and this
+            # branch is committed to directly; they still add the compare link.
+            prev=$(git describe --tags --abbrev=0 --match 'duet-pi5/v*' "$TAG^" 2>/dev/null || true)
+            echo
+            if [ -n "$prev" ]; then
+              echo "## Changes since ${prev#duet-pi5/}"
+              echo
+              git log --no-merges --format='- %s (%h)' "$prev..$TAG" -- . ':!meltingplot/chx350-config'
+              if ! git diff --quiet "$prev" "$TAG" -- meltingplot/chx350-config; then
+                echo "- printer configuration: $(git rev-parse --short "$prev:meltingplot/chx350-config") -> $(git rev-parse --short "$TAG:meltingplot/chx350-config")"
+              fi
+            else
+              echo "## Changes"
+              echo
+              echo "First printer release."
+            fi
           } > "$notes"
-          # The generated notes list the commits since the previous release,
-          # below ours; the printer shows this page as the changelog after an
-          # update.
           args=(--verify-tag --title "duet-pi5 $VERSION" --notes-file "$notes" --generate-notes)
           [ "$PRERELEASE" = "true" ] && args+=(--prerelease)
           gh release create "$TAG" "${args[@]}" "$RELEASE_DIR"/*
