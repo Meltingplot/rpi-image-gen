@@ -363,9 +363,10 @@ To go back, deploy the previous artefact again. It stays registered.
    update. The message box from before the restart does not survive it. On a
    boot the bootloader started as a tryboot, which is every boot that follows
    an update, `mp-dsf-firmware` instead shows an *OTA Update* message box
-   saying the update to this version is complete, with the address of the
-   release page as the changelog, a Close button and no timeout (`M291 S1
-   T0`), so whoever next stands at the printer sees what happened. The
+   saying the update to this version is complete, with a link to the release
+   page as the changelog (Duet Web Control renders the message as HTML), a
+   Close button and no timeout (`M291 S1 T0`), so whoever next stands at the
+   printer sees what happened. The
    version and the page come from `/etc/meltingplot/device.conf`, which the
    release workflow fills in; a local build names its development version and
    no page. A firmware flash resets the mainboard and takes the box with it,

@@ -154,7 +154,11 @@ mp_ota_done_show
 check "done: replaces the notice" 'M409 K"state.messageBox.title",M292,M291 S1 T0 R"OTA Update" P"OTA update completed successfully. The machine is ready for use."' "$(paste -sd, "$tmp/codes.log")"
 MP_VERSION=0.1.0-rc.23
 MP_RELEASE_URL=https://github.com/Meltingplot/rpi-image-gen/releases/tag/duet-pi5%2Fv0.1.0-rc.23
-check "done text: release" "OTA update to 0.1.0-rc.23 completed successfully. Changelog: https://github.com/Meltingplot/rpi-image-gen/releases/tag/duet-pi5%2Fv0.1.0-rc.23" "$(mp_ota_done_text)"
+check "done text: release" 'OTA update to 0.1.0-rc.23 completed successfully. Read the <a href="https://github.com/Meltingplot/rpi-image-gen/releases/tag/duet-pi5%2Fv0.1.0-rc.23" target="_blank">changelog</a>.' "$(mp_ota_done_text)"
+: > "$tmp/codes.log"
+echo '{"key":"state.messageBox.title","flags":"","result":null}' > "$tmp/query.state.messageBox.title"
+mp_ota_done_show
+check "done: quotes doubled for G-code" 'M291 S1 T0 R"OTA Update" P"OTA update to 0.1.0-rc.23 completed successfully. Read the <a href=""https://github.com/Meltingplot/rpi-image-gen/releases/tag/duet-pi5%2Fv0.1.0-rc.23"" target=""_blank"">changelog</a>."' "$(grep '^M291' "$tmp/codes.log")"
 MP_RELEASE_URL=
 check "done text: local build" "OTA update to 0.1.0-rc.23 completed successfully. The machine is ready for use." "$(mp_ota_done_text)"
 MP_RELEASE_URL=https://example.invalid/$(python3 -c 'print("x" * 300)')

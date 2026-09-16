@@ -131,22 +131,25 @@ mp_ota_notice_close() {
 # The message box that stays once the machine has restarted into an update: a
 # Close button and no timeout (M291 S1 T0), so whoever next stands at the
 # printer sees that the update happened and dismisses it. It names the
-# version and, when the image was published as a release, the page with the
-# changelog. RepRapFirmware queues message boxes, so one of ours still on
-# display is closed first; this one carries the same title and is closed by
-# the same helper.
+# version and, when the image was published as a release, links the page
+# with the changelog: Duet Web Control renders a message as HTML, so the
+# link is clickable there. RepRapFirmware queues message boxes, so one of
+# ours still on display is closed first; this one carries the same title and
+# is closed by the same helper.
 #
 # Measured on RepRapFirmware 3.7.0-rc.1 with DSF 3.7.0-rc.1: the firmware
 # shows at most 256 characters of a message, and DuetControlServer refuses a
 # code over 384 bytes in its binary form, which this title and these
 # parameters reach at about 330 characters. The text is cut at what the
 # firmware shows; with a version and a GitHub release page it stays below
-# 160 characters.
+# 200 characters. A double quote inside a G-code string is written twice;
+# that is how the quotes of the link survive the trip, a single quote does
+# not (RepRapFirmware reads it as a lower-case escape and drops it).
 MP_OTA_DONE_MAX=256
 
 mp_ota_done_text() {
    if [ -n "$MP_RELEASE_URL" ]; then
-      _text="OTA update${MP_VERSION:+ to $MP_VERSION} completed successfully. Changelog: $MP_RELEASE_URL"
+      _text="OTA update${MP_VERSION:+ to $MP_VERSION} completed successfully. Read the <a href=\"$MP_RELEASE_URL\" target=\"_blank\">changelog</a>."
    else
       _text="OTA update${MP_VERSION:+ to $MP_VERSION} completed successfully. The machine is ready for use."
    fi
@@ -155,5 +158,6 @@ mp_ota_done_text() {
 
 mp_ota_done_show() {
    mp_ota_notice_close || return 1
-   mp_dcs_code "M291 S1 T0 R\"$MP_OTA_NOTICE_TITLE\" P\"$(mp_ota_done_text)\""
+   _p=$(mp_ota_done_text | sed 's/"/""/g')
+   mp_dcs_code "M291 S1 T0 R\"$MP_OTA_NOTICE_TITLE\" P\"$_p\""
 }
