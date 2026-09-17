@@ -242,7 +242,7 @@ builds from the modified source, what Duet3D would have put in its archive:
 
 ```bash
 # in the fork, on the branch of the pinned generation (v3.7-dev for 3.7.0-rc.1)
-# Directory.Build.props: <Version>3.7.0-rc.1+mp.7</Version>
+# Directory.Build.props: <Version>3.7.0-rc.1+mp.8</Version>
 pkg/build.sh --target-arch=aarch64 --packages=progs,meta deb
 ```
 
