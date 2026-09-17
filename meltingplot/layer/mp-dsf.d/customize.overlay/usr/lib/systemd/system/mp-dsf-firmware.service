@@ -8,7 +8,7 @@ RequiresMountsFor=/bootfs
 ConditionPathExists=/opt/dsf/bin/DuetControlServer
 
 [Service]
-# Not a oneshot: the script settles for minutes before it does anything, and
+# Not a oneshot: the script waits for minutes before it does anything, and
 # a oneshot would hold multi-user.target back for as long as it runs. The
 # packaged DuetPluginService units start only after that target, so a
 # oneshot here would keep every plugin from starting until the firmware check
@@ -17,9 +17,10 @@ ConditionPathExists=/opt/dsf/bin/DuetControlServer
 # runs, and the target is reached without it.
 Type=exec
 ExecStart=/usr/sbin/mp-dsf-firmware
-# Three minutes of settling, two waits of up to five minutes, then every
-# board on the CAN bus.
-RuntimeMaxSec=30min
+# Two waits of up to five minutes, then up to three passes over every board
+# on the CAN bus, each followed by a wait of up to five minutes for the
+# mainboard to come back.
+RuntimeMaxSec=60min
 
 [Install]
 WantedBy=multi-user.target

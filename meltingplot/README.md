@@ -351,27 +351,36 @@ To go back, deploy the previous artefact again. It stays registered.
    reset returns to the old one. If it comes up, the connector commits it
    within seconds of boot and reports the deployment as succeeded. That is the
    whole health check: Linux booted far enough to run the connector.
-4. `mp-dsf-firmware` runs on every boot, waits three minutes for the printer
-   to finish booting, then for the slot to be committed and for the printer to
-   be idle, and then runs `DuetControlServer -u`, which
+4. `mp-dsf-firmware` runs on every boot, waits for the printer to report
+   idle, which RepRapFirmware does only once `config.g` is through (it reports
+   *starting* until then, and `config.g` waits for every board), then for the
+   slot to be committed, and then runs `DuetControlServer -u`, which
    flashes every Duet board whose firmware differs from the files under
    `/opt/dsf/sd/firmware`. Those files belong to the slot, so a rollback
    flashes the previous firmware back the same way. Until that has happened,
-   Duet Web Control shows a firmware mismatch warning. The settling time is
-   there because flashing takes a board off the CAN bus, and a `config.g` that
-   cannot reach one of its boards ends in an emergency stop, which cancels the
-   update. The message box from before the restart does not survive it. On a
+   Duet Web Control shows a firmware mismatch warning. Waiting for the end of
+   `config.g` matters because flashing takes a board off the CAN bus, and a
+   `config.g` that cannot reach one of its boards ends in an emergency stop,
+   which cancels the update. `DuetControlServer -u` returns while the
+   mainboard is still restarting, so after a flash the script waits for
+   RepRapFirmware to report a later start and to be idle again, and asks once
+   more, up to three passes, until every board is up to date.
+   The message box from before the restart does not survive it. On a
    boot the bootloader started as a tryboot, which is every boot that follows
-   an update, `mp-dsf-firmware` instead shows an *OTA Update* message box
-   saying the update to this version is complete, with a link to the release
+   an update, `mp-dsf-firmware` puts the *OTA Update* notice up again as soon
+   as the control server answers, and again after every reset of the
+   mainboard during the firmware update. Once every board is up to date it
+   replaces the notice with a message box saying the update to this version
+   is complete, with a link to the release
    page as the changelog (Duet Web Control renders the message as HTML), a
    Close button and no timeout (`M291 S1 T0`), so whoever next stands at the
    printer sees what happened. The
    version and the page come from `/etc/meltingplot/device.conf`, which the
    release workflow fills in; a local build names its development version and
-   no page. A firmware flash resets the mainboard and takes the box with it,
-   so after a flash it is shown once more. Any other message box, such as a
-   macro's dialog, is left alone.
+   no page. When the printer does not become idle, the slot is not committed
+   or the firmware cannot be brought up to date, a message box of the same
+   kind says that the firmware update did not complete. Any other message
+   box, such as a macro's dialog, is left alone.
 
 The flash comes after the commit, so a firmware that fails to flash is not
 undone by the bootloader. A Duet board keeps its bootloader, so it can be
@@ -389,7 +398,7 @@ This starts the other root filesystem once. Running the same command again
 after it comes up makes the choice permanent. The persistent partition is not
 touched either way, so the machine keeps its data; image-owned configuration
 returns to the version that slot carries. The firmware follows on the next
-boot after the commit, or after the three-minute settling time with
+boot after the commit, or right away with
 `sudo systemctl start mp-dsf-firmware`.
 
 ## Plugins
