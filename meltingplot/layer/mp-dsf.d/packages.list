@@ -19,16 +19,15 @@
 # A board firmware file is not a package of the build; it goes through
 # firmware.list.
 
-# 3.7.0-rc.1+mp.6: upstream v3.7-dev merged up to 4a1ec34, which invalidates
-# pending link requests after every SPI reconnect and only dequeues an object
-# model query for a response if the query was actually sent, so a transfer
-# timeout no longer desynchronises the object model. Our key comparison stays
-# on top: a late response whose echoed key differs from the head query is
-# discarded instead of shifting the queue. mp.5 brought the upstream TfrRdy
-# fix that lets the SPI worker consume the kernel GPIO edge events itself.
-duetsoftwareframework sha256:10cad2a4748d5a48d82d837904ae8259e0e3c382f7a535dbb512666b0cf16430 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.6/duetsoftwareframework_3.7.0.rc.1%2Bmp.6_arm64.deb
-duetcontrolserver sha256:b809e55b2f68f457c4a05d296704782e35774f65c20e36387bd525959e1d2b13 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.6/duetcontrolserver_3.7.0.rc.1%2Bmp.6_arm64.deb
-duetwebserver sha256:fad7e989bbb846cf275dcda7858da4195f036d197c268cd3aa65500c37451295 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.6/duetwebserver_3.7.0.rc.1%2Bmp.6_arm64.deb
-duetpluginservice sha256:838334fd85aa3a826642786539896c4a31466be9548e2c84593315e45ee861c4 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.6/duetpluginservice_3.7.0.rc.1%2Bmp.6_arm64.deb
-duettools sha256:387f49ca8dded942448a8abbd19aca11dab9f616082545595f6b3a5641a0b17f https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.6/duettools_3.7.0.rc.1%2Bmp.6_arm64.deb
-duetruntime sha256:1842bc658520ce7c554cf889d4c1344955edb373f4cbe8b97ed3978347b875c1 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.6/duetruntime_3.7.0.rc.1%2Bmp.6_arm64.deb
+# 3.7.0-rc.1+mp.7: numbered G-code lines (N...) may end with an RRF-style
+# checksum, '*' plus 1-3 digits as XOR or exactly 5 digits as CRC-16/XMODEM.
+# Jobs, macros, code streams and HTTP/IPC codes check it; a wrong or malformed
+# checksum raises a parser error that aborts a running job or macro, no resend
+# is requested. mp.6 brought the upstream fix that keeps the object model in
+# step after an SPI transfer timeout, with our key comparison on top.
+duetsoftwareframework sha256:ab1bd1cd53b6834e62cdc52c81c2e886671d84ad638a85c89413baccc5d926cc https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.7/duetsoftwareframework_3.7.0.rc.1%2Bmp.7_arm64.deb
+duetcontrolserver sha256:c65f7d70f4f7edf449205457ab6752db85dc884308b3a05b3609e1fde922e050 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.7/duetcontrolserver_3.7.0.rc.1%2Bmp.7_arm64.deb
+duetwebserver sha256:9ea1a847ec74bd849e28cdf327c3fe0492fcf21c181a1e708c7aebc0f48216a3 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.7/duetwebserver_3.7.0.rc.1%2Bmp.7_arm64.deb
+duetpluginservice sha256:dca7ce9af990bb901165e5c24ba871aba88bb4b0218e21b45c39c0c0ceb22491 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.7/duetpluginservice_3.7.0.rc.1%2Bmp.7_arm64.deb
+duettools sha256:72c2d634d1c84a648bc33a5cc2d58072390bdb38117fdff3f8ff9bb0d923ff9a https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.7/duettools_3.7.0.rc.1%2Bmp.7_arm64.deb
+duetruntime sha256:cfbae1edbc53d40fa0ab5dccf8b0529bbf7af994e36d0495ce9da591d334471f https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.7/duetruntime_3.7.0.rc.1%2Bmp.7_arm64.deb
