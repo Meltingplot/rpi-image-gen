@@ -151,6 +151,7 @@ check "done text: release" 'OTA update to 0.1.0-rc.23 completed successfully. Re
 echo '{"key":"state.messageBox.title","flags":"","result":null}' > "$tmp/query.state.messageBox.title"
 mp_ota_done_show
 check "done: quotes doubled for G-code" 'M291 S1 T0 R"OTA Update" P"OTA update to 0.1.0-rc.23 completed successfully. Read the <a href=""https://github.com/Meltingplot/rpi-image-gen/releases/tag/duet-pi5%2Fv0.1.0-rc.23"" target=""_blank"">changelog</a>."' "$(grep '^M291' "$tmp/codes.log")"
+check "failed text" "OTA update to 0.1.0-rc.23 installed, but the Duet firmware update did not complete. Please contact Meltingplot support." "$(mp_ota_failed_text)"
 MP_RELEASE_URL=
 check "done text: local build" "OTA update to 0.1.0-rc.23 completed successfully. The machine is ready for use." "$(mp_ota_done_text)"
 MP_RELEASE_URL=https://example.invalid/$(python3 -c 'print("x" * 300)')
@@ -294,6 +295,108 @@ gate_case "idle, notice of the boot"       '"idle"'       active     committed  
 rm -f "$MP_CODECONSOLE"
 gate_case "no control server, running"     '"idle"'       active     committed   IDLE "stop rpi-connect-ota.service" ""
 gate_case "no control server, installing"  '"idle"'       active     committed   INSTALL "stop rpi-connect-ota.service" ""
+
+# --- firmware update after boot --------------------------------------------
+# The script itself against a simulated printer. CodeConsole answers the
+# status from a list, one line per query with the last one repeating, the
+# uptime from a boot time on file, and the message box title from what the
+# codes put up and took down. DuetControlServer -u prints one prepared answer
+# per pass; a pass that flashes resets the mainboard: the message box goes,
+# the boot time moves on (by a fixed step, so that passes in quick succession
+# still read as restarts) and the printer starts again.
+
+cat > "$MP_CODECONSOLE" <<'EOF'
+#!/bin/sh
+d=$(dirname "$0")
+case $2 in
+   'M409 K"state.status"')
+      if [ -s "$d/fw.status" ]; then
+         s=$(head -n1 "$d/fw.status")
+         [ "$(wc -l < "$d/fw.status")" -gt 1 ] && sed -i 1d "$d/fw.status"
+      fi
+      [ -n "${s:-}" ] || exit 1
+      echo "{\"key\":\"state.status\",\"flags\":\"\",\"result\":\"$s\"}" ;;
+   'M409 K"state.upTime"')
+      echo "{\"key\":\"state.upTime\",\"flags\":\"\",\"result\":$(($(date +%s) - $(cat "$d/fw.boot")))}" ;;
+   'M409 K"state.messageBox.title"')
+      t=$(cat "$d/fw.title" 2>/dev/null) || t=
+      if [ -n "$t" ]; then t="\"$t\""; else t=null; fi
+      echo "{\"key\":\"state.messageBox.title\",\"flags\":\"\",\"result\":$t}" ;;
+   M291*)
+      echo "$2" | cut -c1-9 >> "$d/codes.log"
+      echo "OTA Update" > "$d/fw.title" ;;
+   M292)
+      echo M292 >> "$d/codes.log"
+      rm -f "$d/fw.title" ;;
+esac
+EOF
+chmod +x "$MP_CODECONSOLE"
+cat > "$tmp/DuetControlServer" <<'EOF'
+#!/bin/sh
+d=$(dirname "$0")
+n=$(($(cat "$d/fw.pass") + 1))
+echo "$n" > "$d/fw.pass"
+echo "DCS -u" >> "$d/codes.log"
+cat "$d/fw.out.$n"
+if ! grep -q up-to-date "$d/fw.out.$n"; then
+   echo $(($(cat "$d/fw.boot") + 1000)) > "$d/fw.boot"
+   rm -f "$d/fw.title"
+   printf 'updating\nstarting\nidle\n' > "$d/fw.status"
+fi
+exit "$(cat "$d/fw.rc.$n" 2>/dev/null || echo 0)"
+EOF
+chmod +x "$tmp/DuetControlServer"
+export MP_DCS="$tmp/DuetControlServer" MP_FIRMWARE_POLL=1 MP_FIRMWARE_WAIT=20
+fwscript="$here/../layer/mp-dsf.d/customize.overlay/usr/sbin/mp-dsf-firmware"
+printf '[all]\ntryboot_a_b=1\nboot_partition=2\n[tryboot]\nboot_partition=3\n' > "$MP_AUTOBOOT"
+echo 2 > "$tmp/active"
+flashed='There is 1 outdated board:
+- Duet 3 MB6HC (3.7.0-rc.1 -> 3.7.0-rc.1+2-mp.1)
+Updating firmware on mainboard... Done!'
+uptodate='All boards are up-to-date!'
+
+# name, trybooted, status list, answers of each pass -> exit status, codes
+fw_case() {
+   if [ "$2" = yes ]; then printf '\0\0\0\1'; else printf '\0\0\0\0'; fi > "$MP_TRYBOOT_FLAG"
+   printf '%s\n' $3 > "$tmp/fw.status"
+   echo $(($(date +%s) - 5000)) > "$tmp/fw.boot"
+   echo 0 > "$tmp/fw.pass"
+   rm -f "$tmp/fw.title" "$tmp"/fw.out.* "$tmp"/fw.rc.*
+   _i=0
+   for _a in $4; do
+      _i=$((_i + 1))
+      case $_a in
+         flash) printf '%s\n' "$flashed" > "$tmp/fw.out.$_i" ;;
+         ok) printf '%s\n' "$uptodate" > "$tmp/fw.out.$_i" ;;
+         fail) echo 'Error: board did not respond' > "$tmp/fw.out.$_i"; echo 1 > "$tmp/fw.rc.$_i" ;;
+      esac
+   done
+   : > "$tmp/codes.log"
+   _rc=0
+   sh "$fwscript" 2>"$tmp/fw.log" || _rc=$?
+   [ -z "${FWDEBUG:-}" ] || cat "$tmp/fw.log" >&2
+   check "firmware: $1" "$5" "$_rc"
+   check "firmware: $1, codes" "$6" "$(paste -sd, "$tmp/codes.log")"
+}
+
+fw_case "update, firmware current"   yes "starting starting idle" "ok" \
+   0 "M291 S0 T,DCS -u,M292,M291 S1 T"
+fw_case "update, one flash"          yes "starting idle" "flash ok" \
+   0 "M291 S0 T,DCS -u,M291 S0 T,DCS -u,M292,M291 S1 T"
+fw_case "update, flash fails"        yes "idle" "fail" \
+   1 "DCS -u,M291 S1 T"
+fw_case "update, never up to date"   yes "idle" "flash flash flash" \
+   1 "DCS -u,M291 S0 T,DCS -u,M291 S0 T,DCS -u,M291 S1 T"
+fw_case "normal boot, one flash"     no  "starting idle" "flash ok" \
+   0 "DCS -u,DCS -u"
+MP_FIRMWARE_WAIT=3 fw_case "update, never idle" yes "halted" "" \
+   1 "M291 S0 T,M292,M291 S1 T"
+MP_FIRMWARE_WAIT=3 fw_case "normal boot, never idle" no "halted" "" \
+   0 ""
+echo 3 > "$tmp/active"
+MP_FIRMWARE_WAIT=3 fw_case "update, slot not committed" yes "idle" "" \
+   1 "M291 S0 T,M292,M291 S1 T"
+echo 2 > "$tmp/active"
 
 [ "$fail" -eq 0 ] && echo "all tests passed"
 exit "$fail"

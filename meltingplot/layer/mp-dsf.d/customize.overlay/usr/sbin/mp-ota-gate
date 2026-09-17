@@ -30,7 +30,8 @@
 # While the connector reports an install in progress, the printer shows the
 # update notice, refreshed on every run so its timeout never expires ahead of
 # the restart. The restart takes the notice down with the control server;
-# mp-dsf-firmware then tells the printer that the update is complete. An
+# mp-dsf-firmware puts it back, keeps it up through the firmware update and
+# then tells the printer that the update is complete. An
 # install that ends without a restart (it failed, or the connector was
 # stopped) closes the notice on the next run. The flag under /run remembers
 # that this gate put the notice up, so it never closes a message box that a

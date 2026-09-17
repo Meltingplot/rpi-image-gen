@@ -12,15 +12,21 @@
 #
 #   * The printer must have finished booting. Flashing an expansion board
 #     takes it off the CAN bus, and a config.g that cannot reach one of its
-#     boards ends in an emergency stop, which cancels the update. RepRap-
-#     Firmware reports idle before config.g has reached every board, so a
-#     fixed settling time is waited first; a check on the object model can
-#     replace it later.
+#     boards ends in an emergency stop, which cancels the update. While
+#     RepRapFirmware runs config.g it reports its status as starting, and
+#     config.g itself waits for every board, so idle means booted.
 #   * The running slot must be committed. During a tryboot the bootloader
 #     falls back to the other slot on the next reset, and that slot expects
 #     its own firmware. The update connector commits within seconds of a
 #     successful boot, so after an update this is a short wait.
 #   * The printer must be idle. Flashing resets the mainboard.
+#
+# `DuetControlServer -u` flashes the expansion boards one after the other,
+# then starts the mainboard flash, or a reset when only expansion boards were
+# flashed, and returns without waiting for the mainboard to come back. So
+# after a flash this waits for RepRapFirmware to report a later start and to
+# be idle again, and asks once more, until every board is up to date or the
+# passes are used up.
 #
 # Because every slot does this for itself, a rollback also puts the matching
 # firmware back: DuetControlServer flashes on any difference, not only on a
@@ -28,70 +34,113 @@
 #
 # A boot the bootloader started as a tryboot follows an update (or a rollback
 # by hand). The update notice the gate put up before the restart does not
-# survive it, so this boot tells the printer that the update is complete
-# instead, as early as the control server can be reached, with a message
-# that stays until someone closes it. A firmware flash resets the mainboard
-# and takes the message with it, so after a flash it is shown once more. On
-# any other boot the message boxes are left alone.
+# survive it, so this boot puts it up again as soon as the control server
+# answers, and again after every reset of the mainboard. Only when the
+# firmware is up to date does it give way to the message that the update is
+# complete, which stays until someone closes it; when the firmware could not
+# be brought up to date it gives way to a message saying so. On any other
+# boot the message boxes are left alone.
 
 set -eu
 
 MP_TAG=mp-dsf-firmware
-. /usr/lib/meltingplot/mp-common.sh
-. /usr/lib/meltingplot/mp-dsf.sh
+MP_LIB=${MP_LIB:-/usr/lib/meltingplot}
+# shellcheck source=/dev/null
+. "$MP_LIB/mp-common.sh"
+# shellcheck source=/dev/null
+. "$MP_LIB/mp-dsf.sh"
 
-DCS=/opt/dsf/bin/DuetControlServer
-SETTLE=${MP_FIRMWARE_SETTLE:-180}
+DCS=${MP_DCS:-/opt/dsf/bin/DuetControlServer}
 WAIT=${MP_FIRMWARE_WAIT:-300}
+POLL=${MP_FIRMWARE_POLL:-5}
+PASSES=${MP_FIRMWARE_PASSES:-3}
 
-# Poll a condition every few seconds until it holds or the wait is used up.
+updated=no
+if mp_boot_trybooted; then
+   updated=yes
+   mp_log "this boot follows an update; the printer shows the update notice until the firmware is up to date"
+fi
+
+# Poll a condition until it holds or the wait is used up. After an update the
+# notice is put back whenever the control server answers without it, which
+# covers the first connection and every reset of the mainboard.
 wait_for() {
    _left=$WAIT
    until "$@"; do
       [ "$_left" -gt 0 ] || return 1
-      sleep 5
-      _left=$((_left - 5))
+      if [ "$updated" = yes ] && [ -n "$(mp_dcs_status)" ]; then
+         mp_ota_notice_ensure || true
+      fi
+      sleep "$POLL"
+      _left=$((_left - POLL))
    done
 }
 
 printer_idle() { [ "$(mp_dcs_status)" = idle ]; }
 
-# The control server may still be connecting to the mainboard when this
-# starts, so a message that cannot be shown is tried again after settling.
-updated=no
-shown=no
-if mp_boot_trybooted; then
-   updated=yes
-   mp_log "this boot follows an update; the printer shows that it is complete"
-   mp_ota_done_show && shown=yes || true
-fi
+# True once RepRapFirmware reports a start later than $boot and is idle again.
+# The margin absorbs the jitter of the uptime round trip.
+printer_restarted() {
+   _now=$(mp_dcs_boot_time)
+   [ -n "$_now" ] && [ "$_now" -gt $((boot + 10)) ] && printer_idle
+}
 
-mp_log "waiting ${SETTLE}s for the printer to finish booting"
-sleep "$SETTLE"
+# Leave the printer with a message that says how the update ended, then exit.
+finish() {
+   if [ "$updated" = yes ]; then
+      if [ "$1" -eq 0 ]; then
+         mp_ota_done_show || mp_log "the printer cannot be told that the update is complete"
+      else
+         mp_ota_failed_show || mp_log "the printer cannot be told that the firmware update did not complete"
+      fi
+   fi
+   exit "$1"
+}
 
-if [ "$updated" = yes ] && [ "$shown" = no ]; then
-   mp_ota_done_show || mp_log "the printer cannot be told that the update is complete"
+if ! wait_for printer_idle; then
+   mp_log "the printer is '$(mp_dcs_status)', not idle; the firmware stays as it is"
+   [ "$updated" = yes ] && finish 1
+   exit 0
 fi
 
 if ! wait_for mp_slot_committed; then
    mp_log "this slot is not committed, the firmware stays as it is"
+   [ "$updated" = yes ] && finish 1
    exit 0
 fi
 
-if ! wait_for printer_idle; then
-   mp_log "the printer is '$(mp_dcs_status)', not idle; the firmware stays as it is"
-   exit 0
-fi
-
-mp_log "comparing the Duet firmware with this image"
 out=$(mktemp)
 trap 'rm -f "$out"' EXIT
-rc=0
-"$DCS" -u < /dev/null > "$out" 2>&1 || rc=$?
-cat "$out" >&2
+pass=1
+while :; do
+   if ! printer_idle; then
+      mp_log "the printer is '$(mp_dcs_status)', not idle; the firmware stays as it is"
+      finish 1
+   fi
+   boot=$(mp_dcs_boot_time)
+   boot=${boot:-0}
 
-if [ "$updated" = yes ] && [ "$rc" -eq 0 ] && ! grep -q 'up-to-date' "$out"; then
-   # A flash resets the mainboard and closes every message box with it.
-   mp_ota_done_show || mp_log "the printer cannot be told that the update is complete"
-fi
-exit "$rc"
+   mp_log "comparing the Duet firmware with this image (pass $pass of $PASSES)"
+   rc=0
+   "$DCS" -u < /dev/null > "$out" 2>&1 || rc=$?
+   cat "$out" >&2
+   if [ "$rc" -ne 0 ]; then
+      mp_log "the firmware update failed with exit status $rc"
+      finish "$rc"
+   fi
+   if grep -q 'up-to-date' "$out"; then
+      mp_log "every board is up to date"
+      finish 0
+   fi
+   if [ "$pass" -ge "$PASSES" ]; then
+      mp_log "boards are still out of date after $PASSES passes"
+      finish 1
+   fi
+
+   mp_log "waiting for the mainboard to restart and finish booting"
+   if ! wait_for printer_restarted; then
+      mp_log "the printer did not come back idle after the flash"
+      finish 1
+   fi
+   pass=$((pass + 1))
+done

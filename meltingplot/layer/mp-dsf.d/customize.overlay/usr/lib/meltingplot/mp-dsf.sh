@@ -47,6 +47,18 @@ mp_dcs_status() {
    mp_dcs_query state.status
 }
 
+# When RepRapFirmware last started, in seconds since the epoch, from the
+# uptime it reports. A reset of the mainboard moves it forward; the answer
+# carries a second or two of jitter from the round trip. Nothing when the
+# control server cannot be asked or has no uptime yet.
+mp_dcs_boot_time() {
+   _up=$(mp_dcs_query state.upTime)
+   case $_up in
+      '' | *[!0-9]*) return 0 ;;
+   esac
+   echo $(($(date +%s) - _up))
+}
+
 # Send one code to the printer through DuetControlServer. Fails when the
 # control server cannot be reached.
 mp_dcs_code() {
@@ -127,6 +139,12 @@ mp_ota_notice_open() {
    [ "$(mp_dcs_query state.messageBox.title)" = "$MP_OTA_NOTICE_TITLE" ]
 }
 
+# Show the notice unless a message box of ours is already on display, so a
+# queue of identical boxes never builds up.
+mp_ota_notice_ensure() {
+   mp_ota_notice_open || mp_ota_notice_show
+}
+
 # Close the notice if it is the message box on display. Succeeds when there is
 # nothing of ours to close.
 mp_ota_notice_close() {
@@ -165,5 +183,19 @@ mp_ota_done_text() {
 mp_ota_done_show() {
    mp_ota_notice_close || return 1
    _p=$(mp_ota_done_text | sed 's/"/""/g')
+   mp_dcs_code "M291 S1 T0 R\"$MP_OTA_NOTICE_TITLE\" P\"$_p\""
+}
+
+# The same kind of box when the machine restarted into the update but the
+# Duet firmware could not be brought to the version the update carries. The
+# machine runs the new software with the old firmware then, which Duet Web
+# Control also warns about.
+mp_ota_failed_text() {
+   printf '%.*s\n' "$MP_OTA_DONE_MAX" "OTA update${MP_VERSION:+ to $MP_VERSION} installed, but the Duet firmware update did not complete. Please contact Meltingplot support."
+}
+
+mp_ota_failed_show() {
+   mp_ota_notice_close || return 1
+   _p=$(mp_ota_failed_text | sed 's/"/""/g')
    mp_dcs_code "M291 S1 T0 R\"$MP_OTA_NOTICE_TITLE\" P\"$_p\""
 }
