@@ -141,6 +141,29 @@ done
 CONFIG_COMMIT=$(git -C "$CONFIG_DIR" rev-parse HEAD 2>/dev/null || echo unknown)
 say "printer configuration from chx350-config $CONFIG_COMMIT"
 
+# Every G-code line under sys and macros gets its line number and a CRC-16, so
+# a flipped bit in a file on the persistent partition makes DuetControlServer
+# reject the line and abort the macro instead of running altered code. The
+# tool is the one chx350-config carries. Left out are the machine-owned files,
+# whose later edits would break their CRCs, and dsf-config.g, whose M586 C'*'
+# cannot take a line number and which gets the printer-name call appended
+# below. A plain DSF reads '*' as part of the code, so only a build of our own
+# that checks CRCs may run these files.
+dcs_ver=$(chroot "$ROOT" dpkg-query -W -f '${Version}' duetcontrolserver)
+[[ $dcs_ver =~ \+mp\.([0-9]+)$ ]] && (( BASH_REMATCH[1] >= 7 )) ||
+   die "duetcontrolserver $dcs_ver does not check G-code line CRCs, which the
+hardened printer configuration needs (3.7.0-rc.1+mp.7 or later)"
+crc_args=(-x sys/dsf-config.g)
+while read -r pattern; do
+   [[ -z $pattern || $pattern == \#* ]] && continue
+   crc_args+=(-x "$pattern")
+done < "$ASSETS/protected.list"
+(cd "$SD" && python3 "$CONFIG_DIR/tools/gcode_crc.py" add sys macros --crc --strict "${crc_args[@]}" >&2) ||
+   die "a line of the printer configuration cannot take a line number and CRC"
+(cd "$SD" && python3 "$CONFIG_DIR/tools/gcode_crc.py" verify sys macros --crc "${crc_args[@]}" >&2) ||
+   die "the printer configuration does not verify after adding CRCs"
+say "line numbers and CRCs added to sys and macros"
+
 # The licence notice for the whole image sits next to the printer
 # configuration, so it is readable in Duet Web Control as 0:/sys/LICENSES.txt
 # and is replaced with every update like the rest of sys. It names the image
