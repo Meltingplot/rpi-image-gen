@@ -35,6 +35,15 @@ through a release, while a customer's calibration, filament tuning and printer
 name survive it. Editing an image-owned file on the device works until the next
 boot, when it is put back.
 
+The image-owned G-code under `sys` and `macros` is built with a line number and
+a CRC-16 on every line (`tools/gcode_crc.py` from chx350-config), so a flipped
+bit in a file makes DuetControlServer reject the line and abort the macro
+rather than run altered code. The machine-owned files and `sys/dsf-config.g`
+are left as they are. Checking the CRCs takes the DuetSoftwareFramework build
+of our own from 3.7.0-rc.1+mp.7 on; the build stops with any other control
+server, which would read the CRC as part of the code. An edit on the device
+has to keep line number and CRC in step, or the line is rejected.
+
 ## Building
 
 The build runs the way rpi-image-gen documents it, on a Debian or Ubuntu host.
