@@ -19,15 +19,17 @@
 # A board firmware file is not a package of the build; it goes through
 # firmware.list.
 
-# 3.7.0-rc.1+mp.7: numbered G-code lines (N...) may end with an RRF-style
-# checksum, '*' plus 1-3 digits as XOR or exactly 5 digits as CRC-16/XMODEM.
-# Jobs, macros, code streams and HTTP/IPC codes check it; a wrong or malformed
-# checksum raises a parser error that aborts a running job or macro, no resend
-# is requested. mp.6 brought the upstream fix that keeps the object model in
-# step after an SPI transfer timeout, with our key comparison on top.
-duetsoftwareframework sha256:ab1bd1cd53b6834e62cdc52c81c2e886671d84ad638a85c89413baccc5d926cc https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.7/duetsoftwareframework_3.7.0.rc.1%2Bmp.7_arm64.deb
-duetcontrolserver sha256:c65f7d70f4f7edf449205457ab6752db85dc884308b3a05b3609e1fde922e050 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.7/duetcontrolserver_3.7.0.rc.1%2Bmp.7_arm64.deb
-duetwebserver sha256:9ea1a847ec74bd849e28cdf327c3fe0492fcf21c181a1e708c7aebc0f48216a3 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.7/duetwebserver_3.7.0.rc.1%2Bmp.7_arm64.deb
-duetpluginservice sha256:dca7ce9af990bb901165e5c24ba871aba88bb4b0218e21b45c39c0c0ceb22491 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.7/duetpluginservice_3.7.0.rc.1%2Bmp.7_arm64.deb
-duettools sha256:72c2d634d1c84a648bc33a5cc2d58072390bdb38117fdff3f8ff9bb0d923ff9a https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.7/duettools_3.7.0.rc.1%2Bmp.7_arm64.deb
-duetruntime sha256:cfbae1edbc53d40fa0ab5dccf8b0529bbf7af994e36d0495ce9da591d334471f https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.7/duetruntime_3.7.0.rc.1%2Bmp.7_arm64.deb
+# 3.7.0-rc.1+mp.8: job and macro files check their N line numbers. The first
+# numbered line sets the count, every physical line after it adds one, and a
+# numbered line out of step raises a parser error that aborts the job or macro.
+# Once a numbered line carries a checksum, every later numbered line with code
+# must carry one of the same type. Pause/resume, M26 and forked files restart
+# the count. mp.7 brought RRF-style checksums on numbered lines (XOR or
+# CRC-16/XMODEM), mp.6 the upstream fix that keeps the object model in step
+# after an SPI transfer timeout.
+duetsoftwareframework sha256:93e4785698056338a20c1e2102813047f8d009f363bbb6914c57a07bf20fdbd2 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.8/duetsoftwareframework_3.7.0.rc.1%2Bmp.8_arm64.deb
+duetcontrolserver sha256:41304ae2cac18c5a6574f83838a2f55d4ca9b832c389f734ba41c2831d8fe953 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.8/duetcontrolserver_3.7.0.rc.1%2Bmp.8_arm64.deb
+duetwebserver sha256:ee5905066c123f5dd08d9ee9aa7de60dca43c9d2b40e1753ab6d229385fa3055 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.8/duetwebserver_3.7.0.rc.1%2Bmp.8_arm64.deb
+duetpluginservice sha256:b9541ee8c16cb253360986dafbe253b4ac5e1932bc4fb4508ae0185b052bb5df https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.8/duetpluginservice_3.7.0.rc.1%2Bmp.8_arm64.deb
+duettools sha256:d65cc016952d96be14bb2b1f09a11429629f4f570b90a9183d445e27780c9d85 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.8/duettools_3.7.0.rc.1%2Bmp.8_arm64.deb
+duetruntime sha256:d70847e88ec2f812c042c01b56b83cbdd942c1ca97e8d82d641e5d805e764aa7 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.8/duetruntime_3.7.0.rc.1%2Bmp.8_arm64.deb
