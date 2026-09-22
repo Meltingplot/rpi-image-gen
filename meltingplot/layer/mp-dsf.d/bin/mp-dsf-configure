@@ -244,8 +244,9 @@ say "licence notice for version ${IGconf_artefact_version} written to sys/LICENS
 
 # The printer name is a file of its own, so a customer can rename the machine
 # without the change being reverted by the next update, and so the hostname can
-# be derived from the same value. Until chx350-config carries the call itself,
-# add it here; the guard makes this a no-op once it does.
+# be derived from the same value. chx350-config 3.7 carries the call itself
+# (sys/overrides/printer-name.g); for an older configuration it is added here,
+# at the pre-3.7 location that configuration's scripts know.
 if ! grep -q 'printer-name.g' "$SD/sys/dsf-config.g"; then
    cat >> "$SD/sys/dsf-config.g" <<-'EOF'
 
@@ -259,9 +260,9 @@ fi
 
 # The same name must not also be set in the machine override, or the first M550
 # would be rejected by DuetControlServer before printer-name.g ever runs.
-if [[ -f $SD/sys/meltingplot/dsf-config-override.g ]]; then
-   sed -i '/^[[:space:]]*M550[[:space:]]/d' "$SD/sys/meltingplot/dsf-config-override.g"
-fi
+for f in "$SD/sys/overrides/dsf-config-override.g" "$SD/sys/meltingplot/dsf-config-override.g"; do
+   [[ -f $f ]] && sed -i '/^[[:space:]]*M550[[:space:]]/d' "$f"
+done
 
 # --- machine-owned files --------------------------------------------------
 # Move everything on the protected list out of the image and into the skeleton.

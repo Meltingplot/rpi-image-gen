@@ -33,8 +33,11 @@ fi
 
 # --- printer name ---------------------------------------------------------
 # The name shown by Duet Web Control, and the source of the hostname. Created
-# from the commissioning data on first boot, then owned by the customer.
+# from the commissioning data on first boot, then owned by the customer. A
+# file from the pre-3.7 location is moved first, so a customer's name survives
+# the layout change.
 
+mp_migrate_printer_name
 if [ ! -f "$MP_PRINTER_NAME_FILE" ]; then
    name=""
    if [ -r "$MP_IDENTITY_FILE" ]; then
