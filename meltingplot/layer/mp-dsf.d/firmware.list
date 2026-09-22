@@ -14,9 +14,9 @@
 #
 # Example:
 #   Duet3Firmware_TOOL1LC.bin sha256:0123...cdef https://github.com/Meltingplot/RepRapFirmware/releases/download/v3.7.0-rc.1+mp1/Duet3Firmware_TOOL1LC.bin
-Duet3Firmware_TOOL1LC.bin sha256:b5cb704fc400372b765545204a58e67bc3a030349f0f53fa883a562eaec7f221 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.1%2B2-mp.4/Duet3Firmware_TOOL1LC.bin
-Duet3Firmware_EXP1HCL.bin sha256:b0dfdbb19c9ed731e77fef3c33c9dd7f9e3c104795bfbd9609c9ce028e842ebd https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.1%2B2-mp.4/Duet3Firmware_EXP1HCL.bin
-# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0-rc.1+2 (b131e9f), built
+Duet3Firmware_TOOL1LC.bin sha256:8261cb8e8634f116ebffcfd491ec7f82d9a9f40b313532f0f7411910aedcdde6 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.1%2B3-mp.3/Duet3Firmware_TOOL1LC.bin
+Duet3Firmware_EXP1HCL.bin sha256:08e2b8ce29b8e71c97a355d7ce7412521a612e2b7c4bdba21a742de6987635b0 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.1%2B3-mp.3/Duet3Firmware_EXP1HCL.bin
+# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0-rc.1+3 (bb401ea), built
 # by us against the Meltingplot library forks with a version string of its
 # own, so DuetControlServer flashes it on an image update.
-Duet3Firmware_MB6HC.bin sha256:d4c2ac29193e402ef78a5596d304bb7ab7f3fbbca166dc1532dc6367106e8018 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0-rc.1%2B2-mp.1/Duet3Firmware_MB6HC.bin
+Duet3Firmware_MB6HC.bin sha256:782aead15fc543ae38c9492278fef64613281e18bc02f59cf2050b134d00463b https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0-rc.1%2B3-mp.2/Duet3Firmware_MB6HC.bin
