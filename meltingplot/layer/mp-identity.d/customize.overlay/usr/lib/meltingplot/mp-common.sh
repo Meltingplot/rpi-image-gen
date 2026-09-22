@@ -15,7 +15,10 @@ MP_HOSTNAME_CACHE=/persistent/common/etc/hostname
 # single source of both the M550 machine name and the Linux hostname, because
 # DuetControlServer refuses an M550 name whose letters and digits differ from
 # the hostname.
-MP_PRINTER_NAME_FILE=/persistent/shared/opt/dsf/sd/sys/meltingplot/printer-name.g
+MP_PRINTER_NAME_FILE=/persistent/shared/opt/dsf/sd/sys/overrides/printer-name.g
+# Where the file lived before chx350-config 3.7 moved the machine-owned files
+# into sys/overrides/. Read only by mp_migrate_printer_name.
+MP_PRINTER_NAME_FILE_OLD=/persistent/shared/opt/dsf/sd/sys/meltingplot/printer-name.g
 
 MP_USER=root
 MP_PRODUCT=unknown
@@ -82,6 +85,25 @@ mp_valid_serial() {
       [0-9][0-9][0-9]) return 0 ;;
       *) return 1 ;;
    esac
+}
+
+# Move the printer name file from its pre-3.7 location, once. A name the
+# customer set must not be replaced by a freshly seeded default just because
+# the path changed, and the hostname must come from the same file DSF reads.
+# The configuration moves the file too (migrate_overrides.g), but only when
+# DuetControlServer starts, which is after the hostname is set; whichever runs
+# first wins. Runs before anything reads the file (mp-hostname, mp-dsf-seed);
+# a no-op once the old file is gone. Needs root and /persistent.
+mp_migrate_printer_name() {
+   [ -f "$MP_PRINTER_NAME_FILE_OLD" ] || return 0
+   if [ -f "$MP_PRINTER_NAME_FILE" ]; then
+      # both exist: the new one was written after the move started, keep it
+      rm -f "$MP_PRINTER_NAME_FILE_OLD"
+      return 0
+   fi
+   install -d -m 2770 "$(dirname "$MP_PRINTER_NAME_FILE")" 2>/dev/null || return 0
+   mv -f "$MP_PRINTER_NAME_FILE_OLD" "$MP_PRINTER_NAME_FILE" 2>/dev/null || return 0
+   mp_log "printer name file moved to $MP_PRINTER_NAME_FILE"
 }
 
 # Extract the machine name from an RRF M550 line.

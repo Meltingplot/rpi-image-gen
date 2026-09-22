@@ -308,7 +308,7 @@ it. It is set at commissioning, and the customer can change it afterwards:
 sudo mp-set-printer-name "Halle 2 links"
 ```
 
-or by editing `sys/meltingplot/printer-name.g` in Duet Web Control. The name is
+or by editing `sys/overrides/printer-name.g` in Duet Web Control. The name is
 machine-owned, so an update does not reset it. The device keeps its original
 name in Raspberry Pi Connect, which is how Meltingplot finds a machine again
 regardless of what the customer called it; the serial is also a tag there and

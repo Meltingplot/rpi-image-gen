@@ -6,22 +6,35 @@
 # that: they hold per-machine and per-material tuning that a customer or a
 # calibration run produced. They are moved out of the image into
 # /usr/share/meltingplot/dsf-skel and seeded once by mp-dsf-seed, so they are
-# created if missing and never touched again.
+# created if missing and never touched again. The same globs keep the files
+# out of the line-number/CRC pass.
 #
-# The list matches the protected files of the MeltingplotConfig DWC plugin,
-# plus the printer name. Paths are relative to /opt/dsf/sd and may contain
-# shell globs.
+# The list matches the protected files of the MeltingplotConfig DWC plugin.
+# Paths are relative to /opt/dsf/sd and may contain shell globs.
+#
+# Since chx350-config 3.7 everything machine-owned sits in two directories, so
+# a new machine-owned file needs no entry here:
+#   sys/overrides/   what the operator edits: global-override.g,
+#                    machine-override, dsf-config-override.g and the printer
+#                    name (printer-name.g, written by mp-dsf-seed and
+#                    mp-set-printer-name, loaded last by dsf-config.g)
+#   sys/generated/   what the machine writes about itself (nozzle, spool,
+#                    filament diameter, bed surface, last filament
+#                    temperature); the image never ships these
+#
+# The pre-3.7 layout kept these next to the system macros in sys/meltingplot/.
+# No entry for it is needed: the pinned configuration no longer ships those
+# files, and what a device still has there is moved on boot by the
+# configuration's own sys/meltingplot/migrate_overrides.g.
 #
 # Not listed, because the machine writes them and the image never ships them:
-# sys/meltingplot/nozzle*.g, sys/meltingplot/last-filament-temp.g,
 # sys/meltingplot/z-probe/szp_*_calibration_*.g, sys/heightmap.csv,
-# sys/dwc-settings.json, filaments/*/config-auto-*.g,
-# filaments/*/nozzle-*.g
+# sys/dwc-settings.json, filaments/*/config-auto-*.g
 
 sys/config-override.g
-sys/meltingplot/machine-override
-sys/meltingplot/dsf-config-override.g
-sys/meltingplot/global-override.g
-sys/meltingplot/printer-name.g
+sys/overrides/*
+sys/generated/*
 filaments/*/config-override.g
 filaments/*/temps.g
+filaments/*/material.g
+filaments/*/nozzle-*.g

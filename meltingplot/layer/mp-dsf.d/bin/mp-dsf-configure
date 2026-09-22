@@ -146,9 +146,8 @@ say "printer configuration from chx350-config $CONFIG_COMMIT"
 # reject the line and abort the macro instead of running altered code. The
 # tool is the one chx350-config carries. Left out are the machine-owned files,
 # whose later edits would break their CRCs, and dsf-config.g, whose M586 C'*'
-# cannot take a line number and which gets the printer-name call appended
-# below. A plain DSF reads '*' as part of the code, so only a build of our own
-# that checks CRCs may run these files.
+# cannot take a line number. A plain DSF reads '*' as part of the code, so only
+# a build of our own that checks CRCs may run these files.
 dcs_ver=$(chroot "$ROOT" dpkg-query -W -f '${Version}' duetcontrolserver)
 [[ $dcs_ver =~ \+mp\.([0-9]+)$ ]] && (( BASH_REMATCH[1] >= 7 )) ||
    die "duetcontrolserver $dcs_ver does not check G-code line CRCs, which the
@@ -244,24 +243,15 @@ say "licence notice for version ${IGconf_artefact_version} written to sys/LICENS
 
 # The printer name is a file of its own, so a customer can rename the machine
 # without the change being reverted by the next update, and so the hostname can
-# be derived from the same value. Until chx350-config carries the call itself,
-# add it here; the guard makes this a no-op once it does.
-if ! grep -q 'printer-name.g' "$SD/sys/dsf-config.g"; then
-   cat >> "$SD/sys/dsf-config.g" <<-'EOF'
-
-	; Printer name, owned by the machine and managed by the image. Loaded last so
-	; it wins over any name set above. See mp-set-printer-name(8).
-	if fileexists("0:/sys/meltingplot/printer-name.g")
-	  M98 P"0:/sys/meltingplot/printer-name.g"
-	EOF
-   say "added the printer-name.g call to dsf-config.g"
-fi
-
+# be derived from the same value. dsf-config.g loads it last and guarded by
+# fileexists; that call belongs to chx350-config, and postbuild50-dsf-assert
+# refuses a configuration without it.
+#
 # The same name must not also be set in the machine override, or the first M550
 # would be rejected by DuetControlServer before printer-name.g ever runs.
-if [[ -f $SD/sys/meltingplot/dsf-config-override.g ]]; then
-   sed -i '/^[[:space:]]*M550[[:space:]]/d' "$SD/sys/meltingplot/dsf-config-override.g"
-fi
+for f in "$SD/sys/overrides/dsf-config-override.g" "$SD/sys/meltingplot/dsf-config-override.g"; do
+   [[ -f $f ]] && sed -i '/^[[:space:]]*M550[[:space:]]/d' "$f"
+done
 
 # --- machine-owned files --------------------------------------------------
 # Move everything on the protected list out of the image and into the skeleton.

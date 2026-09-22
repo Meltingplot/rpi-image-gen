@@ -12,6 +12,7 @@ set -eu
 MP_TAG=mp-hostname
 . /usr/lib/meltingplot/mp-common.sh
 
+mp_migrate_printer_name
 name=$(mp_read_printer_name "$MP_PRINTER_NAME_FILE")
 source=printer-name.g
 
