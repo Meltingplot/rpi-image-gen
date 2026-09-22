@@ -19,17 +19,17 @@
 # A board firmware file is not a package of the build; it goes through
 # firmware.list.
 
-# 3.7.0-rc.1+mp.8: job and macro files check their N line numbers. The first
-# numbered line sets the count, every physical line after it adds one, and a
-# numbered line out of step raises a parser error that aborts the job or macro.
-# Once a numbered line carries a checksum, every later numbered line with code
-# must carry one of the same type. Pause/resume, M26 and forked files restart
-# the count. mp.7 brought RRF-style checksums on numbered lines (XOR or
-# CRC-16/XMODEM), mp.6 the upstream fix that keeps the object model in step
-# after an SPI transfer timeout.
-duetsoftwareframework sha256:93e4785698056338a20c1e2102813047f8d009f363bbb6914c57a07bf20fdbd2 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.8/duetsoftwareframework_3.7.0.rc.1%2Bmp.8_arm64.deb
-duetcontrolserver sha256:41304ae2cac18c5a6574f83838a2f55d4ca9b832c389f734ba41c2831d8fe953 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.8/duetcontrolserver_3.7.0.rc.1%2Bmp.8_arm64.deb
-duetwebserver sha256:ee5905066c123f5dd08d9ee9aa7de60dca43c9d2b40e1753ab6d229385fa3055 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.8/duetwebserver_3.7.0.rc.1%2Bmp.8_arm64.deb
-duetpluginservice sha256:b9541ee8c16cb253360986dafbe253b4ac5e1932bc4fb4508ae0185b052bb5df https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.8/duetpluginservice_3.7.0.rc.1%2Bmp.8_arm64.deb
-duettools sha256:d65cc016952d96be14bb2b1f09a11429629f4f570b90a9183d445e27780c9d85 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.8/duettools_3.7.0.rc.1%2Bmp.8_arm64.deb
-duetruntime sha256:d70847e88ec2f812c042c01b56b83cbdd942c1ca97e8d82d641e5d805e764aa7 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.8/duetruntime_3.7.0.rc.1%2Bmp.8_arm64.deb
+# 3.7.0-rc.1+mp.9: upstream v3.7-dev up to ff937e49. The object model knows
+# sensors on CAN-connected expansion boards (analog sensor type "remote"), the
+# assisted open loop driver mode, and a pause because a board overheated and
+# its drivers were disabled. The driver mode "unknown" moves from 5 to 6; DSF
+# writes the name, so only a reader of the number is affected. mp.8 made job
+# and macro files check their N line numbers, mp.7 brought RRF-style checksums
+# on numbered lines (XOR or CRC-16/XMODEM), mp.6 the upstream fix that keeps
+# the object model in step after an SPI transfer timeout.
+duetsoftwareframework sha256:44c1aecc37a30e117bfe92928886a9d3e03e1b720494f10d00acabb3b2beea75 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.9/duetsoftwareframework_3.7.0.rc.1%2Bmp.9_arm64.deb
+duetcontrolserver sha256:f5f1a3433b7c7cb2fad33d20fa92bfb2fab619b60a83e74f0632ec14c599a501 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.9/duetcontrolserver_3.7.0.rc.1%2Bmp.9_arm64.deb
+duetwebserver sha256:63fd472a632b8cf83204d75bbedae2f016e48b4c62b4e48c64872dec3082a05c https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.9/duetwebserver_3.7.0.rc.1%2Bmp.9_arm64.deb
+duetpluginservice sha256:f9d3737f4d662b31274f809b9860c4087175b2fe5c4966c667aea5576c6414cc https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.9/duetpluginservice_3.7.0.rc.1%2Bmp.9_arm64.deb
+duettools sha256:4fac7c38f2b342a16c866f0154e0a3b5ec448a6c1151e1fe2a837dd509e8f334 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.9/duettools_3.7.0.rc.1%2Bmp.9_arm64.deb
+duetruntime sha256:632e34275d7098b9f48255778db289f86f9770e8531d0c4bc3efc06128cf23c9 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.9/duetruntime_3.7.0.rc.1%2Bmp.9_arm64.deb
