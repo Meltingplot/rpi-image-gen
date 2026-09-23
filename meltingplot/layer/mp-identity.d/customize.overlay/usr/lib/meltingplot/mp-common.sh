@@ -90,7 +90,7 @@ mp_valid_serial() {
 # Move the printer name file from its pre-3.7 location, once. A name the
 # customer set must not be replaced by a freshly seeded default just because
 # the path changed, and the hostname must come from the same file DSF reads.
-# The configuration moves the file too (migrate_overrides.g), but only when
+# The configuration moves the file too (sys/meltingplot/migrate.g), but only when
 # DuetControlServer starts, which is after the hostname is set; whichever runs
 # first wins. Runs before anything reads the file (mp-hostname, mp-dsf-seed);
 # a no-op once the old file is gone. Needs root and /persistent.
