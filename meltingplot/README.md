@@ -88,6 +88,7 @@ Artefacts land in `work/deploy-<version>/`:
 | `mp-duet-pi5-<version>.idp.tar.zst` | provisioning archive, for rpi-sb-provisioner |
 | `filesystem-<version>.sbom.zst` | software bill of materials |
 | `release.json`, `SHA256SUMS` | what went into this build, and its checksums |
+| `SOURCE_DATE_EPOCH` | the timestamp every build step derived its dates from, deployed by rpi-image-gen |
 
 A build without a version is a development build. The release workflow passes
 the version from the git tag.
