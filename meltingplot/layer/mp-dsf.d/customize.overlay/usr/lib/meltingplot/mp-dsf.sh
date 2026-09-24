@@ -14,6 +14,13 @@ MP_SLOT_TRYBOOT=${MP_SLOT_TRYBOOT:-/usr/bin/rpi-slot-tryboot}
 MP_AUTOBOOT=${MP_AUTOBOOT:-/bootfs/autoboot.txt}
 MP_OTA_STATE_FILE=${MP_OTA_STATE_FILE:-/bootfs/ota_state}
 MP_TRYBOOT_FLAG=${MP_TRYBOOT_FLAG:-/proc/device-tree/chosen/bootloader/tryboot}
+MP_DSF_CONF=${MP_DSF_CONF:-/etc/meltingplot/dsf.conf}
+
+# Settings the image was built with (layer mp-dsf). MP_MAINBOARD_RESET=y makes
+# the first boot after an update reset the mainboard (mp-dsf-firmware).
+MP_MAINBOARD_RESET=n
+# shellcheck source=/dev/null
+[ -r "$MP_DSF_CONF" ] && . "$MP_DSF_CONF"
 
 # Ask DuetControlServer for one key of the object model with M409, which is
 # what Duet Web Control does too. Prints a string result as it is and any

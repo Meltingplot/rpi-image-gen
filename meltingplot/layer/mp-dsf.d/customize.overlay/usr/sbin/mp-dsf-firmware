@@ -32,6 +32,14 @@
 # firmware back: DuetControlServer flashes on any difference, not only on a
 # newer version.
 #
+# An update restarts only the Pi. A mainboard that nothing flashes keeps
+# running the config.g it read before the update, with its globals and
+# triggers, while the files on the virtual SD card are already the new ones.
+# An image built with MP_MAINBOARD_RESET=y therefore resets the mainboard on
+# the first boot after an update when every board was up to date at once, as
+# Duet Web Control does with M999, and waits for it to come back idle. A pass
+# that flashed has reset the mainboard already.
+#
 # A boot the bootloader started as a tryboot follows an update (or a rollback
 # by hand). The update notice the gate put up before the restart does not
 # survive it, so this boot puts it up again as soon as the control server
@@ -85,6 +93,24 @@ printer_restarted() {
    [ -n "$_now" ] && [ "$_now" -gt $((boot + 10)) ] && printer_idle
 }
 
+# Reset the mainboard so that it runs the config.g of this image, and wait for
+# it to come back idle. DuetControlServer stops itself after the reset and
+# systemd starts it again, so M999 may go without an answer.
+reset_mainboard() {
+   if ! printer_idle; then
+      mp_log "the printer is '$(mp_dcs_status)', not idle; the mainboard is not reset"
+      return 1
+   fi
+   boot=$(mp_dcs_boot_time)
+   boot=${boot:-0}
+   mp_log "resetting the mainboard, so that it runs the config.g of this image"
+   mp_dcs_code M999 || true
+   if ! wait_for printer_restarted; then
+      mp_log "the printer did not come back idle after the reset"
+      return 1
+   fi
+}
+
 # Leave the printer with a message that says how the update ended, then exit.
 finish() {
    if [ "$updated" = yes ]; then
@@ -130,6 +156,9 @@ while :; do
    fi
    if grep -q 'up-to-date' "$out"; then
       mp_log "every board is up to date"
+      if [ "$updated" = yes ] && [ "$pass" -eq 1 ] && [ "$MP_MAINBOARD_RESET" = y ]; then
+         reset_mainboard || finish 1
+      fi
       finish 0
    fi
    if [ "$pass" -ge "$PASSES" ]; then

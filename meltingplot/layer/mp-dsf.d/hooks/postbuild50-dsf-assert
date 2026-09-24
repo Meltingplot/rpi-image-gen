@@ -175,6 +175,14 @@ for unit in mp-ota-gate.timer mp-dsf-firmware.service; do
       bad "$unit is not enabled"
 done
 
+# mp-dsf-firmware reads the mainboard reset setting from dsf.conf and takes a
+# missing or unreadable file as n, so a release built to reset would quietly
+# not do it.
+want=${IGconf_dsf_mainboard_reset_after_update:-n}
+have=$(sed -n 's/^MP_MAINBOARD_RESET=//p' "$ROOT/etc/meltingplot/dsf.conf" 2>/dev/null || true)
+[[ $have == "$want" ]] ||
+   bad "/etc/meltingplot/dsf.conf has MP_MAINBOARD_RESET=${have:-nothing}, the build asked for $want"
+
 # --- replaced firmware files ----------------------------------------------
 # A file from the list has to be the pinned build, and it has to have gone in
 # through dpkg-divert: a copy dropped over the packaged file looks the same

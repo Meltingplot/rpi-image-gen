@@ -330,6 +330,18 @@ is recorded in `/persistent/common/etc/mp-identity`.
 
 Roll out to a bench machine first, then to pilot customers.
 
+When the printer configuration of a release changes `config.g` or the
+globals, build it with the mainboard reset (step 5 below), in
+`config/duet-pi5.yaml`:
+
+```yaml
+dsf:
+  mainboard_reset_after_update: y
+```
+
+and take it out again for the next release that does not need it.
+`release.json` records the setting under `components`.
+
 To go back, deploy the previous artefact again. It stays registered.
 
 ### What happens on the device
@@ -391,6 +403,19 @@ To go back, deploy the previous artefact again. It stays registered.
    or the firmware cannot be brought up to date, a message box of the same
    kind says that the firmware update did not complete. Any other message
    box, such as a macro's dialog, is left alone.
+5. An update restarts only the Pi. A mainboard that nothing flashes keeps
+   running the `config.g` it read before the update, with its globals and
+   triggers, while the files on the virtual SD card are already the new ones:
+   a macro that reads a new global fails, and a trigger the new `config.g`
+   sets up does not exist. An image built with
+   `dsf.mainboard_reset_after_update: y` resets the mainboard with `M999` on
+   the first boot after an update when every board was up to date at once,
+   and waits for RepRapFirmware to come back idle before it puts up the
+   message that the update is complete. A pass that flashed has reset the
+   mainboard already, and a normal boot never resets it. The reset clears the
+   homed state like any `M999`. If the printer is not idle at that point or
+   does not come back idle, the message says that the firmware update did
+   not complete.
 
 The flash comes after the commit, so a firmware that fails to flash is not
 undone by the bootloader. A Duet board keeps its bootloader, so it can be
