@@ -221,6 +221,13 @@ fi
 # The Duet packages carry no md5sums, so the pinned .deb itself is the
 # reference; it is taken from the build cache, where vfetch left it verified.
 # Conffiles are left out: the image configures the packages itself.
+#
+# Duet Web Control is laid out the other way round than its package ships it:
+# mp-dsf-configure moves the files from /opt/dsf/dwc to /opt/dsf/sd/www, where
+# DuetWebServer serves them, and makes /opt/dsf/dwc the link. Its files are
+# compared where they went, and the package's link at sd/www is the directory
+# now. Following /opt/dsf/dwc instead would resolve its absolute target on the
+# build host.
 
 list=${IGconf_dsf_packages_list:-}
 if [[ -f $list ]]; then
@@ -244,13 +251,24 @@ if [[ -f $list ]]; then
       stage=$tmp/$pkg.files
       mkdir -p "$stage"
       dpkg-deb --fsys-tarfile "$deb" | tar -C "$stage" -xf -
+      if [[ $pkg == duetwebcontrol ]]; then
+         [[ -L $ROOT/opt/dsf/dwc && $(readlink "$ROOT/opt/dsf/dwc") == /opt/dsf/sd/www ]] ||
+            bad "/opt/dsf/dwc is not the link to /opt/dsf/sd/www that mp-dsf-configure makes"
+      fi
       while IFS= read -r path; do
          grep -qx "$path" <<< "$conffiles" && continue
+         at=$path
+         if [[ $pkg == duetwebcontrol ]]; then
+            case $path in
+               /opt/dsf/sd/www) continue ;;
+               /opt/dsf/dwc/*) at=/opt/dsf/sd/www/${path#/opt/dsf/dwc/} ;;
+            esac
+         fi
          if [[ -L $stage$path ]]; then
-            [[ -L $ROOT$path && $(readlink "$stage$path") == $(readlink "$ROOT$path") ]] ||
-               bad "$path is not the link the pinned build of $pkg ships"
-         elif ! cmp -s "$stage$path" "$ROOT$path"; then
-            bad "$path is not the pinned build of $pkg $ver"
+            [[ -L $ROOT$at && $(readlink "$stage$path") == $(readlink "$ROOT$at") ]] ||
+               bad "$at is not the link the pinned build of $pkg ships"
+         elif ! cmp -s "$stage$path" "$ROOT$at"; then
+            bad "$at is not the pinned build of $pkg $ver"
          fi
       done < <(cd "$stage" && find . -type f -o -type l | sed 's|^\.||')
    done < "$list"
