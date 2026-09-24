@@ -1,15 +1,16 @@
 # METABEGIN
 # X-Env-Layer-Name: mp-dsf
 # X-Env-Layer-Category: app
-# X-Env-Layer-Desc: DuetSoftwareFramework and the CHX350 printer configuration,
-#  laid out for an immutable A/B root: the image owns the machine
-#  configuration and Duet Web Control, the printer owns its calibration, and
+# X-Env-Layer-Desc: DuetSoftwareFramework, Duet Web Control from our fork and
+#  the CHX350 printer configuration, laid out for an immutable A/B root: the
+#  image owns the machine configuration and Duet Web Control, the printer owns
+#  its calibration, and
 #  only plugins that came with the image may run code. The update connector
 #  runs only while the printer is idle (mp-ota-gate), so an update is
 #  installed and restarted into between prints, the printer shows a message
 #  box while an update is in progress, and the Duet firmware follows the
 #  image once a slot is committed (mp-dsf-firmware).
-# X-Env-Layer-Version: 1.8.0
+# X-Env-Layer-Version: 1.9.0
 # X-Env-Layer-Requires: mp-duet-hw,mp-identity,device-user-admin,rpi-debian-trixie
 # X-Env-Layer-RequiresProvider: systemd
 #
@@ -81,6 +82,25 @@
 # X-Env-Var-packages_list-Required: n
 # X-Env-Var-packages_list-Valid: file
 # X-Env-Var-packages_list-Set: y
+#
+# X-Env-Var-dwc_version: 3.7.0-rc.1+mp.1
+# X-Env-Var-dwc_version-Desc: Version of Duet Web Control from the Meltingplot
+#  fork, which replaces the web interface of the duetwebcontrol package. It is
+#  of the pinned DSF generation plus a suffix, <dsf.version>+<suffix> with the
+#  tilde as a hyphen. Only the published release asset is ever installed, the
+#  DuetWebControl-SBC.zip of release v<version> on the fork's releases page;
+#  there is no local build fallback.
+# X-Env-Var-dwc_version-Required: n
+# X-Env-Var-dwc_version-Valid: string
+# X-Env-Var-dwc_version-Set: y
+#
+# X-Env-Var-dwc_sha256: 23f7606300daa336a19f1f50727710a6b29c4c925111c76b6ffab88c65ab4373
+# X-Env-Var-dwc_sha256-Desc: SHA-256 of the Duet Web Control release asset. A
+#  mismatch stops the build rather than shipping an artefact nobody vouched
+#  for.
+# X-Env-Var-dwc_sha256-Required: n
+# X-Env-Var-dwc_sha256-Valid: regex:^[0-9a-f]{64}$
+# X-Env-Var-dwc_sha256-Set: y
 #
 # X-Env-Var-vigil_version: 1.3.0-beta.5
 # X-Env-Var-vigil_version-Desc: Version of the Vigil machine monitoring plugin.
@@ -193,6 +213,9 @@ mmdebstrap:
     # Separately published firmware builds go over the packaged files, under
     # the packaged names, before anything else looks at the firmware directory.
     - ${IGconf_dsf_assetdir}/bin/mp-dsf-firmware-files "$1"
+    # Duet Web Control from our fork goes over the packaged web interface,
+    # before mp-dsf-configure moves it to the virtual SD card.
+    - ${IGconf_dsf_assetdir}/bin/mp-dsf-dwc "$1"
     - $BDEBSTRAP_HOOKS/enable-units "$1" duetcontrolserver duetwebserver duetpluginservice duetpluginservice-root mp-dsf-seed mp-dsf-firmware mp-ota-gate.timer avahi-daemon apparmor
     - ${IGconf_dsf_assetdir}/bin/mp-dsf-configure "$1"
     - ${IGconf_dsf_assetdir}/bin/mp-dsf-vigil "$1"

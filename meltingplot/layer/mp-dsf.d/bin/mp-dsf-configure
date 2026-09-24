@@ -11,7 +11,8 @@
 #     skeleton and seeded once, so calibration and customer tuning survive.
 #   * Duet Web Control is served from the virtual SD card, not from
 #     /opt/dsf/dwc, because that is where DuetWebServer looks and where plugins
-#     put their web assets.
+#     put their web assets. By the time this runs, /opt/dsf/dwc holds the
+#     build from our fork (mp-dsf-dwc).
 #   * The printer configuration from chx350-config is baked in.
 
 set -euo pipefail
@@ -60,69 +61,6 @@ fi
 
 [[ -f $SD/www/index.html ]] ||
    die "no index.html below /opt/dsf/sd/www, Duet Web Control was not installed"
-
-# --- the free-space warning -----------------------------------------------
-# On every connect DWC warns "drive almost full" when volume 0 has less than
-# 5 % free. DuetControlServer lists the mounted filesystems in mount order, so
-# volume 0 is always "/", and here that is the read-only erofs root, which
-# reports 0 bytes free by construction. Uploads go to 0:/gcodes on the
-# persistent partition, so the warning is wrong and only alarms the customer.
-# DWC has no setting for it and DCS no filter, so the check is skipped when
-# volume 0 is the root filesystem. Upstream, DCS intends volume 0 to be the
-# virtual SD card (comment in PeriodicUpdateService.GatherVolumeData); once it
-# is, or DWC checks the volume that holds gcodes, this block goes away.
-#
-# The edit is bound to one exact bundle. A different DWC stops the build, so
-# the change is looked at again rather than silently dropped or misapplied.
-#
-# TODO(release): this is a stop-gap for the lab images, not something to ship.
-# It has to be settled with Duet3D (issue or pull request against DCS or DWC)
-# and this block removed before the first customer release. Until then no
-# release image may carry it; the release gate is the place to enforce that.
-
-case $DSF_VERSION in
-   3.7.0~rc.1) dwc_app_sha256=ea3374262ba31e9579ed84790528056bfeee23adea376c52c9efff47b63fb3d2 ;;
-   *) die "no known Duet Web Control bundle for DSF $DSF_VERSION. Check whether the
-free-space warning still needs skipping for the read-only root and record the
-sha256 of js/app-*.js here." ;;
-esac
-
-python3 - "$SD/www" "$dwc_app_sha256" <<'PY'
-import glob, hashlib, pathlib, re, sys
-
-www = pathlib.Path(sys.argv[1])
-expected = sys.argv[2]
-
-apps = glob.glob(str(www / "js" / "app-*.js"))
-if len(apps) != 1:
-    sys.exit(f"mp-dsf: expected one js/app-*.js below sd/www, found {len(apps)}")
-app = pathlib.Path(apps[0])
-data = app.read_bytes()
-
-got = hashlib.sha256(data).hexdigest()
-if got != expected:
-    sys.exit(f"mp-dsf: {app.name} has sha256 {got}, expected {expected}; "
-             "the free-space patch was written for a different bundle")
-
-# App.vue: if (capacityNum > FREE_SPACE_MIN_CAPACITY && freeSpaceNum / capacityNum < ...)
-needle = b"c>Vq&&l/c<Bq&&r.log(YD.warning,Z.global.t(`notification.freeSpaceWarning.title`)"
-if data.count(needle) != 1:
-    sys.exit(f"mp-dsf: the free-space check was not found exactly once in {app.name}")
-data = data.replace(needle, b"a.path!==`/`&&" + needle)
-app.write_bytes(data)
-
-# The service worker precaches the bundle under a hash of its content. Refresh
-# it, or a browser that already cached the unpatched file would keep it.
-sw = www / "service-worker.js"
-text = sw.read_text()
-entry = re.compile(r'(url:"js/%s",revision:")[0-9a-f]{32}(")' % re.escape(app.name))
-text, n = entry.subn(r"\g<1>%s\2" % hashlib.md5(data).hexdigest(), text)
-if n != 1:
-    sys.exit(f"mp-dsf: service-worker.js has no precache entry for {app.name}")
-sw.write_text(text)
-
-print(f"mp-dsf: free-space warning skipped for the read-only root in {app.name}", file=sys.stderr)
-PY
 
 # --- printer configuration ------------------------------------------------
 # Image-owned: replaced by every update, and reset on the next boot if someone
@@ -225,17 +163,30 @@ package_notice() {
       echo "  printer runs the packages of the Duet3D archive."
    fi
 }
+# The web interface always comes from our fork (mp-dsf-dwc), at the version
+# pinned in dsf.dwc_version.
+dwc_notice() {
+   local ver=${IGconf_dsf_dwc_version:?}
+   echo "  Modified Duet Web Control (Meltingplot, from Duet Web Control),"
+   echo "  including the CHX 350 operator interface: GPL-3.0. It replaces the web"
+   echo "  interface of the duetwebcontrol package; the modified source is"
+   echo "  published where the build is:"
+   echo "    Duet Web Control $ver: https://github.com/Meltingplot/DuetWebControl/releases/tag/v${ver//+/%2B}"
+   echo "  The fonts Jost and JetBrains Mono in it: OFL-1.1."
+}
 python3 - "$ASSETS/LICENSES.txt" "$SD/sys/LICENSES.txt" \
-   "${IGconf_artefact_version:?}" "$(firmware_notice)" "$(package_notice)" <<'PY'
+   "${IGconf_artefact_version:?}" "$(firmware_notice)" "$(package_notice)" \
+   "$(dwc_notice)" <<'PY'
 import pathlib, sys
-src, dst, version, firmware, packages = sys.argv[1:6]
+src, dst, version, firmware, packages, dwc = sys.argv[1:7]
 text = pathlib.Path(src).read_text()
-for tag in ("@VERSION@", "@FIRMWARE@", "@PACKAGES@"):
+for tag in ("@VERSION@", "@FIRMWARE@", "@PACKAGES@", "@DWC@"):
     if tag not in text:
         sys.exit(f"mp-dsf: LICENSES.txt has no {tag} placeholder")
 text = (text.replace("@VERSION@", version)
             .replace("@FIRMWARE@", firmware + "\n")
-            .replace("@PACKAGES@", packages + "\n"))
+            .replace("@PACKAGES@", packages + "\n")
+            .replace("@DWC@", dwc + "\n"))
 pathlib.Path(dst).write_text(text)
 PY
 chmod 0644 "$SD/sys/LICENSES.txt"
