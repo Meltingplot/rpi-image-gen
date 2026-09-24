@@ -25,15 +25,25 @@
 # X-Env-Var-assetdir-Valid: dir
 # X-Env-Var-assetdir-Set: y
 #
-# X-Env-Var-version: 3.7.0~rc.1
+# X-Env-Var-version: 3.7.0~rc.2
 # X-Env-Var-version-Desc: Exact DuetSoftwareFramework version to install. Every
-#  DSF package is pinned to it, and the mainboard firmware follows through the
-#  dependency on reprapfirmware, so an image always carries a known pair of
-#  firmware and control software. A build of our own in packages.list is of
-#  this generation and carries this version plus a suffix.
+#  DSF package is pinned to it. A build of our own in packages.list is of this
+#  generation and carries this version plus a suffix.
 # X-Env-Var-version-Required: n
 # X-Env-Var-version-Valid: string
 # X-Env-Var-version-Set: y
+#
+# X-Env-Var-rrf_version: 3.7.0~rc.1
+# X-Env-Var-rrf_version-Desc: Version of the reprapfirmware package from the
+#  Duet3D archive, without its Debian revision, so an image always carries a
+#  known pair of firmware and control software. It carries the firmware of
+#  every board that firmware.list does not replace. Normally it equals
+#  dsf.version. A build of our own that runs ahead of Duet3D pairs with the
+#  firmware of the last published version instead, and its meta package has to
+#  accept that version, or apt stops the build.
+# X-Env-Var-rrf_version-Required: n
+# X-Env-Var-rrf_version-Valid: string
+# X-Env-Var-rrf_version-Set: y
 #
 # X-Env-Var-suite: unstable
 # X-Env-Var-suite-Desc: Suite of the Duet3D archive. Release candidates are
@@ -170,12 +180,18 @@ mmdebstrap:
           -s /usr/sbin/nologin -c "Duet Software Framework" dsf
     # Pin first: the Duet archive carries several prereleases side by side, and
     # apt would otherwise be free to pick a different one on the next build.
+    # The firmware has a pin of its own, because a build of our own can pair
+    # with the firmware of an earlier version.
     - |-
       set -eu
       install -d -m 0755 "$1/etc/apt/preferences.d"
       cat > "$1/etc/apt/preferences.d/duet3d" <<-EOF
-      Package: duetsoftwareframework duetcontrolserver duetwebserver duetwebcontrol duettools duetruntime duetpluginservice duetsd reprapfirmware
+      Package: duetsoftwareframework duetcontrolserver duetwebserver duetwebcontrol duettools duetruntime duetpluginservice duetsd
       Pin: version ${IGconf_dsf_version}*
+      Pin-Priority: 1001
+
+      Package: reprapfirmware
+      Pin: version ${IGconf_dsf_rrf_version}-*
       Pin-Priority: 1001
 
       Package: *

@@ -193,9 +193,10 @@ Current pins are the defaults in `layer/mp-dsf.yaml`.
 
 ### Replacing a Duet firmware file
 
-The Duet firmware comes from the `reprapfirmware` package, one file per board
-type below `/opt/dsf/sd/firmware`. A build published separately, say a patched
-TOOL1LC firmware, is listed in `layer/mp-dsf.d/firmware.list`:
+The Duet firmware comes from the `reprapfirmware` package of the archive at
+`dsf.rrf_version`, one file per board type below `/opt/dsf/sd/firmware`. A
+build published separately, say a patched TOOL1LC firmware, is listed in
+`layer/mp-dsf.d/firmware.list`:
 
 ```
 Duet3Firmware_TOOL1LC.bin sha256:<checksum> https://<where the build is published>
@@ -244,8 +245,8 @@ The artefacts are the `.deb` files that the upstream packaging in the fork
 builds from the modified source, what Duet3D would have put in its archive:
 
 ```bash
-# in the fork, on the branch of the pinned generation (v3.7-dev for 3.7.0-rc.1)
-# Directory.Build.props: <Version>3.7.0-rc.1+mp.9</Version>
+# in the fork, on the branch of the pinned generation (v3.7-dev for 3.7.0-rc.2)
+# Directory.Build.props: <Version>3.7.0-rc.2+mp.2</Version>
 pkg/build.sh --target-arch=aarch64 --packages=progs,dwc,meta deb
 ```
 
@@ -260,7 +261,7 @@ installation. dpkg, the SBOM, `M122` and Duet Web Control then all report
 the build's version.
 
 The build has to be of the pinned generation and carry a version of the form
-`<dsf.version>+<suffix>`, `3.7.0~rc.1+mp.1` for a modified `3.7.0~rc.1`. The
+`<dsf.version>+<suffix>`, `3.7.0~rc.2+mp.1` for a modified `3.7.0~rc.2`. The
 suffix is what tells it apart from the archive's package; a package that
 keeps the archive's version is the archive's package and is left out of the
 list. A line that names a package outside the generation, a location that is
@@ -272,6 +273,15 @@ its modified source is published in.
 
 A board firmware file is not part of this: it belongs to `reprapfirmware`,
 which is versioned separately, and goes through `firmware.list`.
+
+`reprapfirmware` is installed at `dsf.rrf_version`, which normally equals
+`dsf.version`. Duet3D publishes the control software and the firmware of a
+version together. A build of our own can run ahead of that, when the fork has
+merged an upstream version that Duet3D has not released yet. Its meta package
+then has to accept the firmware of the last published version, which
+`pkg/firmware-version` in the fork names, and `dsf.rrf_version` is set to the
+same version. A meta package that does not accept `dsf.rrf_version`, or an
+archive without that version, stops the build.
 
 ### Duet Web Control from our fork
 
@@ -285,14 +295,15 @@ any other package of that build.
 
 The upstream packaging builds `duetwebcontrol` from a checkout of Duet Web
 Control and pins it in the meta package to the version in its
-`package.json`. The fork's release workflow checks out our Duet Web Control
-at a pinned tag for that, so each DSF release names the web interface it
-carries. The version of our Duet Web Control is that of the generation plus
-a suffix, `3.7.0-rc.1+mp.1` for DSF `3.7.0~rc.1`, which is what it shows as
-its version and what the package carries as `3.7.0~rc.1+mp.1`. A change to
-the web interface therefore means a release of the fork of Duet Web Control
-(an annotated tag `v<version>` on the branch of the generation) and then one
-of the DuetSoftwareFramework fork that packages it.
+`package.json`. The fork's packaging clones our Duet Web Control from the
+branch of the generation (`v3.7-dev`), so a DSF release carries whatever that
+branch holds when it is built. The version of our Duet Web Control is that of
+the generation plus a suffix, `3.7.0-rc.2+mp.2` for DSF `3.7.0~rc.2`, which
+is what it shows as its version and what the package carries as
+`3.7.0~rc.2+mp.2`. A change to the web interface therefore means a release of
+the fork of Duet Web Control (an annotated tag `v<version>` on the branch of
+the generation) and then one of the DuetSoftwareFramework fork that packages
+it, while the tag is still the head of that branch.
 
 `0:/sys/LICENSES.txt` names the release of Duet Web Control its source is
 published in, and the post-build assert checks that `sd/www` holds the

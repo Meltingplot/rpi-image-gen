@@ -84,9 +84,12 @@ say "printer configuration from chx350-config $CONFIG_COMMIT"
 # tool is the one chx350-config carries. Left out are the machine-owned files,
 # whose later edits would break their CRCs, and dsf-config.g, whose M586 C'*'
 # cannot take a line number. A plain DSF reads '*' as part of the code, so only
-# a build of our own that checks CRCs may run these files.
+# a build of our own that checks CRCs may run these files. The suffix counts
+# anew with every upstream version, so the comparison is dpkg's: 3.7.0~rc.2+mp.1
+# carries the check as well.
 dcs_ver=$(chroot "$ROOT" dpkg-query -W -f '${Version}' duetcontrolserver)
-[[ $dcs_ver =~ \+mp\.([0-9]+)$ ]] && (( BASH_REMATCH[1] >= 7 )) ||
+[[ $dcs_ver == *+mp.* ]] &&
+   chroot "$ROOT" dpkg --compare-versions "$dcs_ver" ge 3.7.0~rc.1+mp.7 ||
    die "duetcontrolserver $dcs_ver does not check G-code line CRCs, which the
 hardened printer configuration needs (3.7.0-rc.1+mp.7 or later)"
 crc_args=(-x sys/dsf-config.g)
