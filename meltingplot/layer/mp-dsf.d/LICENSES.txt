@@ -25,7 +25,6 @@ Printer software (Duet3D Ltd)
 
 @FIRMWARE@
 @PACKAGES@
-@DWC@
   Bundled .NET libraries (Microsoft.Extensions.*, Nito.AsyncEx, MQTTnet) and
   the .NET runtime: MIT.
 

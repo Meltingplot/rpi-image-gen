@@ -11,8 +11,7 @@
 #     skeleton and seeded once, so calibration and customer tuning survive.
 #   * Duet Web Control is served from the virtual SD card, not from
 #     /opt/dsf/dwc, because that is where DuetWebServer looks and where plugins
-#     put their web assets. By the time this runs, /opt/dsf/dwc holds the
-#     build from our fork (mp-dsf-dwc).
+#     put their web assets.
 #   * The printer configuration from chx350-config is baked in.
 
 set -euo pipefail
@@ -135,10 +134,13 @@ firmware_notice() {
    fi
 }
 # The same for DSF packages from a build of our own, from packages.list. The
-# version is the one dpkg installed, which is the one the build declares.
+# version is the one dpkg installed, which is the one the build declares. The
+# build packages Duet Web Control from our fork of it, whose release tag is the
+# package version with the tilde as a hyphen, so that is where its modified
+# source is.
 package_notice() {
    local list=${IGconf_dsf_packages_list:-}
-   local line pkg sum url extra ver n=0
+   local line pkg sum url extra ver n=0 dwc=
    if [[ -f $list ]]; then
       while IFS= read -r line || [[ -n $line ]]; do
          [[ -z ${line// } || $line == \#* ]] && continue
@@ -151,42 +153,37 @@ package_notice() {
          fi
          n=$((n + 1))
          ver=$(chroot "$ROOT" dpkg-query -W -f '${Version}' "$pkg" 2>/dev/null || true)
-         if [[ $url =~ ^(https://github\.com/[^/]+/[^/]+)/releases/download/([^/]+)/ ]]; then
+         if [[ $pkg == duetwebcontrol && -n $ver ]]; then
+            dwc=v${ver//\~/-}
+            echo "    $pkg $ver: https://github.com/Meltingplot/DuetWebControl/releases/tag/${dwc//+/%2B}"
+         elif [[ $url =~ ^(https://github\.com/[^/]+/[^/]+)/releases/download/([^/]+)/ ]]; then
             echo "    $pkg ${ver:-?}: ${BASH_REMATCH[1]}/releases/tag/${BASH_REMATCH[2]}"
          else
             echo "    $pkg ${ver:-?}: $url"
          fi
       done < "$list"
    fi
+   if [[ -n $dwc ]]; then
+      echo "  duetwebcontrol is built from Meltingplot/DuetWebControl and includes"
+      echo "  the CHX 350 operator interface, with the fonts Jost and JetBrains"
+      echo "  Mono: OFL-1.1."
+   fi
    if (( n == 0 )); then
       echo "  No DuetSoftwareFramework package comes from a build of our own; the"
       echo "  printer runs the packages of the Duet3D archive."
    fi
 }
-# The web interface always comes from our fork (mp-dsf-dwc), at the version
-# pinned in dsf.dwc_version.
-dwc_notice() {
-   local ver=${IGconf_dsf_dwc_version:?}
-   echo "  Modified Duet Web Control (Meltingplot, from Duet Web Control),"
-   echo "  including the CHX 350 operator interface: GPL-3.0. It replaces the web"
-   echo "  interface of the duetwebcontrol package; the modified source is"
-   echo "  published where the build is:"
-   echo "    Duet Web Control $ver: https://github.com/Meltingplot/DuetWebControl/releases/tag/v${ver//+/%2B}"
-   echo "  The fonts Jost and JetBrains Mono in it: OFL-1.1."
-}
 python3 - "$ASSETS/LICENSES.txt" "$SD/sys/LICENSES.txt" \
-   "${IGconf_artefact_version:?}" "$(firmware_notice)" "$(package_notice)" \
-   "$(dwc_notice)" <<'PY'
+   "${IGconf_artefact_version:?}" "$(firmware_notice)" "$(package_notice)" <<'PY'
 import pathlib, sys
-src, dst, version, firmware, packages, dwc = sys.argv[1:7]
+src, dst, version, firmware, packages = sys.argv[1:6]
 text = pathlib.Path(src).read_text()
-for tag in ("@VERSION@", "@FIRMWARE@", "@PACKAGES@", "@DWC@"):
+for tag in ("@VERSION@", "@FIRMWARE@", "@PACKAGES@"):
     if tag not in text:
         sys.exit(f"mp-dsf: LICENSES.txt has no {tag} placeholder")
 text = (text.replace("@VERSION@", version)
             .replace("@FIRMWARE@", firmware + "\n")
-            .replace("@PACKAGES@", packages + "\n")
-            .replace("@DWC@", dwc + "\n"))
+            .replace("@PACKAGES@", packages + "\n"))
 pathlib.Path(dst).write_text(text)
 PY
 chmod 0644 "$SD/sys/LICENSES.txt"

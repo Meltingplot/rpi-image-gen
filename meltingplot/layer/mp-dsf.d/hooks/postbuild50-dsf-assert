@@ -64,13 +64,15 @@ done < <(find "$DSF/conf" -maxdepth 1 -type f)
 
 [[ -f $SD/sys/config.g ]] || bad "no config.g: the printer configuration was not baked in"
 [[ -f $SD/www/index.html ]] || bad "no index.html below sd/www: Duet Web Control is not where DuetWebServer looks"
-# The web interface served is the pinned build of our fork, not the packaged
-# one; the bundle names its version as a string literal.
-dwc_ver=${IGconf_dsf_dwc_version:-}
+# The web interface served is the one of the installed duetwebcontrol
+# package, and not a copy left over from somewhere else; the bundle names its
+# version as a string literal, with a hyphen where the package has a tilde.
+dwc_ver=$(dpkg-query --admindir="$ROOT/var/lib/dpkg" -W -f '${Version}' duetwebcontrol 2>/dev/null || true)
+dwc_ver=${dwc_ver//\~/-}
 if [[ -z $dwc_ver ]]; then
-   bad "dsf.dwc_version is not set, so the image would carry no Duet Web Control of ours"
+   bad "duetwebcontrol is not installed"
 elif ! grep -qF -e "\`$dwc_ver\`" -e "\"$dwc_ver\"" "$SD"/www/js/*.js 2>/dev/null; then
-   bad "sd/www does not carry Duet Web Control $dwc_ver"
+   bad "sd/www does not carry Duet Web Control $dwc_ver of the duetwebcontrol package"
 fi
 if ! { [[ -f $SD/sys/dsf-config.g ]] && grep -q 'printer-name.g' "$SD/sys/dsf-config.g"; }; then
    bad "dsf-config.g does not load printer-name.g, so the printer name would not apply"
@@ -105,11 +107,6 @@ if [[ -f ${IGconf_dsf_packages_list:-} ]]; then
       grep -Eq "^    $pkg [^:]+: " "$lic" ||
          bad "sys/LICENSES.txt does not name the package $pkg from our own build with its version"
    done < "$IGconf_dsf_packages_list"
-fi
-
-if [[ -n $dwc_ver ]]; then
-   grep -q "^    Duet Web Control $dwc_ver: " "$lic" ||
-      bad "sys/LICENSES.txt does not name Duet Web Control $dwc_ver from our fork"
 fi
 
 # --- the bundled plugin ---------------------------------------------------

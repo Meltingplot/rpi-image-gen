@@ -11,9 +11,11 @@
 # source, progs and meta, installed in place of the archive's set at a version
 # of its own, <dsf.version>+<suffix>. The suffix is what tells the build apart
 # from the archive's on the device, in dpkg, M122 and Duet Web Control alike.
-# Packages the build leaves alone, duetsd, duetwebcontrol and reprapfirmware,
-# still come from the archive: the meta package of the build pins them to the
-# archive's versions, so apt takes them from there.
+# duetwebcontrol belongs to the set once the build packages our fork of Duet
+# Web Control, whose version carries a suffix of its own; the meta package
+# then pins it to exactly that. Packages the build leaves alone, duetsd and
+# reprapfirmware, still come from the archive: the meta package of the build
+# pins them to the archive's versions, so apt takes them from there.
 #
 # The list names each package of the build, the checksum of its published
 # .deb and where it is. Only a published build is ever taken, verified against
@@ -97,7 +99,7 @@ $LIST names ${pkgs[*]} but not duetsoftwareframework.
 
 The meta package pins every other DSF package to its exact version, and the
 programs check each other's version at runtime, so a build of our own is
-installed as a whole: list every package that pkg/build.sh --packages=progs,meta
+installed as a whole: list every package that pkg/build.sh --packages=progs,dwc,meta
 produces for it."
 
 # --- fetch and check the builds -------------------------------------------

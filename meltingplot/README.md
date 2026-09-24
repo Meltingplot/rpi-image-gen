@@ -147,17 +147,16 @@ action ships.
 What the licences oblige the image to tell its user is in one place on the
 device: `0:/sys/LICENSES.txt`, readable in Duet Web Control next to the
 printer configuration and replaced with every update. It comes from
-`layer/mp-dsf.d/LICENSES.txt` with the image version filled in, the
+`layer/mp-dsf.d/LICENSES.txt` with the image version filled in and the
 paragraphs on replaced Duet firmware and on DuetSoftwareFramework packages
-from a build of our own written from `firmware.list` and `packages.list`, and
-the one on Duet Web Control written from `dsf.dwc_version`, so a patched
-board firmware, control server or web interface is named together with the
-release its modified source is published in. The file covers who licensed what, where
+from a build of our own written from `firmware.list` and `packages.list`, so
+a patched board firmware, control server or web interface is named together
+with the release its modified source is published in. The file covers who licensed what, where
 the corresponding source of the exact version is, the written offer for it,
 how a modified image gets onto the machine, and the Broadcom and Raspberry
 Pi notices the boot firmware requires to be reproduced. The post-build
 assert refuses an image without it, or one that does not name every
-replaced firmware file and package and the web interface. Everything else in the file is static: a
+replaced firmware file and package. Everything else in the file is static: a
 new component, pin or source repository means editing it.
 
 `.github/dependabot.yml` also lets Dependabot propose updates for the actions
@@ -177,10 +176,10 @@ grant check -c meltingplot/grant.yaml filesystem.spdx.json
 ### Versions and prereleases
 
 Everything the image contains is pinned: the DuetSoftwareFramework version, the
-Duet Web Control release of our fork and its checksum, the Vigil release and
-its checksum, the dsf-python version, the commit of the printer
-configuration, any Duet firmware file a build of our own replaces, and any
-DuetSoftwareFramework package that comes from a build of our own. A
+Vigil release and its checksum, the dsf-python version, the commit of the
+printer configuration, any Duet firmware file a build of our own replaces,
+and any DuetSoftwareFramework package that comes from a build of our own,
+Duet Web Control included. A
 prerelease of any of them is allowed while the image
 itself is a prerelease, and refused once it is not, so a customer image can
 never quietly contain a release candidate. The check runs before the build
@@ -238,6 +237,7 @@ duetwebserver         sha256:<checksum> https://...
 duetpluginservice     sha256:<checksum> https://...
 duettools             sha256:<checksum> https://...
 duetruntime           sha256:<checksum> https://...
+duetwebcontrol        sha256:<checksum> https://...
 ```
 
 The artefacts are the `.deb` files that the upstream packaging in the fork
@@ -246,15 +246,14 @@ builds from the modified source, what Duet3D would have put in its archive:
 ```bash
 # in the fork, on the branch of the pinned generation (v3.7-dev for 3.7.0-rc.1)
 # Directory.Build.props: <Version>3.7.0-rc.1+mp.9</Version>
-pkg/build.sh --target-arch=aarch64 --packages=progs,meta deb
+pkg/build.sh --target-arch=aarch64 --packages=progs,dwc,meta deb
 ```
 
 The build fetches every listed package, checks it against the pin, and
 installs the set in one apt transaction together with what the archive
-still provides: `duetsd`, `duetwebcontrol` and `reprapfirmware`, which the
-build's meta package pins to the archive's versions, and any package of the
-generation the list leaves out, at `dsf.version`. The files of
-`duetwebcontrol` are then replaced by our own web interface, see below. apt checks the
+still provides: `duetsd` and `reprapfirmware`, which the build's meta package
+pins to the archive's versions, and any package of the generation the list
+leaves out, at `dsf.version`. apt checks the
 exact-version chain over all of them, so a set that does not close, say a
 build without its meta package, stops the build instead of leaving a mixed
 installation. dpkg, the SBOM, `M122` and Duet Web Control then all report
@@ -276,35 +275,28 @@ which is versioned separately, and goes through `firmware.list`.
 
 ### Duet Web Control from our fork
 
-The web interface is always the one from
+The web interface is the one from
 [Meltingplot/DuetWebControl](https://github.com/Meltingplot/DuetWebControl):
 the upstream code of the pinned generation plus our changes, among them the
 CHX 350 operator interface and a free-space warning that looks at the
-virtual SD card instead of the read-only root. It is pinned in
-`layer/mp-dsf.yaml` by version and checksum:
+virtual SD card instead of the read-only root. It reaches the image as the
+`duetwebcontrol` package of the DuetSoftwareFramework build of our own, like
+any other package of that build.
 
-```
-dwc_version: 3.7.0-rc.1+mp.1
-dwc_sha256: <checksum of DuetWebControl-SBC.zip>
-```
+The upstream packaging builds `duetwebcontrol` from a checkout of Duet Web
+Control and pins it in the meta package to the version in its
+`package.json`. The fork's release workflow checks out our Duet Web Control
+at a pinned tag for that, so each DSF release names the web interface it
+carries. The version of our Duet Web Control is that of the generation plus
+a suffix, `3.7.0-rc.1+mp.1` for DSF `3.7.0~rc.1`, which is what it shows as
+its version and what the package carries as `3.7.0~rc.1+mp.1`. A change to
+the web interface therefore means a release of the fork of Duet Web Control
+(an annotated tag `v<version>` on the branch of the generation) and then one
+of the DuetSoftwareFramework fork that packages it.
 
-A release of the fork is made by pushing an annotated tag `v<version>` on
-the branch of the generation (`v3.7-dev`); its `mp-release` workflow builds
-`DuetWebControl-SBC.zip` and names the checksum in the release notes. The
-version in the fork's `package.json` is that of the pinned generation plus a
-suffix, `3.7.0-rc.1+mp.1` for DSF `3.7.0~rc.1`, and that is what Duet Web
-Control shows as its version.
-
-The build fetches the asset of that release, checks it against the pin and
-against the version the bundle names, and puts its contents in place of the
-files of the `duetwebcontrol` package, before they are moved to the virtual
-SD card. The package itself stays installed from the archive, because the
-meta package pins it to exactly the archive's version; a package of our own
-could not satisfy that. A version that is not of the pinned generation or
-has no suffix, a release that does not exist, an asset that does not match
-its checksum, or a bundle of another version stops the build. There is no
-local path and no fallback. `release.json` records the version and checksum,
-and `0:/sys/LICENSES.txt` names the release with its modified source.
+`0:/sys/LICENSES.txt` names the release of Duet Web Control its source is
+published in, and the post-build assert checks that `sd/www` holds the
+version of the installed package.
 
 ## Commissioning a printer
 

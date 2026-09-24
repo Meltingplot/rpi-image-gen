@@ -65,8 +65,6 @@ release = {
     "components": {
         "dsf": env("IGconf_dsf_version", ""),
         "dsf_suite": env("IGconf_dsf_suite", ""),
-        "dwc": env("IGconf_dsf_dwc_version", ""),
-        "dwc_sha256": env("IGconf_dsf_dwc_sha256", ""),
         "vigil": env("IGconf_dsf_vigil_version", ""),
         "vigil_sha256": env("IGconf_dsf_vigil_sha256", ""),
         "dsf_python": env("IGconf_dsf_python_version", ""),

@@ -7,14 +7,15 @@
 #
 # The DSF packages pin each other to one exact version and check it again at
 # runtime, so a build of our own is installed as a whole: every package that
-# pkg/build.sh --packages=progs,meta produces in the fork, at a version
-# <dsf.version>+<suffix> (3.7.0~rc.1+mp.1 for a modified 3.7.0~rc.1). Only
-# these packages are taken from the build; duetsd, duetwebcontrol and
-# reprapfirmware come from the archive, where the build's meta package pins
-# them. An empty list installs the archive's packages. Only a published build
-# is taken, checked against the pin: no local path, no fallback, a mismatch
-# stops the build. See "Installing a DuetSoftwareFramework build of our own"
-# in the README.
+# pkg/build.sh --packages=progs,dwc,meta produces in the fork, at a version
+# <dsf.version>+<suffix> (3.7.0~rc.1+mp.1 for a modified 3.7.0~rc.1).
+# duetwebcontrol is among them: the build packages our fork of Duet Web
+# Control, Meltingplot/DuetWebControl, at a version of the same form, and the
+# meta package pins it. duetsd and reprapfirmware come from the archive, where
+# the build's meta package pins them. An empty list installs the archive's
+# packages. Only a published build is taken, checked against the pin: no local
+# path, no fallback, a mismatch stops the build. See "Installing a
+# DuetSoftwareFramework build of our own" in the README.
 #
 # A board firmware file is not a package of the build; it goes through
 # firmware.list.

@@ -2,9 +2,9 @@
 # Refuse to build a final release out of prereleases.
 #
 # Development and release candidate images may carry a Duet release candidate,
-# a Vigil or Duet Web Control prerelease and a beta of dsf-python: that is how
-# a new firmware generation gets tested at all. A final image may not, because
-# it is what ends up on a customer's machine and in the technical file.
+# a Vigil prerelease and a beta of dsf-python: that is how a new firmware
+# generation gets tested at all. A final image may not, because it is what ends
+# up on a customer's machine and in the technical file.
 #
 # The distinction is the version of the image itself. Anything with a suffix
 # (0.1.0-rc.1, 0.0.0-dev.202609102100) is a prerelease and may use them; a bare
@@ -43,8 +43,6 @@ problems=()
 shopt -s nocasematch
 [[ ! ${IGconf_dsf_vigil_version:-} =~ -(rc|beta|alpha|dev|pre) ]] ||
    problems+=("dsf.vigil_version ${IGconf_dsf_vigil_version} is a prerelease")
-[[ ! ${IGconf_dsf_dwc_version:-} =~ -(rc|beta|alpha|dev|pre) ]] ||
-   problems+=("dsf.dwc_version ${IGconf_dsf_dwc_version} is a prerelease")
 [[ ! ${IGconf_dsf_python_version:-} =~ (a|b|rc)[0-9]+$ ]] ||
    problems+=("dsf.python_version ${IGconf_dsf_python_version} is a prerelease")
 
