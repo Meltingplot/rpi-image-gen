@@ -21,6 +21,7 @@ MP_SLOT_TRYBOOT="$tmp/rpi-slot-tryboot"
 MP_AUTOBOOT="$tmp/autoboot.txt"
 MP_OTA_STATE_FILE="$tmp/ota_state"
 MP_TRYBOOT_FLAG="$tmp/tryboot"
+MP_DSF_CONF="$tmp/dsf.conf"
 . "$here/../layer/mp-dsf.d/customize.overlay/usr/lib/meltingplot/mp-dsf.sh"
 
 fail=0
@@ -214,7 +215,7 @@ export MP_LIB="$tmp/lib"
 mkdir -p "$MP_LIB"
 cp "$here/../layer/mp-identity.d/customize.overlay/usr/lib/meltingplot/mp-common.sh" "$MP_LIB/"
 cp "$here/../layer/mp-dsf.d/customize.overlay/usr/lib/meltingplot/mp-dsf.sh" "$MP_LIB/"
-export MP_DEVICE_CONF MP_CODECONSOLE MP_SLOT_TRYBOOT MP_AUTOBOOT MP_OTA_STATE_FILE MP_TRYBOOT_FLAG
+export MP_DEVICE_CONF MP_CODECONSOLE MP_SLOT_TRYBOOT MP_AUTOBOOT MP_OTA_STATE_FILE MP_TRYBOOT_FLAG MP_DSF_CONF
 export MP_SYSTEMCTL="$tmp/systemctl"
 export MP_NOTICE_FLAG="$tmp/notice.flag"
 cat > "$MP_SYSTEMCTL" <<'EOF'
@@ -303,7 +304,8 @@ gate_case "no control server, installing"  '"idle"'       active     committed  
 # codes put up and took down. DuetControlServer -u prints one prepared answer
 # per pass; a pass that flashes resets the mainboard: the message box goes,
 # the boot time moves on (by a fixed step, so that passes in quick succession
-# still read as restarts) and the printer starts again.
+# still read as restarts) and the printer starts again. M999 does the same,
+# and with fw.stuck on file the printer never becomes idle after it.
 
 cat > "$MP_CODECONSOLE" <<'EOF'
 #!/bin/sh
@@ -328,6 +330,11 @@ case $2 in
    M292)
       echo M292 >> "$d/codes.log"
       rm -f "$d/fw.title" ;;
+   M999)
+      echo M999 >> "$d/codes.log"
+      echo $(($(cat "$d/fw.boot") + 1000)) > "$d/fw.boot"
+      rm -f "$d/fw.title"
+      if [ -e "$d/fw.stuck" ]; then echo starting; else printf 'starting\nidle\n'; fi > "$d/fw.status" ;;
 esac
 EOF
 chmod +x "$MP_CODECONSOLE"
@@ -355,8 +362,11 @@ flashed='There is 1 outdated board:
 Updating firmware on mainboard... Done!'
 uptodate='All boards are up-to-date!'
 
-# name, trybooted, status list, answers of each pass -> exit status, codes
+# name, trybooted, status list, answers of each pass -> exit status, codes.
+# The image setting MP_MAINBOARD_RESET comes from $fw_reset.
+fw_reset=n
 fw_case() {
+   echo "MP_MAINBOARD_RESET=$fw_reset" > "$MP_DSF_CONF"
    if [ "$2" = yes ]; then printf '\0\0\0\1'; else printf '\0\0\0\0'; fi > "$MP_TRYBOOT_FLAG"
    printf '%s\n' $3 > "$tmp/fw.status"
    echo $(($(date +%s) - 5000)) > "$tmp/fw.boot"
@@ -397,6 +407,28 @@ echo 3 > "$tmp/active"
 MP_FIRMWARE_WAIT=3 fw_case "update, slot not committed" yes "idle" "" \
    1 "M291 S0 T,M292,M291 S1 T"
 echo 2 > "$tmp/active"
+
+# Mainboard reset on the first boot after an update: only when nothing was
+# flashed, since a flash resets the mainboard already, and never on a normal
+# boot.
+fw_reset=y
+fw_case "reset, update, firmware current"  yes "starting starting idle" "ok" \
+   0 "M291 S0 T,DCS -u,M999,M291 S0 T,M292,M291 S1 T"
+fw_case "reset, update, one flash"         yes "starting idle" "flash ok" \
+   0 "M291 S0 T,DCS -u,M291 S0 T,DCS -u,M292,M291 S1 T"
+fw_case "reset, normal boot"               no  "idle" "ok" \
+   0 "DCS -u"
+fw_case "reset, update, flash fails"       yes "idle" "fail" \
+   1 "DCS -u,M291 S1 T"
+fw_case "reset, update, busy at the reset" yes "idle idle processing" "ok" \
+   1 "DCS -u,M291 S1 T"
+touch "$tmp/fw.stuck"
+MP_FIRMWARE_WAIT=3 fw_case "reset, update, not idle again" yes "idle" "ok" \
+   1 "DCS -u,M999,M291 S0 T,M292,M291 S1 T"
+rm -f "$tmp/fw.stuck"
+check "reset, update, not idle again, log" yes \
+   "$(grep -q 'did not come back idle after the reset' "$tmp/fw.log" && echo yes || echo no)"
+fw_reset=n
 
 [ "$fail" -eq 0 ] && echo "all tests passed"
 exit "$fail"

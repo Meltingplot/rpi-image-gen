@@ -9,7 +9,7 @@
 #  installed and restarted into between prints, the printer shows a message
 #  box while an update is in progress, and the Duet firmware follows the
 #  image once a slot is committed (mp-dsf-firmware).
-# X-Env-Layer-Version: 1.7.2
+# X-Env-Layer-Version: 1.8.0
 # X-Env-Layer-Requires: mp-duet-hw,mp-identity,device-user-admin,rpi-debian-trixie
 # X-Env-Layer-RequiresProvider: systemd
 #
@@ -113,6 +113,17 @@
 # X-Env-Var-plugin_policy-Required: n
 # X-Env-Var-plugin_policy-Valid: enforce,complain
 # X-Env-Var-plugin_policy-Set: y
+#
+# X-Env-Var-mainboard_reset_after_update: n
+# X-Env-Var-mainboard_reset_after_update-Desc: y resets the Duet mainboard
+#  once on the first boot after an update, when the firmware update did not
+#  reset it already, so that RepRapFirmware runs the config.g of this image.
+#  An update restarts only the Pi; without a reset the mainboard keeps the
+#  globals and triggers of the configuration it last ran. Set it for a
+#  release whose printer configuration changes config.g or the globals.
+# X-Env-Var-mainboard_reset_after_update-Required: n
+# X-Env-Var-mainboard_reset_after_update-Valid: y,n
+# X-Env-Var-mainboard_reset_after_update-Set: y
 # METAEND
 ---
 mmdebstrap:
@@ -195,4 +206,16 @@ mmdebstrap:
         echo "mp-dsf: WARNING plugin policy is in complain mode, it only logs" >&2
       else
         sed -i 's/__MP_MODE__//g' "$profile"
+      fi
+    # Settings of this layer that the mp-* scripts read at runtime, next to
+    # the identity file of mp-identity.
+    - |-
+      set -eu
+      install -d -m 0755 "$1/etc/meltingplot"
+      cat > "$1/etc/meltingplot/dsf.conf" <<-EOF
+      # Written by rpi-image-gen layer mp-dsf. Do not edit on the device.
+      MP_MAINBOARD_RESET=${IGconf_dsf_mainboard_reset_after_update}
+      EOF
+      if [ "$IGconf_dsf_mainboard_reset_after_update" = y ]; then
+        echo "mp-dsf: the first boot after an update resets the mainboard" >&2
       fi
