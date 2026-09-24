@@ -65,6 +65,7 @@ release = {
     "components": {
         "dsf": env("IGconf_dsf_version", ""),
         "dsf_suite": env("IGconf_dsf_suite", ""),
+        "reprapfirmware": env("IGconf_dsf_rrf_version", ""),
         "vigil": env("IGconf_dsf_vigil_version", ""),
         "vigil_sha256": env("IGconf_dsf_vigil_sha256", ""),
         "dsf_python": env("IGconf_dsf_python_version", ""),

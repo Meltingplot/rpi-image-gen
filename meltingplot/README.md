@@ -150,8 +150,8 @@ printer configuration and replaced with every update. It comes from
 `layer/mp-dsf.d/LICENSES.txt` with the image version filled in and the
 paragraphs on replaced Duet firmware and on DuetSoftwareFramework packages
 from a build of our own written from `firmware.list` and `packages.list`, so
-a patched board firmware or control server is named together with the
-release its modified source is published in. The file covers who licensed what, where
+a patched board firmware, control server or web interface is named together
+with the release its modified source is published in. The file covers who licensed what, where
 the corresponding source of the exact version is, the written offer for it,
 how a modified image gets onto the machine, and the Broadcom and Raspberry
 Pi notices the boot firmware requires to be reproduced. The post-build
@@ -178,7 +178,8 @@ grant check -c meltingplot/grant.yaml filesystem.spdx.json
 Everything the image contains is pinned: the DuetSoftwareFramework version, the
 Vigil release and its checksum, the dsf-python version, the commit of the
 printer configuration, any Duet firmware file a build of our own replaces,
-and any DuetSoftwareFramework package that comes from a build of our own. A
+and any DuetSoftwareFramework package that comes from a build of our own,
+Duet Web Control included. A
 prerelease of any of them is allowed while the image
 itself is a prerelease, and refused once it is not, so a customer image can
 never quietly contain a release candidate. The check runs before the build
@@ -192,9 +193,10 @@ Current pins are the defaults in `layer/mp-dsf.yaml`.
 
 ### Replacing a Duet firmware file
 
-The Duet firmware comes from the `reprapfirmware` package, one file per board
-type below `/opt/dsf/sd/firmware`. A build published separately, say a patched
-TOOL1LC firmware, is listed in `layer/mp-dsf.d/firmware.list`:
+The Duet firmware comes from the `reprapfirmware` package of the archive at
+`dsf.rrf_version`, one file per board type below `/opt/dsf/sd/firmware`. A
+build published separately, say a patched TOOL1LC firmware, is listed in
+`layer/mp-dsf.d/firmware.list`:
 
 ```
 Duet3Firmware_TOOL1LC.bin sha256:<checksum> https://<where the build is published>
@@ -236,29 +238,30 @@ duetwebserver         sha256:<checksum> https://...
 duetpluginservice     sha256:<checksum> https://...
 duettools             sha256:<checksum> https://...
 duetruntime           sha256:<checksum> https://...
+duetwebcontrol        sha256:<checksum> https://...
 ```
 
 The artefacts are the `.deb` files that the upstream packaging in the fork
 builds from the modified source, what Duet3D would have put in its archive:
 
 ```bash
-# in the fork, on the branch of the pinned generation (v3.7-dev for 3.7.0-rc.1)
-# Directory.Build.props: <Version>3.7.0-rc.1+mp.9</Version>
-pkg/build.sh --target-arch=aarch64 --packages=progs,meta deb
+# in the fork, on the branch of the pinned generation (v3.7-dev for 3.7.0-rc.2)
+# Directory.Build.props: <Version>3.7.0-rc.2+mp.3</Version>
+pkg/build.sh --target-arch=aarch64 --packages=progs,dwc,meta deb
 ```
 
 The build fetches every listed package, checks it against the pin, and
 installs the set in one apt transaction together with what the archive
-still provides: `duetsd`, `duetwebcontrol` and `reprapfirmware`, which the
-build's meta package pins to the archive's versions, and any package of the
-generation the list leaves out, at `dsf.version`. apt checks the
+still provides: `duetsd` and `reprapfirmware`, which the build's meta package
+pins to the archive's versions, and any package of the generation the list
+leaves out, at `dsf.version`. apt checks the
 exact-version chain over all of them, so a set that does not close, say a
 build without its meta package, stops the build instead of leaving a mixed
 installation. dpkg, the SBOM, `M122` and Duet Web Control then all report
 the build's version.
 
 The build has to be of the pinned generation and carry a version of the form
-`<dsf.version>+<suffix>`, `3.7.0~rc.1+mp.1` for a modified `3.7.0~rc.1`. The
+`<dsf.version>+<suffix>`, `3.7.0~rc.2+mp.1` for a modified `3.7.0~rc.2`. The
 suffix is what tells it apart from the archive's package; a package that
 keeps the archive's version is the archive's package and is left out of the
 list. A line that names a package outside the generation, a location that is
@@ -270,6 +273,41 @@ its modified source is published in.
 
 A board firmware file is not part of this: it belongs to `reprapfirmware`,
 which is versioned separately, and goes through `firmware.list`.
+
+`reprapfirmware` is installed at `dsf.rrf_version`, which normally equals
+`dsf.version`. Duet3D publishes the control software and the firmware of a
+version together. A build of our own can run ahead of that, when the fork has
+merged an upstream version that Duet3D has not released yet. Its meta package
+then has to accept the firmware of the last published version, which
+`pkg/firmware-version` in the fork names, and `dsf.rrf_version` is set to the
+same version. A meta package that does not accept `dsf.rrf_version`, or an
+archive without that version, stops the build.
+
+### Duet Web Control from our fork
+
+The web interface is the one from
+[Meltingplot/DuetWebControl](https://github.com/Meltingplot/DuetWebControl):
+the upstream code of the pinned generation plus our changes, among them the
+CHX 350 operator interface and a free-space warning that looks at the
+virtual SD card instead of the read-only root. It reaches the image as the
+`duetwebcontrol` package of the DuetSoftwareFramework build of our own, like
+any other package of that build.
+
+The upstream packaging builds `duetwebcontrol` from a checkout of Duet Web
+Control and pins it in the meta package to the version in its
+`package.json`. The fork's packaging clones our Duet Web Control from the
+branch of the generation (`v3.7-dev`), so a DSF release carries whatever that
+branch holds when it is built. The version of our Duet Web Control is that of
+the generation plus a suffix, `3.7.0-rc.2+mp.2` for DSF `3.7.0~rc.2`, which
+is what it shows as its version and what the package carries as
+`3.7.0~rc.2+mp.2`. A change to the web interface therefore means a release of
+the fork of Duet Web Control (an annotated tag `v<version>` on the branch of
+the generation) and then one of the DuetSoftwareFramework fork that packages
+it, while the tag is still the head of that branch.
+
+`0:/sys/LICENSES.txt` names the release of Duet Web Control its source is
+published in, and the post-build assert checks that `sd/www` holds the
+version of the installed package.
 
 ## Commissioning a printer
 
@@ -453,7 +491,14 @@ build, a read rule for them and one for its endpoint sockets below `/run/dsf`
 to the `dsf_plugin_py` profile, and its id to the Duet Web Control factory
 defaults in `sys/dwc-defaults.json`. That last file is what makes a fresh
 printer load the plugin's web part: DWC keeps its own list of enabled plugins,
-and the SBC autostart list in `plugins.txt` says nothing to it. Build with
+and the SBC autostart list in `plugins.txt` says nothing to it. The list
+replaces DWC's built-in default, so it carries that default along, including
+the CHX 350 operator interface our Duet Web Control enables.
+
+The CHX 350 operator interface is built into our Duet Web Control and has an
+optional SBC part of its own, a small daemon that reads slicer metadata from
+job files and the job history from the event log. The image does not ship
+that part yet, so the interface runs without those two. Build with
 `-- IGconf_dsf_plugin_policy=complain` to collect what a plugin needs first;
 never ship that.
 

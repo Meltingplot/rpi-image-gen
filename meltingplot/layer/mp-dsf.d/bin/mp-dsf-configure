@@ -61,69 +61,6 @@ fi
 [[ -f $SD/www/index.html ]] ||
    die "no index.html below /opt/dsf/sd/www, Duet Web Control was not installed"
 
-# --- the free-space warning -----------------------------------------------
-# On every connect DWC warns "drive almost full" when volume 0 has less than
-# 5 % free. DuetControlServer lists the mounted filesystems in mount order, so
-# volume 0 is always "/", and here that is the read-only erofs root, which
-# reports 0 bytes free by construction. Uploads go to 0:/gcodes on the
-# persistent partition, so the warning is wrong and only alarms the customer.
-# DWC has no setting for it and DCS no filter, so the check is skipped when
-# volume 0 is the root filesystem. Upstream, DCS intends volume 0 to be the
-# virtual SD card (comment in PeriodicUpdateService.GatherVolumeData); once it
-# is, or DWC checks the volume that holds gcodes, this block goes away.
-#
-# The edit is bound to one exact bundle. A different DWC stops the build, so
-# the change is looked at again rather than silently dropped or misapplied.
-#
-# TODO(release): this is a stop-gap for the lab images, not something to ship.
-# It has to be settled with Duet3D (issue or pull request against DCS or DWC)
-# and this block removed before the first customer release. Until then no
-# release image may carry it; the release gate is the place to enforce that.
-
-case $DSF_VERSION in
-   3.7.0~rc.1) dwc_app_sha256=ea3374262ba31e9579ed84790528056bfeee23adea376c52c9efff47b63fb3d2 ;;
-   *) die "no known Duet Web Control bundle for DSF $DSF_VERSION. Check whether the
-free-space warning still needs skipping for the read-only root and record the
-sha256 of js/app-*.js here." ;;
-esac
-
-python3 - "$SD/www" "$dwc_app_sha256" <<'PY'
-import glob, hashlib, pathlib, re, sys
-
-www = pathlib.Path(sys.argv[1])
-expected = sys.argv[2]
-
-apps = glob.glob(str(www / "js" / "app-*.js"))
-if len(apps) != 1:
-    sys.exit(f"mp-dsf: expected one js/app-*.js below sd/www, found {len(apps)}")
-app = pathlib.Path(apps[0])
-data = app.read_bytes()
-
-got = hashlib.sha256(data).hexdigest()
-if got != expected:
-    sys.exit(f"mp-dsf: {app.name} has sha256 {got}, expected {expected}; "
-             "the free-space patch was written for a different bundle")
-
-# App.vue: if (capacityNum > FREE_SPACE_MIN_CAPACITY && freeSpaceNum / capacityNum < ...)
-needle = b"c>Vq&&l/c<Bq&&r.log(YD.warning,Z.global.t(`notification.freeSpaceWarning.title`)"
-if data.count(needle) != 1:
-    sys.exit(f"mp-dsf: the free-space check was not found exactly once in {app.name}")
-data = data.replace(needle, b"a.path!==`/`&&" + needle)
-app.write_bytes(data)
-
-# The service worker precaches the bundle under a hash of its content. Refresh
-# it, or a browser that already cached the unpatched file would keep it.
-sw = www / "service-worker.js"
-text = sw.read_text()
-entry = re.compile(r'(url:"js/%s",revision:")[0-9a-f]{32}(")' % re.escape(app.name))
-text, n = entry.subn(r"\g<1>%s\2" % hashlib.md5(data).hexdigest(), text)
-if n != 1:
-    sys.exit(f"mp-dsf: service-worker.js has no precache entry for {app.name}")
-sw.write_text(text)
-
-print(f"mp-dsf: free-space warning skipped for the read-only root in {app.name}", file=sys.stderr)
-PY
-
 # --- printer configuration ------------------------------------------------
 # Image-owned: replaced by every update, and reset on the next boot if someone
 # edits it on the device.
@@ -147,9 +84,12 @@ say "printer configuration from chx350-config $CONFIG_COMMIT"
 # tool is the one chx350-config carries. Left out are the machine-owned files,
 # whose later edits would break their CRCs, and dsf-config.g, whose M586 C'*'
 # cannot take a line number. A plain DSF reads '*' as part of the code, so only
-# a build of our own that checks CRCs may run these files.
+# a build of our own that checks CRCs may run these files. The suffix counts
+# anew with every upstream version, so the comparison is dpkg's: 3.7.0~rc.2+mp.1
+# carries the check as well.
 dcs_ver=$(chroot "$ROOT" dpkg-query -W -f '${Version}' duetcontrolserver)
-[[ $dcs_ver =~ \+mp\.([0-9]+)$ ]] && (( BASH_REMATCH[1] >= 7 )) ||
+[[ $dcs_ver == *+mp.* ]] &&
+   chroot "$ROOT" dpkg --compare-versions "$dcs_ver" ge 3.7.0~rc.1+mp.7 ||
    die "duetcontrolserver $dcs_ver does not check G-code line CRCs, which the
 hardened printer configuration needs (3.7.0-rc.1+mp.7 or later)"
 crc_args=(-x sys/dsf-config.g)
@@ -197,10 +137,13 @@ firmware_notice() {
    fi
 }
 # The same for DSF packages from a build of our own, from packages.list. The
-# version is the one dpkg installed, which is the one the build declares.
+# version is the one dpkg installed, which is the one the build declares. The
+# build packages Duet Web Control from our fork of it, whose release tag is the
+# package version with the tilde as a hyphen, so that is where its modified
+# source is.
 package_notice() {
    local list=${IGconf_dsf_packages_list:-}
-   local line pkg sum url extra ver n=0
+   local line pkg sum url extra ver n=0 dwc=
    if [[ -f $list ]]; then
       while IFS= read -r line || [[ -n $line ]]; do
          [[ -z ${line// } || $line == \#* ]] && continue
@@ -213,12 +156,20 @@ package_notice() {
          fi
          n=$((n + 1))
          ver=$(chroot "$ROOT" dpkg-query -W -f '${Version}' "$pkg" 2>/dev/null || true)
-         if [[ $url =~ ^(https://github\.com/[^/]+/[^/]+)/releases/download/([^/]+)/ ]]; then
+         if [[ $pkg == duetwebcontrol && -n $ver ]]; then
+            dwc=v${ver//\~/-}
+            echo "    $pkg $ver: https://github.com/Meltingplot/DuetWebControl/releases/tag/${dwc//+/%2B}"
+         elif [[ $url =~ ^(https://github\.com/[^/]+/[^/]+)/releases/download/([^/]+)/ ]]; then
             echo "    $pkg ${ver:-?}: ${BASH_REMATCH[1]}/releases/tag/${BASH_REMATCH[2]}"
          else
             echo "    $pkg ${ver:-?}: $url"
          fi
       done < "$list"
+   fi
+   if [[ -n $dwc ]]; then
+      echo "  duetwebcontrol is built from Meltingplot/DuetWebControl and includes"
+      echo "  the CHX 350 operator interface, with the fonts Jost and JetBrains"
+      echo "  Mono: OFL-1.1."
    fi
    if (( n == 0 )); then
       echo "  No DuetSoftwareFramework package comes from a build of our own; the"

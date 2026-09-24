@@ -39,6 +39,8 @@ problems=()
 
 [[ ${IGconf_dsf_version:-} != *'~'* ]] ||
    problems+=("dsf.version ${IGconf_dsf_version} is a prerelease")
+[[ ${IGconf_dsf_rrf_version:-} != *'~'* ]] ||
+   problems+=("dsf.rrf_version ${IGconf_dsf_rrf_version} is a prerelease")
 
 shopt -s nocasematch
 [[ ! ${IGconf_dsf_vigil_version:-} =~ -(rc|beta|alpha|dev|pre) ]] ||

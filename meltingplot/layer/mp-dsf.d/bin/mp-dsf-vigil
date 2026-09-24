@@ -113,7 +113,8 @@ say "${#dwc_files[@]} web assets installed"
 # printer shows the plugin as partially started until someone presses Start
 # once. DWC reads 0:/sys/dwc-defaults.json when it has no settings yet, and
 # that file is image-owned like the rest of sys, so the entry is put there.
-# The list replaces DWC's built-in default, so that default is carried along.
+# The list replaces DWC's built-in default, so that default is carried along:
+# the one of our fork, which enables the CHX 350 operator interface too.
 
 python3 - "$SD/sys/dwc-defaults.json" <<'PY'
 import json, pathlib, sys
@@ -122,7 +123,7 @@ p = pathlib.Path(sys.argv[1])
 data = json.loads(p.read_text()) if p.exists() else {}
 plugins = data.get("enabledPlugins")
 if not isinstance(plugins, list):
-    plugins = ["GCodeViewer", "HeightMap", "InputShaping", "ObjectModelBrowser"]
+    plugins = ["GCodeViewer", "HeightMap", "InputShaping", "ObjectModelBrowser", "CHX350"]
 if "Vigil" not in plugins:
     plugins.append("Vigil")
 data["enabledPlugins"] = plugins

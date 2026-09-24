@@ -7,29 +7,35 @@
 #
 # The DSF packages pin each other to one exact version and check it again at
 # runtime, so a build of our own is installed as a whole: every package that
-# pkg/build.sh --packages=progs,meta produces in the fork, at a version
-# <dsf.version>+<suffix> (3.7.0~rc.1+mp.1 for a modified 3.7.0~rc.1). Only
-# these packages are taken from the build; duetsd, duetwebcontrol and
-# reprapfirmware come from the archive, where the build's meta package pins
-# them. An empty list installs the archive's packages. Only a published build
-# is taken, checked against the pin: no local path, no fallback, a mismatch
-# stops the build. See "Installing a DuetSoftwareFramework build of our own"
-# in the README.
+# pkg/build.sh --packages=progs,dwc,meta produces in the fork, at a version
+# <dsf.version>+<suffix> (3.7.0~rc.2+mp.1 for a modified 3.7.0~rc.2).
+# duetwebcontrol is among them: the build packages our fork of Duet Web
+# Control, Meltingplot/DuetWebControl, at a version of the same form, and the
+# meta package pins it. duetsd and reprapfirmware come from the archive, where
+# the build's meta package pins them; reprapfirmware at dsf.rrf_version, which
+# the meta package has to accept. An empty list installs the archive's
+# packages. Only a published build is taken, checked against the pin: no local
+# path, no fallback, a mismatch stops the build. See "Installing a
+# DuetSoftwareFramework build of our own" in the README.
 #
 # A board firmware file is not a package of the build; it goes through
 # firmware.list.
 
-# 3.7.0-rc.1+mp.9: upstream v3.7-dev up to ff937e49. The object model knows
-# sensors on CAN-connected expansion boards (analog sensor type "remote"), the
-# assisted open loop driver mode, and a pause because a board overheated and
-# its drivers were disabled. The driver mode "unknown" moves from 5 to 6; DSF
-# writes the name, so only a reader of the number is affected. mp.8 made job
-# and macro files check their N line numbers, mp.7 brought RRF-style checksums
-# on numbered lines (XOR or CRC-16/XMODEM), mp.6 the upstream fix that keeps
-# the object model in step after an SPI transfer timeout.
-duetsoftwareframework sha256:44c1aecc37a30e117bfe92928886a9d3e03e1b720494f10d00acabb3b2beea75 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.9/duetsoftwareframework_3.7.0.rc.1%2Bmp.9_arm64.deb
-duetcontrolserver sha256:f5f1a3433b7c7cb2fad33d20fa92bfb2fab619b60a83e74f0632ec14c599a501 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.9/duetcontrolserver_3.7.0.rc.1%2Bmp.9_arm64.deb
-duetwebserver sha256:63fd472a632b8cf83204d75bbedae2f016e48b4c62b4e48c64872dec3082a05c https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.9/duetwebserver_3.7.0.rc.1%2Bmp.9_arm64.deb
-duetpluginservice sha256:f9d3737f4d662b31274f809b9860c4087175b2fe5c4966c667aea5576c6414cc https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.9/duetpluginservice_3.7.0.rc.1%2Bmp.9_arm64.deb
-duettools sha256:4fac7c38f2b342a16c866f0154e0a3b5ec448a6c1151e1fe2a837dd509e8f334 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.9/duettools_3.7.0.rc.1%2Bmp.9_arm64.deb
-duetruntime sha256:632e34275d7098b9f48255778db289f86f9770e8531d0c4bc3efc06128cf23c9 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.1%2Bmp.9/duetruntime_3.7.0.rc.1%2Bmp.9_arm64.deb
+# 3.7.0-rc.2+mp.3: upstream v3.7-dev at 3.7.0-rc.2, which moves the
+# accelerometers from boards[] to sensors.accelerometers (as RepRapFirmware
+# 3.7.0-rc.1+3-mp.6 in firmware.list reports them), plus our fix for a DCS
+# crash on a non-finite expression result, and Duet Web Control from our fork,
+# 3.7.0-rc.2+mp.2, with the CHX 350 operator interface. Duet3D has published
+# no 3.7.0-rc.2 yet, so the meta package accepts the firmware of 3.7.0-rc.1
+# (pkg/firmware-version in the fork), which dsf.rrf_version installs. Earlier
+# builds: mp.9 of 3.7.0-rc.1 brought remote sensors on CAN expansion boards,
+# mp.8 checked N line numbers in job and macro files, mp.7 RRF-style checksums
+# on numbered lines, mp.6 kept the object model in step after an SPI transfer
+# timeout.
+duetsoftwareframework sha256:141fcda19af20d52d866065897a5a258df6040283f9175fb35cc158cdde2b040 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.3/duetsoftwareframework_3.7.0.rc.2%2Bmp.3_arm64.deb
+duetcontrolserver sha256:23dfb43d208376cb1b288d4e922e90ac0ed45a6fdf230dd22df5300dce040d13 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.3/duetcontrolserver_3.7.0.rc.2%2Bmp.3_arm64.deb
+duetwebserver sha256:d69dd46d17ec78236b779e0dfe06126b4bbbddf1f1cd755377d45ffb757452e4 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.3/duetwebserver_3.7.0.rc.2%2Bmp.3_arm64.deb
+duetpluginservice sha256:9e3f8f5f846944e622bbe41b4c6b76f0c2dc4d5e6202d7bc4f305246575e9746 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.3/duetpluginservice_3.7.0.rc.2%2Bmp.3_arm64.deb
+duettools sha256:59b04a7522a3b2192523903d415350a2762bd81d2b426488fe03f80f99dcdb07 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.3/duettools_3.7.0.rc.2%2Bmp.3_arm64.deb
+duetruntime sha256:5b2cc2c061ce8483ecb71b63cc8cf332812f84634221d90ccde55e908beff72f https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.3/duetruntime_3.7.0.rc.2%2Bmp.3_arm64.deb
+duetwebcontrol sha256:3645557ffbe44807dc23e6f61c2b008ea1b3fe69a860bfda4ce43c2a1036029f https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.3/duetwebcontrol_3.7.0.rc.2%2Bmp.2_all.deb

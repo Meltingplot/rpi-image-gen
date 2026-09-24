@@ -11,9 +11,14 @@
 # source, progs and meta, installed in place of the archive's set at a version
 # of its own, <dsf.version>+<suffix>. The suffix is what tells the build apart
 # from the archive's on the device, in dpkg, M122 and Duet Web Control alike.
-# Packages the build leaves alone, duetsd, duetwebcontrol and reprapfirmware,
-# still come from the archive: the meta package of the build pins them to the
-# archive's versions, so apt takes them from there.
+# duetwebcontrol belongs to the set once the build packages our fork of Duet
+# Web Control, whose version carries a suffix of its own; the meta package
+# then pins it to exactly that. Packages the build leaves alone, duetsd and
+# reprapfirmware, still come from the archive: the meta package of the build
+# pins them to the archive's versions, so apt takes them from there.
+# reprapfirmware is installed at dsf.rrf_version, which the meta package has
+# to accept. That is normally dsf.version, and an earlier version when the
+# build runs ahead of the firmware Duet3D has published.
 #
 # The list names each package of the build, the checksum of its published
 # .deb and where it is. Only a published build is ever taken, verified against
@@ -26,6 +31,7 @@ set -euo pipefail
 ROOT=${1:?rootfs}
 LIST=${IGconf_dsf_packages_list:?}
 BASE=${IGconf_dsf_version:?}
+RRF=${IGconf_dsf_rrf_version:?}
 
 # The packages pinned to dsf.version. Whichever the list does not name is
 # installed from the archive at exactly that version.
@@ -85,10 +91,25 @@ for p in "${PINNED[@]}"; do
    listed "$p" || from_archive+=("$p=$BASE")
 done
 
+# The firmware is pinned in apt's preferences, and a pin that matches nothing
+# in the archive is silently ignored. Check what apt took.
+check_firmware() {
+   local have
+   have=$(chroot "$ROOT" dpkg-query -W -f '${Version}' reprapfirmware)
+   [[ $have == "$RRF"-* ]] || die "\
+reprapfirmware $have was installed, but dsf.rrf_version is $RRF.
+
+The Duet3D archive has no reprapfirmware $RRF-<revision>, or the meta
+package does not accept it. Set dsf.rrf_version to a version that is in the
+archive and that the meta package depends on."
+   say "reprapfirmware $have from the archive"
+}
+
 if ((${#pkgs[@]} == 0)); then
    say "installing DuetSoftwareFramework $BASE from the Duet3D archive"
    chroot "$ROOT" apt-get install -y --no-install-recommends \
       "${from_archive[@]}" "${ARCHIVE_ONLY[@]}"
+   check_firmware
    exit 0
 fi
 
@@ -97,7 +118,7 @@ $LIST names ${pkgs[*]} but not duetsoftwareframework.
 
 The meta package pins every other DSF package to its exact version, and the
 programs check each other's version at runtime, so a build of our own is
-installed as a whole: list every package that pkg/build.sh --packages=progs,meta
+installed as a whole: list every package that pkg/build.sh --packages=progs,dwc,meta
 produces for it."
 
 # --- fetch and check the builds -------------------------------------------
@@ -155,3 +176,4 @@ chroot "$ROOT" apt-get install -y --no-install-recommends \
 for i in "${!pkgs[@]}"; do
    say "${pkgs[i]} $(chroot "$ROOT" dpkg-query -W -f '${Version}' "${pkgs[i]}") from ${urls[i]}"
 done
+check_firmware
