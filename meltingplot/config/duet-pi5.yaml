@@ -32,3 +32,10 @@ layer:
   net: mp-net-static
   hw: mp-duet-hw
   app: mp-dsf
+
+# chx350-config 63e38ef sets up the deadline checks as triggers in config.g.
+# A device already on rc.40 gets no firmware flash with this update, so without
+# the reset its mainboard would run without them until M999. Take this out
+# again for the next release that does not change config.g or the globals.
+dsf:
+  mainboard_reset_after_update: y
