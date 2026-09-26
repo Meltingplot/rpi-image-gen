@@ -26,4 +26,4 @@ Vigil 1.3.0-beta.5 sha256:8d83784cce44dd8dc0c46c3408fef8734ed44319adf6ffcda4d805
 # Control. It is released with Duet Web Control, from the tag the
 # duetwebcontrol package in packages.list is built from, and carries its
 # version; the post-build assert refuses a pair that differs.
-CHX350 3.7.0-rc.2+mp.4 sha256:9416d9810c69805a3dc106b57f019cd64352f609935354b20916fa51da930450 https://github.com/Meltingplot/DuetWebControl/releases/download/v3.7.0-rc.2%2Bmp.4/CHX350-SBC.zip
+CHX350 3.7.0-rc.2+mp.5 sha256:8c6977cd326e2bfbb48cafa8fecbb4dd8f3b04eba33a1f62d14e126c7d0c5ab2 https://github.com/Meltingplot/DuetWebControl/releases/download/v3.7.0-rc.2%2Bmp.5/CHX350-SBC.zip
