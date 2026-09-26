@@ -507,11 +507,15 @@ asset, checks it against the pin, checks that the manifest carries the listed
 id and version and targets the DSF generation of `dsf.version`, stages the
 manifest and the SBC files in the seed skeleton, builds the plugin's Python
 virtual environment with the pinned dsf-python at the path it will run from,
-and precompiles the sources. A plugin that needs anything beyond dsf-python on
-the SBC, or ships firmware or SD card files, is refused, because the build
-would install it incomplete. `mp-dsf-seed` puts a plugin in place on the first
-boot of an image that carries a version the printer does not have yet, and
-keeps the machine's data.
+and precompiles the sources. The Debian packages a plugin names as
+`sbcPackageDependencies` would be installed with apt by DuetSoftwareFramework,
+which a read-only root cannot do; they are in the package list of
+`layer/mp-dsf.yaml` instead, and the build stops when one of them is not
+installed. A plugin that needs Python packages beyond dsf-python, or ships
+firmware or SD card files, is refused, because the build would install it
+incomplete. `mp-dsf-seed` puts a plugin in place on the first boot of an
+image that carries a version the printer does not have yet, and keeps the
+machine's data.
 
 A plugin's web files, if it has any, go to `/opt/dsf/sd/www` with Duet Web
 Control, and its id goes into the Duet Web Control factory defaults in
@@ -531,6 +535,8 @@ Adding a plugin therefore takes, besides its line in `plugins.list`:
   device's copy whenever a plugin is started or stopped. A printer that gets
   a plugin through an update for the first time has it added by `mp-dsf-seed`,
   once, so a customer who stops it later keeps it stopped;
+- the Debian packages of its `sbcPackageDependencies` in the package list of
+  `layer/mp-dsf.yaml`;
 - its licence in `layer/mp-dsf.d/LICENSES.txt`.
 
 The post-build assert checks the read rule and the licence line of every

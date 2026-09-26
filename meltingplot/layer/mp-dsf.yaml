@@ -9,7 +9,7 @@
 #  installed and restarted into between prints, the printer shows a message
 #  box while an update is in progress, and the Duet firmware follows the
 #  image once a slot is committed (mp-dsf-firmware).
-# X-Env-Layer-Version: 1.10.0
+# X-Env-Layer-Version: 1.11.0
 # X-Env-Layer-Requires: mp-duet-hw,mp-identity,device-user-admin,rpi-debian-trixie
 # X-Env-Layer-RequiresProvider: systemd
 #
@@ -149,6 +149,16 @@ mmdebstrap:
     - python3
     - python3-venv
     - ca-certificates
+    # Debian packages for the bundled plugins, which name them in their
+    # manifests as sbcPackageDependencies. DuetSoftwareFramework would install
+    # them along with the plugin, which a read-only root cannot do, so they come
+    # with the image; mp-dsf-plugins stops the build when one is missing here.
+    #
+    # ffmpeg, for AV1: the libavcodec of the Raspberry Pi archive encodes it
+    # with SVT-AV1, libaom and rav1e and decodes it with dav1d, in software;
+    # the Raspberry Pi 5 has no AV1 hardware. The post-build assert checks that
+    # it still does.
+    - ffmpeg
     # groupadd and useradd, for the dsf account created below. device-user-admin
     # pulls this in as well, but the hook here fails hard without it.
     - passwd
