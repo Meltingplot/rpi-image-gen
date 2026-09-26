@@ -9,7 +9,7 @@ Phase 1 covers one target:
 
 | Config | Machine | Contents |
 |---|---|---|
-| `duet-pi5.yaml` | Raspberry Pi 5 on the Duet 3 mainboard of a CHX350 | DuetSoftwareFramework, Duet Web Control, the CHX350 printer configuration, the Vigil monitoring plugin |
+| `duet-pi5.yaml` | Raspberry Pi 5 on the Duet 3 mainboard of a CHX350 | DuetSoftwareFramework, Duet Web Control, the CHX350 printer configuration, the Vigil monitoring plugin, the backend of the CHX 350 operator interface |
 
 The operator panel (`hmi`) follows in phase 2 and shares `mp-base.yaml`.
 
@@ -129,9 +129,9 @@ file covers the Go runtime inside Raspberry Pi Connect, which only Raspberry
 Pi can rebuild; the symbol-level check behind it was `govulncheck
 -mode=binary` on the two Connect binaries.
 
-Two findings were removed at the source instead: the Vigil virtual environment
-no longer carries pip, which the build only needs to install dsf-python and
-which nothing on the device uses, and the wireless and bluetooth firmware is
+Two findings were removed at the source instead: the virtual environments of
+the bundled plugins no longer carry pip, which the build only needs to install
+dsf-python and which nothing on the device uses, and the wireless and bluetooth firmware is
 taken out of the image by `mp-net-static`, since the radios it serves are
 switched off in firmware anyway.
 
@@ -176,7 +176,8 @@ grant check -c meltingplot/grant.yaml filesystem.spdx.json
 ### Versions and prereleases
 
 Everything the image contains is pinned: the DuetSoftwareFramework version, the
-Vigil release and its checksum, the dsf-python version, the commit of the
+release of every bundled plugin and its checksum, the dsf-python version, the
+commit of the
 printer configuration, any Duet firmware file a build of our own replaces,
 and any DuetSoftwareFramework package that comes from a build of our own,
 Duet Web Control included. A
@@ -246,7 +247,7 @@ builds from the modified source, what Duet3D would have put in its archive:
 
 ```bash
 # in the fork, on the branch of the pinned generation (v3.7-dev for 3.7.0-rc.2)
-# Directory.Build.props: <Version>3.7.0-rc.2+mp.3</Version>
+# Directory.Build.props: <Version>3.7.0-rc.2+mp.4</Version>
 pkg/build.sh --target-arch=aarch64 --packages=progs,dwc,meta deb
 ```
 
@@ -298,12 +299,15 @@ Control and pins it in the meta package to the version in its
 `package.json`. The fork's packaging clones our Duet Web Control from the
 branch of the generation (`v3.7-dev`), so a DSF release carries whatever that
 branch holds when it is built. The version of our Duet Web Control is that of
-the generation plus a suffix, `3.7.0-rc.2+mp.2` for DSF `3.7.0~rc.2`, which
+the generation plus a suffix, `3.7.0-rc.2+mp.3` for DSF `3.7.0~rc.2`, which
 is what it shows as its version and what the package carries as
-`3.7.0~rc.2+mp.2`. A change to the web interface therefore means a release of
+`3.7.0~rc.2+mp.3`. A change to the web interface therefore means a release of
 the fork of Duet Web Control (an annotated tag `v<version>` on the branch of
 the generation) and then one of the DuetSoftwareFramework fork that packages
-it, while the tag is still the head of that branch.
+it, while the tag is still the head of that branch. The Duet Web Control
+release also carries the backend of the CHX 350 operator interface,
+`CHX350-SBC.zip`, which `plugins.list` pins at the same version (see
+Plugins).
 
 `0:/sys/LICENSES.txt` names the release of Duet Web Control its source is
 published in, and the post-build assert checks that `sd/www` holds the
@@ -334,8 +338,8 @@ the auth key from the boot partition, grows the persistent partition to the
 medium, seeds the machine-owned configuration and starts the control server.
 
 Check afterwards: Duet Web Control answers on the printer address, `M115` and
-`M122` reply, the device is listed in Connect, and the Vigil page shows
-counters.
+`M122` reply, the device is listed in Connect, the Vigil page shows counters,
+and `/machine/CHX350/status` answers.
 
 ### The printer name
 
@@ -479,28 +483,71 @@ boot after the commit, or right away with
 Duet Web Control plugins can be installed as usual. Plugins that would run code
 on the printer cannot: they install, but never start. A printer placed on the
 market may only run software that is part of a released image, so the plugins
-that do run are the ones the image brought, currently Vigil.
+that do run are the ones the image brought, currently Vigil and the backend
+of the CHX 350 operator interface.
 
 The rule is enforced by an AppArmor profile
 (`layer/mp-dsf.d/customize.overlay/etc/apparmor.d/opt.dsf.bin.DuetPluginService`)
 and a systemd sandbox around the plugin service. Refusals show up as
 `apparmor="DENIED"` in `journalctl -k`.
 
-Adding another Meltingplot plugin to an image means adding its files to the
-build, a read rule for them and one for its endpoint sockets below `/run/dsf`
-to the `dsf_plugin_py` profile, and its id to the Duet Web Control factory
-defaults in `sys/dwc-defaults.json`. That last file is what makes a fresh
-printer load the plugin's web part: DWC keeps its own list of enabled plugins,
-and the SBC autostart list in `plugins.txt` says nothing to it. The list
-replaces DWC's built-in default, so it carries that default along, including
-the CHX 350 operator interface our Duet Web Control enables.
+The bundled plugins are listed in `layer/mp-dsf.d/plugins.list`, one line per
+plugin with its id, version, checksum and the published release asset:
+
+```
+Vigil 1.3.0-beta.5 sha256:<checksum> https://github.com/Meltingplot/dwc-vigil/releases/download/...
+```
+
+`bin/mp-dsf-plugins` does at build time what DuetSoftwareFramework would do on
+installation, since the control server is not running then: it fetches each
+asset, checks it against the pin, checks that the manifest carries the listed
+id and version and targets the DSF generation of `dsf.version`, stages the
+manifest and the SBC files in the seed skeleton, builds the plugin's Python
+virtual environment with the pinned dsf-python at the path it will run from,
+and precompiles the sources. A plugin that needs anything beyond dsf-python on
+the SBC, or ships firmware or SD card files, is refused, because the build
+would install it incomplete. `mp-dsf-seed` puts a plugin in place on the first
+boot of an image that carries a version the printer does not have yet, and
+keeps the machine's data.
+
+A plugin's web files, if it has any, go to `/opt/dsf/sd/www` with Duet Web
+Control, and its id goes into the Duet Web Control factory defaults in
+`sys/dwc-defaults.json`. That last file is what makes a fresh printer load the
+plugin's web part: DWC keeps its own list of enabled plugins, and the SBC
+autostart list in `plugins.txt` says nothing to it. The list replaces DWC's
+built-in default, so it carries that default along, including the CHX 350
+operator interface our Duet Web Control enables.
+
+Adding a plugin therefore takes, besides its line in `plugins.list`:
+
+- a block in the `dsf_plugin_py` profile that lets it read its own code and
+  serve its endpoint sockets below `/run/dsf/<id>`, plus whatever else it
+  reads or writes;
+- its id in `layer/mp-dsf.d/skel/conf/plugins.txt`, if it is to start on its
+  own. That file reaches a new printer only; DuetControlServer rewrites the
+  device's copy whenever a plugin is started or stopped. A printer that gets
+  a plugin through an update for the first time has it added by `mp-dsf-seed`,
+  once, so a customer who stops it later keeps it stopped;
+- its licence in `layer/mp-dsf.d/LICENSES.txt`.
+
+The post-build assert checks the read rule and the licence line of every
+listed plugin, and refuses a profile rule or an autostart entry for a plugin
+the image does not bundle: a read rule alone would let a plugin of that name,
+installed later, run code.
 
 The CHX 350 operator interface is built into our Duet Web Control and has an
-optional SBC part of its own, a small daemon that reads slicer metadata from
-job files and the job history from the event log. The image does not ship
-that part yet, so the interface runs without those two. Build with
-`-- IGconf_dsf_plugin_policy=complain` to collect what a plugin needs first;
-never ship that.
+SBC part of its own, the plugin `CHX350`: a small daemon that serves
+`/machine/CHX350/{status,fileinfo,history,diagnostics}`, reading the slicer
+settings from the end of a job file and the job history from the event log.
+It is released with our Duet Web Control, as the asset `CHX350-SBC.zip` of
+the same tag the `duetwebcontrol` package is built from, and carries the same
+version. The two share that interface, so the post-build assert refuses a
+pair whose versions differ. The plugin has no web files and no data of its
+own, so it needs no entry in `dwc-defaults.json`: `CHX350` is in the default
+list of our Duet Web Control already.
+
+Build with `-- IGconf_dsf_plugin_policy=complain` to collect what a plugin
+needs first; never ship that.
 
 ## What is deliberately missing
 

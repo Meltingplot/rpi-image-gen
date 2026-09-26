@@ -14,6 +14,7 @@ DSF_UID=${IGconf_dsf_uid:?}
 DSF="$ROOT/opt/dsf"
 SD="$DSF/sd"
 SKEL="$ROOT/usr/share/meltingplot/dsf-skel"
+profile="$ROOT/etc/apparmor.d/opt.dsf.bin.DuetPluginService"
 
 fail=0
 bad() { echo "mp-dsf assert: $*" >&2; fail=1; }
@@ -109,16 +110,58 @@ if [[ -f ${IGconf_dsf_packages_list:-} ]]; then
    done < "$IGconf_dsf_packages_list"
 fi
 
-# --- the bundled plugin ---------------------------------------------------
+# --- the bundled plugins --------------------------------------------------
+# Every plugin on the list is staged with a virtual environment that works on
+# the device, may read its own code under the plugin policy, and is named in
+# the licence notice.
 
-[[ -f $SKEL/plugins/Vigil.json ]] || bad "Vigil was not staged into the skeleton"
-venv_python="$SKEL/plugins/Vigil/venv/bin/python"
-if [[ -L $venv_python ]]; then
-   target=$(readlink "$venv_python")
-   [[ $target == /usr/bin/python3* || $target == python3* ]] ||
-      bad "the Vigil virtual environment points at $target, which will not exist on the device"
-else
-   bad "the Vigil virtual environment has no python"
+declare -A bundled=()
+list=${IGconf_dsf_plugins_list:-}
+if [[ -f $list ]]; then
+   while read -r id version _ || [[ -n $id ]]; do
+      [[ -z $id || $id == \#* ]] && continue
+      bundled[$id]=$version
+      if [[ ! -f $SKEL/plugins/$id.json ]]; then
+         bad "$id was not staged into the skeleton"
+         continue
+      fi
+      venv_python="$SKEL/plugins/$id/venv/bin/python"
+      if [[ -L $venv_python ]]; then
+         target=$(readlink "$venv_python")
+         [[ $target == /usr/bin/python3* || $target == python3* ]] ||
+            bad "the $id virtual environment points at $target, which will not exist on the device"
+      else
+         bad "the $id virtual environment has no python"
+      fi
+      grep -qF "/opt/dsf/plugins/$id/** mr," "$profile" 2>/dev/null ||
+         bad "the plugin policy has no read rule for $id, so it would never start"
+      grep -q "^    $id, " "$lic" 2>/dev/null ||
+         bad "sys/LICENSES.txt does not name the bundled plugin $id"
+   done < "$list"
+fi
+
+# Nothing names a plugin the image does not ship. A read rule for one would
+# let a plugin of that name, installed later, run code; an autostart entry
+# would have DuetControlServer report a failed start on every boot.
+while IFS= read -r id; do
+   [[ -n ${bundled[$id]+x} ]] ||
+      bad "the plugin policy lets $id read its code, but the image does not bundle it"
+done < <(grep -v '^[[:space:]]*#' "$profile" 2>/dev/null |
+         sed -n 's|^[[:space:]]*/opt/dsf/plugins/\([^/]*\)/\*\* mr,.*|\1|p')
+if [[ -f $SKEL/conf/plugins.txt ]]; then
+   while IFS= read -r id || [[ -n $id ]]; do
+      [[ -z $id ]] && continue
+      [[ -n ${bundled[$id]+x} ]] ||
+         bad "the plugin autostart list starts $id, which the image does not bundle"
+   done < "$SKEL/conf/plugins.txt"
+fi
+
+# The CHX 350 backend serves /machine/CHX350/* to the operator interface built
+# into Duet Web Control. The two are released together, from one tag of our
+# Duet Web Control, and only a pair of the same version is known to agree on
+# that interface.
+if [[ -n ${bundled[CHX350]:-} && ${bundled[CHX350]} != "$dwc_ver" ]]; then
+   bad "the CHX350 backend is ${bundled[CHX350]}, but Duet Web Control is ${dwc_ver:-not installed}; both have to come from the same release"
 fi
 
 # --- boot configuration ---------------------------------------------------
@@ -132,7 +175,6 @@ grep -q 'cgroup_enable=memory' "$ROOT/boot/firmware/cmdline.txt" ||
 
 # --- plugin policy --------------------------------------------------------
 
-profile="$ROOT/etc/apparmor.d/opt.dsf.bin.DuetPluginService"
 if [[ -f $profile ]]; then
    if grep -q '__MP_MODE__' "$profile"; then
       bad "the AppArmor profile still carries its mode placeholder"

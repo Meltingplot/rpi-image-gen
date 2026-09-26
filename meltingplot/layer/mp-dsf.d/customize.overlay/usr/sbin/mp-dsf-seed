@@ -8,9 +8,9 @@
 # rollback. Those are kept out of the image and created here if they are
 # missing. Nothing here ever overwrites an existing file.
 #
-# The bundled Vigil plugin is handled the same way, except that it is replaced
-# when the image carries a newer version, because the plugin is part of the
-# release rather than machine state.
+# The bundled plugins are handled the same way, except that a plugin is
+# replaced when the image carries a different version, because it is part of
+# the release rather than machine state.
 
 set -eu
 
@@ -62,7 +62,7 @@ EOF
    mp_log "printer name set to '$name'"
 fi
 
-# --- bundled plugin -------------------------------------------------------
+# --- bundled plugins ------------------------------------------------------
 
 seed_plugin() {
    id=$1
@@ -84,9 +84,23 @@ seed_plugin() {
    cp -a "$manifest" "$DSF/plugins/${id}.json"
    if [ -n "$have" ]; then
       mp_log "plugin $id updated from $have to $want"
-   else
-      mp_log "plugin $id $want installed"
+      return 0
    fi
+   mp_log "plugin $id $want installed"
+
+   # The autostart list is machine state: DuetControlServer rewrites it from
+   # the running plugins whenever one is started or stopped in Duet Web
+   # Control, so the seeded copy only reaches a new printer. A plugin that an
+   # update brings to a printer for the first time is added once, if the
+   # image starts it; after that, a customer who stops it keeps it stopped.
+   autostart="$DSF/conf/plugins.txt"
+   grep -qxF "$id" "$SKEL/conf/plugins.txt" 2>/dev/null || return 0
+   grep -qxF "$id" "$autostart" 2>/dev/null && return 0
+   if [ -s "$autostart" ] && [ -n "$(tail -c 1 "$autostart")" ]; then
+      echo >> "$autostart"
+   fi
+   echo "$id" >> "$autostart"
+   mp_log "plugin $id added to the autostart list"
 }
 
 if [ -d "$SKEL/plugins" ]; then

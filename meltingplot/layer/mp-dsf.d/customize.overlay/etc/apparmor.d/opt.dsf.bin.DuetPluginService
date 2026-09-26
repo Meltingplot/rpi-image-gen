@@ -145,19 +145,41 @@ profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnec
     # in step.
     /opt/dsf/conf/config.json r,
 
-    # Plugins that came with the image. One block per bundled plugin; a plugin
-    # installed later has no block here and cannot read its own files.
+    # Plugins that came with the image (layer/mp-dsf.d/plugins.list). One
+    # block per bundled plugin; a plugin installed later has no block here and
+    # cannot read its own files. The post-build assert refuses a block for a
+    # plugin the image does not bundle, since a plugin of that name installed
+    # later would then run.
+    #
+    # The build precompiles each plugin, so Python has nothing to write into
+    # its __pycache__. Should the cache still be stale, writing it is
+    # harmless: the plugin already runs this code, and the directory is its
+    # own.
+    #
+    # All bundled plugins run in this one profile, so what one of them may
+    # read, all of them may. They all come from us; what the profile keeps
+    # out is every plugin that does not.
+
+    # Vigil, machine monitoring
     /opt/dsf/plugins/Vigil.json r,
     /opt/dsf/plugins/Vigil/** mr,
-    # The build precompiles the plugin, so Python has nothing to write here.
-    # Should the cache still be stale, writing it is harmless: the plugin
-    # already runs this code, and the directory is its own.
     owner /opt/dsf/plugins/Vigil/dsf/__pycache__/ w,
     owner /opt/dsf/plugins/Vigil/dsf/__pycache__/* rw,
-
-    # Its own data on the virtual SD card.
+    # its counters and history on the virtual SD card
     /opt/dsf/sd/Vigil/ rw,
     /opt/dsf/sd/Vigil/** rwk,
+
+    # CHX350, the backend of the CHX 350 operator interface in Duet Web
+    # Control. It writes nothing. It reads the slicer settings at the end of a
+    # job file, whose path DuetControlServer resolves, and the job history in
+    # RepRapFirmware's event log (M929 in config.g).
+    /opt/dsf/plugins/CHX350.json r,
+    /opt/dsf/plugins/CHX350/** mr,
+    owner /opt/dsf/plugins/CHX350/dsf/__pycache__/ w,
+    owner /opt/dsf/plugins/CHX350/dsf/__pycache__/* rw,
+    /opt/dsf/sd/gcodes/ r,
+    /opt/dsf/sd/gcodes/** r,
+    /opt/dsf/sd/sys/eventlog.log r,
 
     # The control server socket, which the plugin connects to, and its own
     # HTTP endpoints, which it serves: DuetControlServer creates the namespace
@@ -171,6 +193,8 @@ profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnec
     /run/dsf/* rw,
     /run/dsf/Vigil/{,**/} r,
     /run/dsf/Vigil/** rw,
+    /run/dsf/CHX350/{,**/} r,
+    /run/dsf/CHX350/** rw,
     unix (bind, listen, accept, connect, send, receive) type=stream,
 
     owner /tmp/** rw,

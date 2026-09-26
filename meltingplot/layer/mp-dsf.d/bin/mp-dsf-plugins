@@ -1,0 +1,231 @@
+#!/bin/bash
+# Preinstall the plugins the image bundles, one per line of plugins.list.
+#
+# DuetControlServer is not running at build time, so the install path DSF would
+# take is reproduced here: the manifest and the SBC files go to the plugin
+# directory, the web assets to the virtual SD card, and the Python virtual
+# environment is built at the path it will run from. The plugin directory is
+# slot-shared and therefore not part of the image, so everything lands in the
+# seed skeleton and mp-dsf-seed puts it in place on the device.
+#
+# Only published release assets are ever used. A prerelease is allowed as long
+# as the image itself is a prerelease; the release gate enforces that.
+
+set -euo pipefail
+
+ROOT=${1:?rootfs}
+LIST=${IGconf_dsf_plugins_list:?}
+DSF_VERSION=${IGconf_dsf_version:?}
+DSF_PYTHON_VERSION=${IGconf_dsf_python_version:?}
+DSF_UID=${IGconf_dsf_uid:?}
+
+SKEL="$ROOT/usr/share/meltingplot/dsf-skel"
+SD="$ROOT/opt/dsf/sd"
+
+say() { echo "mp-dsf-plugins: $*" >&2; }
+die() { echo "mp-dsf-plugins: $*" >&2; exit 1; }
+
+# Duet Web Control generation a plugin has to match: 3.7.0~rc.2 -> 3.7
+dotted=$(printf '%s' "$DSF_VERSION" | sed -n 's/^\([0-9]\{1,\}\.[0-9]\{1,\}\).*/\1/p')
+[[ -n $dotted ]] || die "cannot derive the DWC generation from dsf version $DSF_VERSION"
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+install_plugin() {
+   local id=$1 version=$2 sum=$3 url=$4
+   local work="$tmp/$id" plugin_dir=/opt/dsf/plugins/$id
+   local exe f
+   local -a dwc_files
+   mkdir -p "$work"
+
+   # vfetch is rpi-image-gen's own downloader: it verifies the checksum and
+   # keeps a verified copy in the build cache (IGconf_sys_cachedir), so a
+   # second build does not fetch the asset again. rpi-image-gen clean
+   # discards that cache.
+   say "fetching $id $version"
+   printf '%s sha256:%s %s\n' "$id-$version.zip" "$sum" "$url" > "$work/meta"
+   vfetch "$work/meta" "$work/plugin.zip" || die "\
+could not obtain $id $version with checksum $sum from
+  $url
+
+Either there is no such release asset, or it does not match the pin. The image
+only ever installs published release assets, so there is nothing to fall back
+to: publish the release, or point the line for $id in plugins.list at one that
+exists. Do not build past this."
+
+   # --- unpack ------------------------------------------------------------
+
+   python3 - "$work/plugin.zip" "$work" "$id" "$version" "$dotted" <<'PY'
+import json, pathlib, sys, zipfile
+
+archive, work, want_id, want_version, want_dwc = sys.argv[1:6]
+work = pathlib.Path(work)
+dest = work / "x"
+
+with zipfile.ZipFile(archive) as z:
+    names = z.namelist()
+    for name in names:
+        if name.startswith("/") or ".." in pathlib.PurePosixPath(name).parts:
+            sys.exit(f"mp-dsf-plugins: refusing path {name!r} in the {want_id} archive")
+    z.extractall(dest)
+
+manifest = json.loads((dest / "plugin.json").read_text())
+problems = []
+if manifest.get("id") != want_id:
+    problems.append(f"manifest id {manifest.get('id')!r}, listed as {want_id!r}")
+if manifest.get("version") != want_version:
+    problems.append(f"manifest version {manifest.get('version')!r}, pinned {want_version!r}")
+for key in ("dwcVersion", "sbcDsfVersion"):
+    value = str(manifest.get(key, ""))
+    if value not in (want_dwc, "auto-major"):
+        problems.append(f"{key} {value!r}, image carries DSF {want_dwc}")
+if not manifest.get("sbcExecutable"):
+    problems.append("no sbcExecutable, so there is nothing to bundle")
+# What DSF would install beyond the SBC and web files, the build does not: it
+# puts dsf-python into the virtual environment and nothing else. A plugin that
+# needs more would come out incomplete, so it stops here instead.
+extra = [d for d in manifest.get("sbcPythonDependencies", []) if d != "dsf-python"]
+if extra:
+    problems.append(f"Python dependencies beyond dsf-python: {extra}")
+if manifest.get("sbcPackageDependencies"):
+    problems.append(f"package dependencies: {manifest['sbcPackageDependencies']}")
+if manifest.get("rrfFiles"):
+    problems.append(f"firmware files: {manifest['rrfFiles']}")
+sd = [n for n in names if n.startswith("sd/") and not n.endswith("/")]
+if sd:
+    problems.append(f"files for the virtual SD card: {sd}")
+if problems:
+    sys.exit(f"mp-dsf-plugins: {want_id}: " + "; ".join(problems))
+
+(work / "exe").write_text(manifest["sbcExecutable"])
+(work / "dwc").write_text("".join(f + "\n" for f in manifest.get("dwcFiles", []) if f))
+PY
+
+   exe=$(<"$work/exe")
+   mapfile -t dwc_files < "$work/dwc"
+
+   # --- SBC side ----------------------------------------------------------
+
+   install -d -m 0755 "$SKEL/plugins"
+   install -m 0644 "$work/x/plugin.json" "$SKEL/plugins/$id.json"
+
+   install -d -m 2770 "$SKEL/plugins/$id/dsf"
+   cp -a "$work/x/dsf/." "$SKEL/plugins/$id/dsf/"
+   [[ -f $SKEL/plugins/$id/dsf/$exe ]] || die "the $id archive has no dsf/$exe"
+   chmod 0770 "$SKEL/plugins/$id/dsf/$exe"
+
+   # --- web side ----------------------------------------------------------
+   # Image-owned: pushed over the device copy on every boot, so an update
+   # also updates the plugin's user interface. A plugin whose interface is
+   # built into Duet Web Control lists no web files and has nothing here.
+
+   if (( ${#dwc_files[@]} )); then
+      for f in "${dwc_files[@]}"; do
+         [[ -f $work/x/dwc/$f ]] || die "the $id plugin.json lists dwc/$f, which the archive does not contain"
+         install -D -m 0660 "$work/x/dwc/$f" "$SD/www/$f"
+      done
+      say "$id: ${#dwc_files[@]} web assets installed"
+
+      # Duet Web Control loads a plugin's web part only for the plugins in its
+      # own list, which lives in the machine-owned 0:/sys/dwc-settings.json.
+      # The SBC autostart list in plugins.txt says nothing to it. Without an
+      # entry a fresh printer shows the plugin as partially started until
+      # someone presses Start once. DWC reads 0:/sys/dwc-defaults.json when it
+      # has no settings yet, and that file is image-owned like the rest of
+      # sys, so the entry is put there. The list replaces DWC's built-in
+      # default, so that default is carried along: the one of our fork, which
+      # enables the CHX 350 operator interface too.
+      python3 - "$SD/sys/dwc-defaults.json" "$id" <<'PY'
+import json, pathlib, sys
+
+p, plugin = pathlib.Path(sys.argv[1]), sys.argv[2]
+data = json.loads(p.read_text()) if p.exists() else {}
+plugins = data.get("enabledPlugins")
+if not isinstance(plugins, list):
+    plugins = ["GCodeViewer", "HeightMap", "InputShaping", "ObjectModelBrowser", "CHX350"]
+if plugin not in plugins:
+    plugins.append(plugin)
+data["enabledPlugins"] = plugins
+p.parent.mkdir(parents=True, exist_ok=True)
+p.write_text(json.dumps(data, indent=2) + "\n")
+PY
+      chmod 0660 "$SD/sys/dwc-defaults.json"
+      say "$id enabled in the Duet Web Control factory defaults"
+   else
+      say "$id has no web assets of its own"
+   fi
+
+   # --- Python environment ------------------------------------------------
+   # Built at the path it will run from: a virtual environment records
+   # absolute paths, and DuetPluginService starts the daemon as
+   # <plugin>/venv/bin/python.
+
+   say "$id: building the plugin virtual environment (emulated, this takes a while)"
+   chroot "$ROOT" python3 -m venv "$plugin_dir/venv"
+   # The venv starts with the pip Debian ships, which is older than the fixes
+   # the scanners know. The build installs with a current pip and then takes
+   # it out again: nothing on the device installs packages, the root is
+   # read-only, and a pip that never ships needs no tracking in the SBOM.
+   chroot "$ROOT" "$plugin_dir/venv/bin/pip" install \
+      --no-cache-dir --disable-pip-version-check --upgrade pip ||
+      die "pip could not be updated from PyPI"
+   chroot "$ROOT" "$plugin_dir/venv/bin/pip" install \
+      --no-cache-dir --disable-pip-version-check \
+      "dsf-python==${DSF_PYTHON_VERSION}" ||
+      die "dsf-python ${DSF_PYTHON_VERSION} could not be installed from PyPI"
+   chroot "$ROOT" "$plugin_dir/venv/bin/pip" uninstall -y --disable-pip-version-check pip ||
+      die "pip could not be removed from the virtual environment"
+
+   [[ -x $ROOT$plugin_dir/venv/bin/python ]] || die "the $id virtual environment has no python"
+   [[ ! -e $ROOT$plugin_dir/venv/bin/pip ]] || die "pip is still in the $id virtual environment"
+   mv "$ROOT$plugin_dir/venv" "$SKEL/plugins/$id/venv"
+   rmdir "$ROOT$plugin_dir" 2>/dev/null || true
+
+   # Python writes bytecode next to the sources on first import. Done here
+   # instead, so the plugin starts from a finished cache and never needs to
+   # write into its own directory on the device. The seed copies the tree
+   # with its timestamps, which is what keeps the cache valid.
+   chroot "$ROOT" python3 -m compileall -q "${SKEL#"$ROOT"}/plugins/$id/dsf" ||
+      die "the $id sources do not compile"
+
+   say "$id $version staged with dsf-python ${DSF_PYTHON_VERSION}"
+}
+
+# --- the list -------------------------------------------------------------
+# Read in full first: the installs run programs in the chroot, and none of
+# them should see the list on its standard input.
+
+[[ -f $LIST ]] || die "no plugin list at $LIST"
+entries=()
+ids=()
+declare -A seen=()
+while read -r id version sum url extra || [[ -n $id ]]; do
+   [[ -z $id || $id == \#* ]] && continue
+   [[ -n $url && -z $extra ]] ||
+      die "the line for $id in $(basename "$LIST") is not <id> <version> sha256:<hex> <https url>"
+   # The id becomes a directory name here, on the device and in the plugin
+   # policy.
+   [[ $id =~ ^[A-Za-z0-9_-]+$ ]] || die "'$id' in $(basename "$LIST") is not a plugin id"
+   [[ $sum =~ ^sha256:[0-9a-fA-F]{64}$ ]] || die "$id: '$sum' is not sha256:<64 hex digits>"
+   [[ $url == https://* ]] || die "$id: '$url' is not an https location"
+   [[ -z ${seen[$id]:-} ]] || die "$id is listed twice in $(basename "$LIST")"
+   seen[$id]=1
+   ids+=("$id")
+   entries+=("$id $version ${sum#sha256:} $url")
+done < "$LIST"
+
+if (( ${#entries[@]} == 0 )); then
+   say "$(basename "$LIST") lists no plugin, none bundled"
+   exit 0
+fi
+
+for entry in "${entries[@]}"; do
+   # shellcheck disable=SC2086 # four fields, none with blanks
+   install_plugin $entry
+done
+
+chown -R "$DSF_UID:$DSF_UID" "$SKEL/plugins" "$SD/www"
+[[ ! -f $SD/sys/dwc-defaults.json ]] || chown "$DSF_UID:$DSF_UID" "$SD/sys/dwc-defaults.json"
+
+say "${#ids[@]} plugins staged: ${ids[*]}"

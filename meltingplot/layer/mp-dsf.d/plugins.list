@@ -1,0 +1,29 @@
+# Duet plugins the image bundles, the only ones that may run code on the
+# printer.
+#
+# One line per plugin:
+#
+#   <id> <version> sha256:<checksum of the release asset> <https location>
+#
+# The asset is a plugin ZIP as DuetSoftwareFramework installs it. Its
+# plugin.json has to carry this id and version and target the DSF generation
+# of dsf.version; a plugin that needs more than dsf-python on the SBC is
+# refused, because the build would install it incomplete. Only a published
+# release asset is taken, checked against the pin: no local path, no fallback,
+# a mismatch stops the build.
+#
+# A plugin listed here also needs its block in the plugin policy
+# (customize.overlay/etc/apparmor.d/opt.dsf.bin.DuetPluginService), its
+# licence in LICENSES.txt, and its id in skel/conf/plugins.txt if it is to
+# start on its own. The post-build assert checks the first two, and refuses a
+# policy rule or autostart entry for a plugin that is not listed here. See
+# "Plugins" in the README.
+
+# Vigil, the machine monitoring plugin, as built for Duet Web Control 3.7.
+Vigil 1.3.0-beta.5 sha256:8d83784cce44dd8dc0c46c3408fef8734ed44319adf6ffcda4d80568259bd8ac https://github.com/Meltingplot/dwc-vigil/releases/download/v1.3.0-beta.5/Vigil-1.3.0-beta.5-dwc37.zip
+
+# CHX350, the backend of the CHX 350 operator interface built into our Duet Web
+# Control. It is released with Duet Web Control, from the tag the
+# duetwebcontrol package in packages.list is built from, and carries its
+# version; the post-build assert refuses a pair that differs.
+CHX350 3.7.0-rc.2+mp.3 sha256:a3cb67ff1122fd8fb4332f02d12499a89ebd83bebcf6c5c773cca0fb32f44bfe https://github.com/Meltingplot/DuetWebControl/releases/download/v3.7.0-rc.2%2Bmp.3/CHX350-SBC.zip
