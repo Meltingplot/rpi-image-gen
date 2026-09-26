@@ -9,7 +9,7 @@ Phase 1 covers one target:
 
 | Config | Machine | Contents |
 |---|---|---|
-| `duet-pi5.yaml` | Raspberry Pi 5 on the Duet 3 mainboard of a CHX350 | DuetSoftwareFramework, Duet Web Control, the CHX350 printer configuration, the Vigil monitoring plugin |
+| `duet-pi5.yaml` | Raspberry Pi 5 on the Duet 3 mainboard of a CHX350 | DuetSoftwareFramework, Duet Web Control, the CHX350 printer configuration, the Vigil monitoring plugin, the backend of the CHX 350 operator interface |
 
 The operator panel (`hmi`) follows in phase 2 and shares `mp-base.yaml`.
 
@@ -335,8 +335,8 @@ the auth key from the boot partition, grows the persistent partition to the
 medium, seeds the machine-owned configuration and starts the control server.
 
 Check afterwards: Duet Web Control answers on the printer address, `M115` and
-`M122` reply, the device is listed in Connect, and the Vigil page shows
-counters.
+`M122` reply, the device is listed in Connect, the Vigil page shows counters,
+and `/machine/CHX350/status` answers.
 
 ### The printer name
 
@@ -480,7 +480,8 @@ boot after the commit, or right away with
 Duet Web Control plugins can be installed as usual. Plugins that would run code
 on the printer cannot: they install, but never start. A printer placed on the
 market may only run software that is part of a released image, so the plugins
-that do run are the ones the image brought, currently Vigil.
+that do run are the ones the image brought, currently Vigil and the backend
+of the CHX 350 operator interface.
 
 The rule is enforced by an AppArmor profile
 (`layer/mp-dsf.d/customize.overlay/etc/apparmor.d/opt.dsf.bin.DuetPluginService`)
@@ -532,11 +533,18 @@ the image does not bundle: a read rule alone would let a plugin of that name,
 installed later, run code.
 
 The CHX 350 operator interface is built into our Duet Web Control and has an
-optional SBC part of its own, a small daemon that reads slicer metadata from
-job files and the job history from the event log. The image does not ship
-that part yet, so the interface runs without those two. Build with
-`-- IGconf_dsf_plugin_policy=complain` to collect what a plugin needs first;
-never ship that.
+SBC part of its own, the plugin `CHX350`: a small daemon that serves
+`/machine/CHX350/{status,fileinfo,history,diagnostics}`, reading the slicer
+settings from the end of a job file and the job history from the event log.
+It is released with our Duet Web Control, as the asset `CHX350-SBC.zip` of
+the same tag the `duetwebcontrol` package is built from, and carries the same
+version. The two share that interface, so the post-build assert refuses a
+pair whose versions differ. The plugin has no web files and no data of its
+own, so it needs no entry in `dwc-defaults.json`: `CHX350` is in the default
+list of our Duet Web Control already.
+
+Build with `-- IGconf_dsf_plugin_policy=complain` to collect what a plugin
+needs first; never ship that.
 
 ## What is deliberately missing
 

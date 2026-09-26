@@ -34,6 +34,10 @@ Meltingplot software
   Plugins that come with the image; release.json names the version of each:
     Vigil, the machine monitoring plugin: MIT.
       https://github.com/Meltingplot/dwc-vigil
+    CHX350, the SBC backend of the CHX 350 operator interface:
+      GPL-3.0-or-later. Released with our Duet Web Control, from the same
+      tag as the duetwebcontrol package named above.
+      https://github.com/Meltingplot/DuetWebControl
   The image definition and build, based on rpi-image-gen by Raspberry Pi Ltd:
   BSD-3-Clause.
   https://github.com/Meltingplot/rpi-image-gen
