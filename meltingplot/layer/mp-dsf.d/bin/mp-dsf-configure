@@ -254,8 +254,8 @@ def patch(path, changes):
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, indent=2) + "\n")
 
-# DuetControlServer. Plugin support stays on because the image ships Vigil, but
-# a plugin can never gain root and can never install packages.
+# DuetControlServer. Plugin support stays on because the image ships plugins of
+# its own, but a plugin can never gain root and can never install packages.
 patch("opt/dsf/conf/config.json", {
     "PluginSupport": True,
     "RootPluginSupport": False,

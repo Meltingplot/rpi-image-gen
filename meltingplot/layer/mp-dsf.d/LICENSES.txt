@@ -31,8 +31,9 @@ Printer software (Duet3D Ltd)
 Meltingplot software
   Printer configuration for the CHX350: MIT.
   https://github.com/Meltingplot/chx350-config
-  Vigil, the machine monitoring plugin: MIT.
-  https://github.com/Meltingplot/dwc-vigil
+  Plugins that come with the image; release.json names the version of each:
+    Vigil, the machine monitoring plugin: MIT.
+      https://github.com/Meltingplot/dwc-vigil
   The image definition and build, based on rpi-image-gen by Raspberry Pi Ltd:
   BSD-3-Clause.
   https://github.com/Meltingplot/rpi-image-gen

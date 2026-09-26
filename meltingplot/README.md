@@ -129,9 +129,9 @@ file covers the Go runtime inside Raspberry Pi Connect, which only Raspberry
 Pi can rebuild; the symbol-level check behind it was `govulncheck
 -mode=binary` on the two Connect binaries.
 
-Two findings were removed at the source instead: the Vigil virtual environment
-no longer carries pip, which the build only needs to install dsf-python and
-which nothing on the device uses, and the wireless and bluetooth firmware is
+Two findings were removed at the source instead: the virtual environments of
+the bundled plugins no longer carry pip, which the build only needs to install
+dsf-python and which nothing on the device uses, and the wireless and bluetooth firmware is
 taken out of the image by `mp-net-static`, since the radios it serves are
 switched off in firmware anyway.
 
@@ -176,7 +176,8 @@ grant check -c meltingplot/grant.yaml filesystem.spdx.json
 ### Versions and prereleases
 
 Everything the image contains is pinned: the DuetSoftwareFramework version, the
-Vigil release and its checksum, the dsf-python version, the commit of the
+release of every bundled plugin and its checksum, the dsf-python version, the
+commit of the
 printer configuration, any Duet firmware file a build of our own replaces,
 and any DuetSoftwareFramework package that comes from a build of our own,
 Duet Web Control included. A
@@ -486,14 +487,49 @@ The rule is enforced by an AppArmor profile
 and a systemd sandbox around the plugin service. Refusals show up as
 `apparmor="DENIED"` in `journalctl -k`.
 
-Adding another Meltingplot plugin to an image means adding its files to the
-build, a read rule for them and one for its endpoint sockets below `/run/dsf`
-to the `dsf_plugin_py` profile, and its id to the Duet Web Control factory
-defaults in `sys/dwc-defaults.json`. That last file is what makes a fresh
-printer load the plugin's web part: DWC keeps its own list of enabled plugins,
-and the SBC autostart list in `plugins.txt` says nothing to it. The list
-replaces DWC's built-in default, so it carries that default along, including
-the CHX 350 operator interface our Duet Web Control enables.
+The bundled plugins are listed in `layer/mp-dsf.d/plugins.list`, one line per
+plugin with its id, version, checksum and the published release asset:
+
+```
+Vigil 1.3.0-beta.5 sha256:<checksum> https://github.com/Meltingplot/dwc-vigil/releases/download/...
+```
+
+`bin/mp-dsf-plugins` does at build time what DuetSoftwareFramework would do on
+installation, since the control server is not running then: it fetches each
+asset, checks it against the pin, checks that the manifest carries the listed
+id and version and targets the DSF generation of `dsf.version`, stages the
+manifest and the SBC files in the seed skeleton, builds the plugin's Python
+virtual environment with the pinned dsf-python at the path it will run from,
+and precompiles the sources. A plugin that needs anything beyond dsf-python on
+the SBC, or ships firmware or SD card files, is refused, because the build
+would install it incomplete. `mp-dsf-seed` puts a plugin in place on the first
+boot of an image that carries a version the printer does not have yet, and
+keeps the machine's data.
+
+A plugin's web files, if it has any, go to `/opt/dsf/sd/www` with Duet Web
+Control, and its id goes into the Duet Web Control factory defaults in
+`sys/dwc-defaults.json`. That last file is what makes a fresh printer load the
+plugin's web part: DWC keeps its own list of enabled plugins, and the SBC
+autostart list in `plugins.txt` says nothing to it. The list replaces DWC's
+built-in default, so it carries that default along, including the CHX 350
+operator interface our Duet Web Control enables.
+
+Adding a plugin therefore takes, besides its line in `plugins.list`:
+
+- a block in the `dsf_plugin_py` profile that lets it read its own code and
+  serve its endpoint sockets below `/run/dsf/<id>`, plus whatever else it
+  reads or writes;
+- its id in `layer/mp-dsf.d/skel/conf/plugins.txt`, if it is to start on its
+  own. That file reaches a new printer only; DuetControlServer rewrites the
+  device's copy whenever a plugin is started or stopped. A printer that gets
+  a plugin through an update for the first time has it added by `mp-dsf-seed`,
+  once, so a customer who stops it later keeps it stopped;
+- its licence in `layer/mp-dsf.d/LICENSES.txt`.
+
+The post-build assert checks the read rule and the licence line of every
+listed plugin, and refuses a profile rule or an autostart entry for a plugin
+the image does not bundle: a read rule alone would let a plugin of that name,
+installed later, run code.
 
 The CHX 350 operator interface is built into our Duet Web Control and has an
 optional SBC part of its own, a small daemon that reads slicer metadata from

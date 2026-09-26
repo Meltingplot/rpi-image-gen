@@ -47,6 +47,20 @@ def pins(path, key):
         found.append({key: name, "sha256": algo_hex.split(":", 1)[1].lower(), "url": url})
     return found
 
+def plugins(path):
+    # The bundled plugins as plugins.list pins them.
+    if not path or not os.path.isfile(path):
+        return []
+    found = []
+    for line in pathlib.Path(path).read_text().splitlines():
+        parts = line.split()
+        if not parts or parts[0].startswith("#"):
+            continue
+        plugin, version, algo_hex, url = parts[:4]
+        found.append({"id": plugin, "version": version,
+                      "sha256": algo_hex.split(":", 1)[1].lower(), "url": url})
+    return found
+
 release = {
     "version": env("IGconf_artefact_version", ""),
     "image": env("IGconf_image_name", ""),
@@ -66,9 +80,8 @@ release = {
         "dsf": env("IGconf_dsf_version", ""),
         "dsf_suite": env("IGconf_dsf_suite", ""),
         "reprapfirmware": env("IGconf_dsf_rrf_version", ""),
-        "vigil": env("IGconf_dsf_vigil_version", ""),
-        "vigil_sha256": env("IGconf_dsf_vigil_sha256", ""),
         "dsf_python": env("IGconf_dsf_python_version", ""),
+        "plugins": plugins(env("IGconf_dsf_plugins_list", "")),
         "plugin_policy": env("IGconf_dsf_plugin_policy", ""),
         "mainboard_reset_after_update": env("IGconf_dsf_mainboard_reset_after_update", "n") == "y",
         "firmware_replaced": pins(env("IGconf_dsf_firmware_list", ""), "file"),

@@ -2,7 +2,7 @@
 # Refuse to build a final release out of prereleases.
 #
 # Development and release candidate images may carry a Duet release candidate,
-# a Vigil prerelease and a beta of dsf-python: that is how a new firmware
+# a plugin prerelease and a beta of dsf-python: that is how a new firmware
 # generation gets tested at all. A final image may not, because it is what ends
 # up on a customer's machine and in the technical file.
 #
@@ -43,10 +43,18 @@ problems=()
    problems+=("dsf.rrf_version ${IGconf_dsf_rrf_version} is a prerelease")
 
 shopt -s nocasematch
-[[ ! ${IGconf_dsf_vigil_version:-} =~ -(rc|beta|alpha|dev|pre) ]] ||
-   problems+=("dsf.vigil_version ${IGconf_dsf_vigil_version} is a prerelease")
 [[ ! ${IGconf_dsf_python_version:-} =~ (a|b|rc)[0-9]+$ ]] ||
    problems+=("dsf.python_version ${IGconf_dsf_python_version} is a prerelease")
+
+# A bundled plugin carries its version in the list.
+list=${IGconf_dsf_plugins_list:-}
+if [[ -f $list ]]; then
+   while read -r id version _ || [[ -n $id ]]; do
+      [[ -z $id || $id == \#* ]] && continue
+      [[ ! $version =~ -(rc|beta|alpha|dev|pre) ]] ||
+         problems+=("the bundled plugin $id is at the prerelease $version")
+   done < "$list"
+fi
 
 # A replaced firmware file is pinned by its published location; the release it
 # came from is the version segment of that path.
