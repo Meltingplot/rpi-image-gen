@@ -84,6 +84,19 @@ fi
 compgen -G "$ROOT/usr/lib/*/libicuuc.so.*" >/dev/null ||
    bad "libicu is not installed, so DuetPluginService and the duettools abort at startup"
 
+# ffmpeg is in the image for AV1, which it encodes and decodes through
+# libraries libavcodec links against. A libavcodec built without them would
+# install just the same and only fail at the first encode.
+if [[ $(dpkg-query --admindir="$ROOT/var/lib/dpkg" -W -f '${db:Status-Abbrev}' ffmpeg 2>/dev/null) != ii* ]]; then
+   bad "ffmpeg is not installed"
+else
+   avcodec=$(dpkg-query --admindir="$ROOT/var/lib/dpkg" -W -f '${Depends}\n' 'libavcodec[0-9]*' 2>/dev/null || true)
+   grep -Eq 'libsvtav1enc|libaom|librav1e' <<< "$avcodec" ||
+      bad "libavcodec links no AV1 encoder (SVT-AV1, libaom, rav1e), so ffmpeg cannot write AV1"
+   grep -Eq 'libdav1d|libaom' <<< "$avcodec" ||
+      bad "libavcodec links no AV1 decoder (dav1d, libaom), so ffmpeg cannot read AV1"
+fi
+
 uid=$(awk -F: '$1=="dsf"{print $3}' "$ROOT/etc/passwd")
 [[ $uid == "$DSF_UID" ]] ||
    bad "dsf has uid ${uid:-none}, expected $DSF_UID; persistent files are owned numerically"

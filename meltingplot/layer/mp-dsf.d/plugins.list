@@ -7,10 +7,11 @@
 #
 # The asset is a plugin ZIP as DuetSoftwareFramework installs it. Its
 # plugin.json has to carry this id and version and target the DSF generation
-# of dsf.version; a plugin that needs more than dsf-python on the SBC is
-# refused, because the build would install it incomplete. Only a published
-# release asset is taken, checked against the pin: no local path, no fallback,
-# a mismatch stops the build.
+# of dsf.version. The Debian packages it names as sbcPackageDependencies have
+# to be in the package list of mp-dsf.yaml; a plugin that needs Python
+# packages beyond dsf-python is refused, because the build would install it
+# incomplete. Only a published release asset is taken, checked against the
+# pin: no local path, no fallback, a mismatch stops the build.
 #
 # A plugin listed here also needs its block in the plugin policy
 # (customize.overlay/etc/apparmor.d/opt.dsf.bin.DuetPluginService), its

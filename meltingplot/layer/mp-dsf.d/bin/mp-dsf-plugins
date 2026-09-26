@@ -57,7 +57,7 @@ exists. Do not build past this."
    # --- unpack ------------------------------------------------------------
 
    python3 - "$work/plugin.zip" "$work" "$id" "$version" "$dotted" <<'PY'
-import json, pathlib, sys, zipfile
+import json, pathlib, re, sys, zipfile
 
 archive, work, want_id, want_version, want_dwc = sys.argv[1:6]
 work = pathlib.Path(work)
@@ -82,14 +82,20 @@ for key in ("dwcVersion", "sbcDsfVersion"):
         problems.append(f"{key} {value!r}, image carries DSF {want_dwc}")
 if not manifest.get("sbcExecutable"):
     problems.append("no sbcExecutable, so there is nothing to bundle")
-# What DSF would install beyond the SBC and web files, the build does not: it
-# puts dsf-python into the virtual environment and nothing else. A plugin that
-# needs more would come out incomplete, so it stops here instead.
+# What DSF would install beyond the SBC and web files, the build does only in
+# part: it puts dsf-python into the virtual environment, and the Debian
+# packages come with the package list of the layer, which is checked below.
+# A plugin that needs more would come out incomplete, so it stops here instead.
 extra = [d for d in manifest.get("sbcPythonDependencies", []) if d != "dsf-python"]
 if extra:
     problems.append(f"Python dependencies beyond dsf-python: {extra}")
-if manifest.get("sbcPackageDependencies"):
-    problems.append(f"package dependencies: {manifest['sbcPackageDependencies']}")
+# DSF takes a package name as it stands, without a version or architecture,
+# and so does the check below. dpkg-query would read anything else as a
+# pattern, and a pattern that matches some installed package passes.
+packages = manifest.get("sbcPackageDependencies", [])
+bad_names = [p for p in packages if not re.fullmatch(r"[a-z0-9][a-z0-9.+-]+", p)]
+if bad_names:
+    problems.append(f"package dependencies that are not Debian package names: {bad_names}")
 if manifest.get("rrfFiles"):
     problems.append(f"firmware files: {manifest['rrfFiles']}")
 sd = [n for n in names if n.startswith("sd/") and not n.endswith("/")]
@@ -100,10 +106,26 @@ if problems:
 
 (work / "exe").write_text(manifest["sbcExecutable"])
 (work / "dwc").write_text("".join(f + "\n" for f in manifest.get("dwcFiles", []) if f))
+(work / "pkgs").write_text("".join(p + "\n" for p in packages))
 PY
 
    exe=$(<"$work/exe")
    mapfile -t dwc_files < "$work/dwc"
+   mapfile -t packages < "$work/pkgs"
+
+   # --- Debian packages ---------------------------------------------------
+   # DSF would install these with apt when the plugin is installed. Nothing
+   # installs packages on the read-only root, so they are in the package list
+   # of mp-dsf.yaml, which mmdebstrap has installed before this hook runs.
+   # Checked before the virtual environment, which takes the longest.
+
+   if (( ${#packages[@]} )); then
+      for p in "${packages[@]}"; do
+         [[ $(dpkg-query --admindir="$ROOT/var/lib/dpkg" -W -f '${db:Status-Abbrev}' "$p" 2>/dev/null) == ii* ]] ||
+            die "$id $version needs the Debian package $p, which the image does not install; add it to the package list in mp-dsf.yaml"
+      done
+      say "$id: Debian packages present: ${packages[*]}"
+   fi
 
    # --- SBC side ----------------------------------------------------------
 
