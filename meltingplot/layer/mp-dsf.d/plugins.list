@@ -20,7 +20,7 @@
 # "Plugins" in the README.
 
 # Vigil, the machine monitoring plugin, as built for Duet Web Control 3.7.
-Vigil 1.3.0-beta.5 sha256:8d83784cce44dd8dc0c46c3408fef8734ed44319adf6ffcda4d80568259bd8ac https://github.com/Meltingplot/dwc-vigil/releases/download/v1.3.0-beta.5/Vigil-1.3.0-beta.5-dwc37.zip
+Vigil 1.3.0-rc.1 sha256:60f1b5751b2278375acd74f46b06771f2bf95dfb51b3d99e74d0f48d9f0f2439 https://github.com/Meltingplot/dwc-vigil/releases/download/v1.3.0-rc.1/Vigil-1.3.0-rc.1-dwc37.zip
 
 # CHX350, the backend of the CHX 350 operator interface built into our Duet Web
 # Control. It is released with Duet Web Control, from the tag the
