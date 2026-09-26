@@ -1,8 +1,8 @@
 # Licence policy for the image, evaluated by grant against the SBOM of every
 # build, see the release workflow and README.md.
 #
-# grant allows a package when one of its licences matches a pattern below and
-# reports everything else. The list holds the licence families expected in a
+# grant allows a package when each of its licences matches a pattern below
+# and reports everything else. The list holds the licence families expected in a
 # Debian based product whose source is offered on request; each pattern is an
 # SPDX identifier or a glob over them, matched case-sensitively.
 #
@@ -21,6 +21,13 @@
 #  - single licences outside the families, with their meaning,
 #  - licence texts syft could not name and reports as the SHA-256 of the
 #    text; the comment names the packages and what their copyright file says.
+#
+# Added 2026-09-26 for ffmpeg (PR #46): 73 packages it brings in, the X11
+# client libraries, fonts, Mesa with LLVM, and codec libraries. Same result:
+# nothing non-commercial or proprietary. Each block below has them in a
+# section of its own. Two of the licences ask more than a copyright file on
+# the device: IJG wants a sentence in the documentation, which the image's
+# licence file carries, and FreeType is FTL or GPL-2+, used under GPL-2+.
 #
 # Components without licence metadata pass the check unseen, because
 # require-license is off. Their licences, from the upstream repositories:
@@ -94,12 +101,40 @@ allow:
   - "Expat AND GPL-2.0-only AND GPL-2.0-or-later"
   - "All-permissive AND GPL-2.0-only AND GPL-2.0-or-later AND LicenseRef-configure AND LicenseRef-installsh"
   - "ISC AND LicenseRef-MIT-1"
+  # Added 2026-09-26 with ffmpeg. LicenseRef-other in libva and libvdpau is
+  # an X11-style permission notice.
+  - "Expat AND GPL-2.0-only AND GPL-2.0-or-later AND ISC AND LGPL-2.1-only AND LGPL-2.1-or-later"   # libx265
+  - "Expat AND LicenseRef-Expat-advertising AND GPL-2.0-only AND GPL-2.0-or-later AND LicenseRef-other"   # libva2, libva-drm2, libva-x11-2
+  - "Expat AND LicenseRef-other"   # libvdpau1
+  - "CC0 AND LicenseRef-Expat AND LGPL-2.1-only AND LGPL-2.1-or-later AND Zlib"   # libplacebo349
+  - "Expat AND LicenseRef-FSF-unlimited AND GPL-2.0-only AND GPL-2.0-or-later AND GPL-3.0-only AND GPL-3.0-or-later AND LicenseRef-MIT-FSF-public"   # libbs2b0
+  - "Expat AND GPL-3.0-only AND GPL-3.0-or-later"   # libdecor-0-0
+  - "JMVBSD AND LicenseRef-KISSFFTBSD AND LGPL-2.1-only"   # libcodec2-1.2
+  - "Zlib AND LicenseRef-unicode-data"   # libunibreak6
+  - "GPL AND GPL-1.0-only AND GPL-2.0-only AND GPL-2.0-or-later AND ISC AND LGPL-2.0-only AND LGPL-2.0-or-later AND LicenseRef-WTFPL-2"   # libcaca0
+  - "APACHE-2-LLVM-EXCEPTIONS AND Apache-2.0 AND BSD-3-Clause AND BSD-3-Clause AND MIT AND LicenseRef-Python AND LicenseRef-solar-public-domain"   # libllvm19
+  - "0BSD AND Apache-2.0 AND LicenseRef-Apache-2.0- AND BSD-2-Clause AND BSD-3-Clause AND LicenseRef-Boost-1.0 AND LicenseRef-CC-zero-waive-1.0-us AND LicenseRef-Expat AND FSFAP AND LGPL-2.0-only AND LGPL-2.0-or-later AND MPL-2.0 AND OFL-1.1 AND LicenseRef-Sun-permissive AND Unlicense AND Zlib"   # librsvg2-2, the vendored Rust crates
 
   # Reviewed 2026-09-12: single licences outside the families.
   - CC-BY-SA-4.0   # documentation of cryptsetup and gpiod
   - CC-BY-SA-3.0   # documentation of glib
   - ad-hoc         # media-types, Debian's own terms
   - Dual-License   # python-dateutil, Apache-2.0 or BSD-3-Clause
+  # Added 2026-09-26 with ffmpeg.
+  - HPND                       # X11 client libraries, permission notice
+  - HPND-sell-variant          # X11 client libraries, fontconfig
+  - Unlicense                  # libsrt, libass, librsvg: public domain dedication
+  - Libpng                     # libpng16
+  - IJG                        # JPEG code in ffmpeg (notice in LICENSES.txt); in lcms2 only its jpgicc tool
+  - NTP                        # libjpeg62-turbo, libsndfile1, libass9: permission notice
+  - FTL                        # libfreetype6, FTL or GPL-2+
+  - Hylafax                    # libtiff6, permission notice
+  - TU-Berlin-2.0              # libgsm1, permission notice
+  - OFL-1.1                    # harfbuzz, pango, librsvg: font licence
+  - Bitstream-Vera             # fonts-dejavu, pango: font licence
+  - ICU                        # pango: Unicode data, permission notice
+  - TCL                        # pango: BSD-style
+  - Linux-man-pages-copyleft   # lm-sensors: manual pages, free to copy
 
   # Reviewed 2026-09-12: licence texts syft could not name, by SHA-256.
   - 936728f4181718f42951b881c1e8f1386bf6b2723c4fbc533c374d6f42c71816  # krb5-multidev, libgssapi-krb5-2, libgssrpc4t64, libk5crypto3…: BSD | GPL-2 | MIT
@@ -119,6 +154,19 @@ allow:
   - 289d796794edf8c547691e415ddd7ba3396e6e6d8de03397bd69ce9515914bf8  # wget: GPL-3
   - bfc258d27d325eaba426c9a68bf4043a5aa1818f7e4aafee4ad65a2656eba6e0  # flashrom: GPL-2 | public-domain
   - f997ae27f25db0ddac1b8c852720175ca6ef6e624de11f02afd46cb3954d66aa  # libdaemon0: GPL-2 | LGPL-2.1
+  # Added 2026-09-26 with ffmpeg.
+  - 4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80  # libxcb1, libxcb-dri3-0, libxcb-glx0, libxcb-present0…: MIT
+  - 118dd263a7b91c8f21c489f949bf13281dff9e766deea92b829dac4dce66601a  # libxau6: X11 permission notice (The Open Group)
+  - 1bcbb50f8603fe8b86d330bfa460b772ea04fbd3c70e4499f0768b5340b9fd6e  # libxdmcp6: X11 permission notice (The Open Group)
+  - bc57e445ca1d9fe082c8d54189dd411ff26caa8552c9c63d44ea06a982f32124  # libxext6: X11 permission notice (The Open Group)
+  - c812f9c54513ae593aab9580b54a4b18219648df7068d49ca1daa47f522ba3fa  # libxi6: X11 permission notice (The Open Group)
+  - 2badb73e6e70d0bd2e0b85d39ce18d3c66cfebc3e301720374fa20e6539c947d  # x11-common: MIT
+  - 5eeaeb1b6e029a0274e1573765bb0bae2926ef96a3679203faa4fd00fdaeaa88  # libxkbcommon0: MIT
+  - 408fb9e704e875cd42d432e7c9b3b378f568e3c89db2b5c5ef3d11c025319574  # libcairo2, libcairo-gobject2: LGPL-2.1 | MPL-1.1
+  - 179c34f5e56cd0b6b73dd7970a97357ee784e2236e8293826656c7ebb3bface7  # libnuma1: LGPL-2.1 (library), GPL-2 (tools)
+  - 8179158680353631133a7339cdcd3637613cbc8f227b7681cdb1d9c1f874dad6  # libraw1394-11: LGPL-2.1+, some files GPL or MIT
+  - 5145b47d997486e5327091374e807046a32216168b6f2bbf6d1816f60927686c  # shared-mime-info: GPL-2+
+  - 77d13a5e6cbe7277b4721033f9ad15707241c2832baa8c74ec823c9ee5ebf71c  # libflite1: CMU/Edinburgh permission notices, free for any use
 
 ignore-packages: []
 
