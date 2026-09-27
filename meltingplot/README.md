@@ -498,7 +498,7 @@ The bundled plugins are listed in `layer/mp-dsf.d/plugins.list`, one line per
 plugin with its id, version, checksum and the published release asset:
 
 ```
-Vigil 1.3.0-rc.1 sha256:<checksum> https://github.com/Meltingplot/dwc-vigil/releases/download/...
+Vigil 1.3.0-rc.2 sha256:<checksum> https://github.com/Meltingplot/dwc-vigil/releases/download/...
 ```
 
 `bin/mp-dsf-plugins` does at build time what DuetSoftwareFramework would do on
