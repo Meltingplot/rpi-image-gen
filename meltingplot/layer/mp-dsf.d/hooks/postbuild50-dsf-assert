@@ -10,6 +10,7 @@ set -euo pipefail
 ROOT=${1:?rootfs}
 ASSETS=${IGconf_dsf_assetdir:?}
 DSF_UID=${IGconf_dsf_uid:?}
+DSF_GID=${IGconf_dsf_gid:?}
 
 DSF="$ROOT/opt/dsf"
 SD="$DSF/sd"
@@ -100,6 +101,9 @@ fi
 uid=$(awk -F: '$1=="dsf"{print $3}' "$ROOT/etc/passwd")
 [[ $uid == "$DSF_UID" ]] ||
    bad "dsf has uid ${uid:-none}, expected $DSF_UID; persistent files are owned numerically"
+gid=$(awk -F: '$1=="dsf"{print $3}' "$ROOT/etc/group")
+[[ $gid == "$DSF_GID" ]] ||
+   bad "the group dsf has gid ${gid:-none}, expected $DSF_GID; persistent files are owned numerically"
 
 # --- licence notice -------------------------------------------------------
 

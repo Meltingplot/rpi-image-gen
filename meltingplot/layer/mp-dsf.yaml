@@ -56,13 +56,22 @@
 # X-Env-Var-suite-Set: y
 #
 # X-Env-Var-uid: 992
-# X-Env-Var-uid-Desc: Fixed uid and gid of the dsf account. The package would
+# X-Env-Var-uid-Desc: Fixed uid of the dsf account. The package would
 #  allocate one dynamically, but the printer's files live on a partition shared
 #  by both slots and are owned numerically, so a change between builds would
 #  make them unreadable after an update.
 # X-Env-Var-uid-Required: n
 # X-Env-Var-uid-Valid: int:100-999
 # X-Env-Var-uid-Set: y
+#
+# X-Env-Var-gid: 986
+# X-Env-Var-gid-Desc: Fixed gid of the dsf group, for the same reason. It is
+#  the gid printers have carried since the first image: device-user-admin used
+#  to create the group ahead of this layer, while user1 was a member of it,
+#  with the next free system gid, and 992 belongs to kvm.
+# X-Env-Var-gid-Required: n
+# X-Env-Var-gid-Valid: int:100-999
+# X-Env-Var-gid-Set: y
 #
 # X-Env-Var-config_dir: ${DIRECTORY}/../chx350-config
 # X-Env-Var-config_dir-Desc: Checkout of the printer configuration repository,
@@ -181,7 +190,7 @@ mmdebstrap:
     - |-
       set -eu
       chroot "$1" getent group dsf >/dev/null ||
-        chroot "$1" groupadd -g "$IGconf_dsf_uid" dsf
+        chroot "$1" groupadd -g "$IGconf_dsf_gid" dsf
       chroot "$1" getent passwd dsf >/dev/null ||
         chroot "$1" useradd -r -u "$IGconf_dsf_uid" -g dsf -d /opt/dsf \
           -s /usr/sbin/nologin -c "Duet Software Framework" dsf
