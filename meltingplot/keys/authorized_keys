@@ -1,9 +1,12 @@
-# SSH public keys of the Meltingplot administrators.
+# SSH public keys for the meltingplot account.
 #
-# Every key listed here can log in as the `meltingplot` account on every image
-# built from this tree. The account has no password (SSH key authentication
-# only, sudo without password), so a build without a key here produces an image
-# nobody can reach over SSH. Raspberry Pi Connect remote shell still works.
+# meltingplot is the account Raspberry Pi Connect runs as. It holds no
+# privileges: no sudo, no access to the printer's files, plugins or hardware.
+# Root is for the administrator, whose keys are in mpadmin.keys.
+#
+# The keys land in the home directory, which moves to the persistent partition
+# when an image is made and which no update touches afterwards. A change here
+# therefore reaches a printer only when its medium is flashed, never by update.
 #
 # Public keys only. Never put a private key or an auth key in this repository -
 # it is public.

@@ -218,6 +218,9 @@ cp "$here/../layer/mp-dsf.d/customize.overlay/usr/lib/meltingplot/mp-dsf.sh" "$M
 export MP_DEVICE_CONF MP_CODECONSOLE MP_SLOT_TRYBOOT MP_AUTOBOOT MP_OTA_STATE_FILE MP_TRYBOOT_FLAG MP_DSF_CONF
 export MP_SYSTEMCTL="$tmp/systemctl"
 export MP_NOTICE_FLAG="$tmp/notice.flag"
+export MP_DOWN_FLAG="$tmp/down.flag"
+export MP_UPTIME="$tmp/uptime"
+echo "100.00 90.00" > "$MP_UPTIME"
 cat > "$MP_SYSTEMCTL" <<'EOF'
 #!/bin/sh
 case $1 in
@@ -292,10 +295,35 @@ gate_case "idle, install over, dialog open" '"idle"'      active     committed  
 # A boot puts up its own notice; a gate that has not announced one leaves it.
 echo '{"key":"state.messageBox.title","flags":"","result":"OTA Update"}' > "$tmp/query.state.messageBox.title"
 gate_case "idle, notice of the boot"       '"idle"'       active     committed   IDLE "" ""
+echo '{"key":"state.messageBox.title","flags":"","result":null}' > "$tmp/query.state.messageBox.title"
+
+# A mainboard that stays disconnected lets the connector run after ten
+# minutes without a break, counted from the uptime; any other answer in
+# between starts the count again.
+echo "1000.00 900.00" > "$MP_UPTIME"
+gate_case "disconnected, first check"      '"disconnected"' active   committed   IDLE "stop rpi-connect-ota.service" ""
+echo "1300.00 900.00" > "$MP_UPTIME"
+gate_case "disconnected, 5 min"            '"disconnected"' inactive committed   ""   ""                             ""
+gate_case "printing in between"            '"processing"' inactive   committed   ""   ""                             ""
+echo "1700.00 900.00" > "$MP_UPTIME"
+gate_case "disconnected again, count anew" '"disconnected"' inactive committed   ""   ""                             ""
+echo "2299.99 900.00" > "$MP_UPTIME"
+gate_case "disconnected, 9:59"             '"disconnected"' inactive committed   ""   ""                             ""
+echo "2300.00 900.00" > "$MP_UPTIME"
+gate_case "disconnected, 10 min"           '"disconnected"' inactive committed   ""   "start rpi-connect-ota.service" ""
+gate_case "disconnected, connector runs"   '"disconnected"' active   committed   IDLE ""                             ""
+gate_case "idle again"                     '"idle"'       active     committed   IDLE ""                             ""
+[ -e "$MP_DOWN_FLAG" ] && r=yes || r=no
+check "gate: count cleared once reachable" no "$r"
 
 rm -f "$MP_CODECONSOLE"
 gate_case "no control server, running"     '"idle"'       active     committed   IDLE "stop rpi-connect-ota.service" ""
 gate_case "no control server, installing"  '"idle"'       active     committed   INSTALL "stop rpi-connect-ota.service" ""
+# The same for a control server that stays unreachable.
+echo "2899.00 900.00" > "$MP_UPTIME"
+gate_case "no control server, 9:59"        '"idle"'       inactive   committed   ""   ""                             ""
+echo "2900.00 900.00" > "$MP_UPTIME"
+gate_case "no control server, 10 min"      '"idle"'       inactive   committed   ""   "start rpi-connect-ota.service" ""
 
 # --- firmware update after boot --------------------------------------------
 # The script itself against a simulated printer. CodeConsole answers the

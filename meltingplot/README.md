@@ -348,17 +348,66 @@ and `/machine/CHX350/status` answers.
 
 The name shown in Duet Web Control and on the PanelDue is also the Linux
 hostname, because DuetControlServer refuses a machine name that disagrees with
-it. It is set at commissioning, and the customer can change it afterwards:
+it. It is set at commissioning. The customer can change it afterwards by
+editing `sys/overrides/printer-name.g` in Duet Web Control, and the
+administrator (see Access) with:
 
 ```bash
 sudo mp-set-printer-name "Halle 2 links"
 ```
 
-or by editing `sys/overrides/printer-name.g` in Duet Web Control. The name is
-machine-owned, so an update does not reset it. The device keeps its original
-name in Raspberry Pi Connect, which is how Meltingplot finds a machine again
-regardless of what the customer called it; the serial is also a tag there and
-is recorded in `/persistent/common/etc/mp-identity`.
+The name is machine-owned, so an update does not reset it. The device keeps
+its original name in Raspberry Pi Connect, which is how Meltingplot finds a
+machine again regardless of what the customer called it; the serial is also a
+tag there and is recorded in `/persistent/common/etc/mp-identity`.
+
+## Access
+
+Two accounts log in, and only one of them can become root:
+
+| Account | Logs in | May |
+|---|---|---|
+| `meltingplot` | through the Raspberry Pi Connect remote shell, and over SSH with a key from `keys/authorized_keys` | read the journal, nothing else |
+| `mpadmin` | over SSH with a key from `keys/mpadmin.keys`, from the printer network only | `sudo` without a password |
+
+Raspberry Pi Connect runs as `meltingplot`, so its remote shell is that
+account, reachable from wherever Connect is. That is why it holds no
+privileges: no sudo, and none of the groups that reach past the control
+server, such as `dsf`, which would let it change the printer's files and the
+code of the bundled plugins, or `spi` and `gpio`, which reach the mainboard
+directly. sudo is installed for the administrator; the rule upstream writes
+for `meltingplot` (`device.user1sudo: passwd`) asks for a password the account
+does not have and, with `/etc/shadow` on the read-only root, never can have.
+
+The administrator logs in from the printer network, which on a CHX350 means
+through the HMI:
+
+```bash
+ssh -J meltingplot@<HMI address> mpadmin@10.42.0.2
+```
+
+sshd lets `mpadmin` in from the network of `mpnet.address` only, and refuses
+it from the machine's own address and the loopback, so a shell on the device,
+a Connect remote shell included, cannot hop to it. The keys that work are the
+ones in `keys/mpadmin.keys`, installed on the read-only root: a key in the
+home directory or added on the device is not accepted, and a key removed from
+the file stops working with the update that carries the change. Only keys
+held on a hardware token (Nitrokey) go into that file. The keys of
+`meltingplot`, by contrast, are in its home directory, which lives on the
+persistent partition and which no update touches; a change to
+`keys/authorized_keys` reaches a printer only when its medium is flashed.
+
+What support used to do as root over the Connect shell goes like this now:
+
+- A printer whose control server is down takes a deployment anyway once it
+  has been unreachable for ten minutes (see What happens on the device).
+- A rollback is the previous artefact deployed again through Connect, or a
+  rollback by hand as the administrator.
+- The printer name is changed in Duet Web Control, or by the administrator.
+
+The post-build assert of `mp-admin` refuses an image in which `meltingplot`
+could become root or belongs to any group besides `adm`, or in which sshd
+would let the administrator in from anywhere else.
 
 ## Updating a fleet
 
@@ -396,7 +445,14 @@ To go back, deploy the previous artefact again. It stays registered.
    stops the connector's service for anything but idle: a running, paused or
    cancelling print, a firmware update, or a control server that cannot be
    asked. A deployment created in Connect meanwhile stays pending there, for
-   as long as the print takes.
+   as long as the print takes. The one exception is a printer that has been
+   out of reach for ten minutes without a break, with a control server that
+   does not answer or a mainboard it reports disconnected: no print runs
+   without the control server, since RepRapFirmware gets every line of a job
+   from it, and a deployment is the only way to replace a release that broke
+   either, because the Connect shell cannot become root. The ten minutes are
+   counted from the uptime, not the clock, which jumps once the machine
+   reaches its time server.
 2. Once the printer is idle the connector runs, picks the deployment up,
    streams the bundle into the other slot and restarts the machine at once.
    That is the packaged behaviour, and it cannot be changed: the connector's
@@ -405,9 +461,7 @@ To go back, deploy the previous artefact again. It stays registered.
    yes. This was found the hard way, with a print cut short by a restart.
    What the gate cannot cover is the minute between a print starting and its
    next check: an install that completes within that minute restarts the
-   machine. Support can deploy to a printer whose control server is down by
-   stopping `mp-ota-gate.timer` and starting `rpi-connect-ota` by hand over
-   the Connect shell.
+   machine.
    While the connector reports an install in progress, the gate puts a
    message box titled *OTA Update* on the PanelDue and in Duet Web Control
    (`M291 S0`, no buttons) asking not to shut the machine down until the
@@ -468,6 +522,9 @@ recovered over USB, but not remotely. Committing only after a successful flash
 is planned, see the project plan.
 
 ### Rolling back by hand
+
+As the administrator (see Access), which takes a login from the printer
+network; remotely, deploy the previous artefact again instead.
 
 ```bash
 sudo sh -c 'rpi-slot-tryboot > /bootfs/autoboot.txt'

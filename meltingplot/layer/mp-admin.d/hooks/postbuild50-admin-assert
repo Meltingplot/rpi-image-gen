@@ -1,0 +1,82 @@
+#!/bin/bash
+# Check that the only way to root is the administrator of mp-admin.
+#
+# user1 is the account Raspberry Pi Connect runs as, so whatever it may do, a
+# Connect remote shell may do too, from wherever Connect is. None of this
+# fails loudly on a device: an account that can become root works exactly
+# like one that cannot, until someone uses it. So the image is checked here.
+
+set -euo pipefail
+
+ROOT=${1:?rootfs}
+USER1=${IGconf_device_user1:?}
+ADMIN=${IGconf_mpadmin_user:?}
+
+fail=0
+bad() { echo "mp-admin assert: $*" >&2; fail=1; }
+
+# --- sudo is there, for the administrator ---------------------------------
+
+[[ $(dpkg-query --admindir="$ROOT/var/lib/dpkg" -W -f '${db:Status-Abbrev}' sudo 2>/dev/null) == ii* ]] ||
+   bad "sudo is not installed, so the administrator cannot become root (device.user1sudo none purges it)"
+
+sudoers=("$ROOT/etc/sudoers" "$ROOT"/etc/sudoers.d/*)
+rule=$(grep -hvE '^[[:space:]]*(#|$)' "$ROOT/etc/sudoers.d/020_mp-admin" 2>/dev/null || true)
+[[ $rule == "$ADMIN ALL=(ALL:ALL) NOPASSWD: ALL" ]] ||
+   bad "/etc/sudoers.d/020_mp-admin does not give $ADMIN sudo"
+[[ $(stat -c %a "$ROOT/etc/sudoers.d/020_mp-admin" 2>/dev/null) == 440 ]] ||
+   bad "/etc/sudoers.d/020_mp-admin is not mode 0440, sudo ignores it"
+
+# --- user1 cannot become root ---------------------------------------------
+# sudo stays installed, so user1 must not get through it: no rule may spare
+# anyone but the administrator the password, and user1 has no password to give.
+
+while IFS= read -r line; do
+   who=${line%%[[:space:]]*}
+   [[ $who == "$ADMIN" ]] || bad "a sudo rule without password for $who: $line"
+done < <(grep -hE '^[^#]*NOPASSWD' "${sudoers[@]}" 2>/dev/null || true)
+if grep -hE '^[^#]*Defaults.*!authenticate' "${sudoers[@]}" >/dev/null 2>&1; then
+   bad "a sudoers Defaults line turns authentication off"
+fi
+
+for account in "$USER1" root; do
+   hash=$(awk -F: -v u="$account" '$1 == u { print $2 }' "$ROOT/etc/shadow")
+   [[ $hash == [\!\*]* ]] || bad "$account has a password, so sudo could be given one"
+done
+
+# adm reads the journal; sudo is where device.user1sudo passwd puts it, and
+# the locked password above is what keeps that harmless. Any other group
+# reaches past the control server: dsf the printer's files and the plugins'
+# code, spi, gpio and i2c the hardware, and so on.
+while IFS= read -r group; do
+   case $group in
+      adm | sudo | "$USER1") ;;
+      *) bad "$USER1 is in the group $group; the Connect account holds no privileges" ;;
+   esac
+done < <(awk -F: -v u="$USER1" '{ n = split($4, m, ","); for (i = 1; i <= n; i++) if (m[i] == u) print $1 }' "$ROOT/etc/group")
+
+# --- SSH ------------------------------------------------------------------
+
+grep -qx 'PermitRootLogin no' "$ROOT/etc/ssh/sshd_config.d/01pubkey-only.conf" 2>/dev/null ||
+   bad "sshd does not refuse root (ssh.pubkey_only)"
+[[ ! -s $ROOT/root/.ssh/authorized_keys ]] || bad "root has authorized_keys"
+
+conf="$ROOT/etc/ssh/sshd_config.d/10-mp-admin.conf"
+if [[ -f $conf ]]; then
+   grep -qE "^AllowUsers $USER1 $ADMIN@[0-9./]+$" "$conf" ||
+      bad "sshd lets $ADMIN log in from anywhere, or lets in others than $USER1 and $ADMIN"
+   grep -qE "^Match User $ADMIN Address " "$conf" ||
+      bad "sshd does not refuse $ADMIN from the machine itself"
+else
+   bad "no sshd access rules (/etc/ssh/sshd_config.d/10-mp-admin.conf)"
+fi
+
+keys="$ROOT/etc/meltingplot/ssh/$ADMIN.keys"
+if [[ ! -f $keys ]]; then
+   bad "no key file for $ADMIN"
+elif ! grep -qvE '^[[:space:]]*(#|$)' "$keys"; then
+   echo "mp-admin assert: WARNING $ADMIN has no key, this image has no root at all" >&2
+fi
+
+((fail == 0)) || exit 1
+echo "mp-admin assert: only $ADMIN becomes root, $USER1 holds no privileges" >&2

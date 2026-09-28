@@ -9,10 +9,18 @@ device:
   user1: meltingplot
   user1uid: 1000
   user1gid: 1000
-  user1groups: adm,dialout,plugdev,spi,i2c,gpio,video,render,dsf
-  # There is no password on these machines and there never will be: access is
-  # by SSH key or through Raspberry Pi Connect, so sudo cannot ask for one.
-  user1sudo: nopasswd
+  # user1 is the account Raspberry Pi Connect runs as, so its remote shell is
+  # this account, reachable from wherever Connect is. It holds no privileges:
+  # it may read the journal, and it touches neither the printer's files and
+  # plugins (dsf) nor the hardware (spi, gpio, i2c) behind the control
+  # server's back. Root is for the administrator of mp-admin, from the
+  # printer network only.
+  user1groups: adm
+  # passwd, not none: none has device-user-admin purge sudo, which the
+  # administrator needs. The account has no password and the root filesystem
+  # is read-only, so the password sudo asks for can never be given; the
+  # post-build assert of mp-admin checks that it is locked.
+  user1sudo: passwd
   # Only recorded in the provisioning descriptor. The image itself finds its
   # root by GPT label and runs from an SD card or an NVMe drive unchanged.
   storage_type: sd
@@ -31,6 +39,9 @@ image:
 ssh:
   pubkey_user1: ${@SRCROOT}/keys/authorized_keys
   pubkey_only: y
+
+mpadmin:
+  pubkeys: ${@SRCROOT}/keys/mpadmin.keys
 
 connect:
   # No auth key in the image. A device signs in on first boot from the key that
@@ -54,3 +65,4 @@ layer:
   suite: mp-suite-trixie
   connect: mp-connect
   identity: mp-identity
+  admin: mp-admin
