@@ -653,6 +653,17 @@ neither a timelapse nor accelerometer spectra until they are set once on that
 page: `timelapse.snapshotUrl` and `accelerometer.board` (see `docs/image.md`
 in dwc-quality-assurance).
 
+Its timelapse takes the only two exceptions the plugin profile makes. At
+every layer the plugin fetches a camera snapshot from the operator panel over
+HTTP, and after the job it has ffmpeg encode the frames to AV1 and ffprobe
+check the result. So the profile allows TCP connections, which AppArmor cannot
+narrow to one address and therefore allows every bundled plugin, and it lets a
+plugin start `/usr/bin/ffmpeg` and `/usr/bin/ffprobe`. Both inherit the plugin
+profile (`ix`), so they reach nothing the plugin could not; a plugin the image
+did not ship still cannot read its own code, let alone start them. The
+post-build assert refuses any other exec rule in the plugin profile, and any
+other form of these two.
+
 Build with `-- IGconf_dsf_plugin_policy=complain` to collect what a plugin
 needs first; never ship that.
 

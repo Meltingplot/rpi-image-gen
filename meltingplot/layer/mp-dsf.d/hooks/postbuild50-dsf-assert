@@ -203,14 +203,19 @@ if [[ -f $profile ]]; then
       bad "the AppArmor profile still carries its mode placeholder"
    fi
 
-   # A plugin must not be able to start another program. Everything the child
-   # profile may do is listed explicitly, so any exec permission in it is a
-   # mistake.
-   if awk '/profile dsf_plugin_py/,/^  }$/' "$profile" |
-        grep -v '^[[:space:]]*#' |
-        grep -Eq '[[:space:]][a-zA-Z]*x[a-zA-Z]*,[[:space:]]*$'; then
-      bad "the dsf_plugin_py profile grants an exec permission"
-   fi
+   # A plugin must not be able to start another program, with the exception of
+   # these, for the timelapse of QualityAssurance. They may only inherit the
+   # plugin profile ("ix"), so they can do nothing the plugin cannot. Any other
+   # exec permission in the child profile is a mistake, and so is a qualifier
+   # or a transition on one of these. An exec permission is any mode that
+   # contains x, wherever it stands in the rule.
+   plugin_programs=" /usr/bin/ffmpeg /usr/bin/ffprobe "
+   while read -r path mode rest; do
+      [[ $plugin_programs == *" $path "* && $mode == ix, && -z $rest ]] && continue
+      bad "the dsf_plugin_py profile grants an exec permission: $path $mode${rest:+ $rest}"
+   done < <(awk '/profile dsf_plugin_py/,/^  }$/' "$profile" |
+            grep -v '^[[:space:]]*#' | sed 's/[[:space:]]#.*//' |
+            grep -E '(^|[[:space:]])[rwaklmipuPUcC]*x[rwaklmipuPUcC]*(,|[[:space:]]|$)' || true)
 
    # The service runs with NoNewPrivileges, and under no_new_privs the kernel
    # denies an exec that leaves the current profile. Only a stacked transition
