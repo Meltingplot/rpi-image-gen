@@ -232,3 +232,12 @@ mp_dsf_fix_group() {
    mkdir -p "$(dirname "$MP_DSF_GROUP_STAMP")"
    printf '%s\n' "$MP_VERSION" > "$MP_DSF_GROUP_STAMP"
 }
+
+# Whether the autostart list $1 of DuetPluginService names plugin $2.
+# DuetControlServer rewrites that file whenever a plugin is started or
+# stopped in Duet Web Control, as UTF-8 with a byte order mark in front of
+# the first id, which a plain grep takes for part of that line.
+mp_dsf_autostart_has() {
+   [ -f "$1" ] || return 1
+   LC_ALL=C sed '1s/^\xef\xbb\xbf//' "$1" | grep -qxF "$2"
+}

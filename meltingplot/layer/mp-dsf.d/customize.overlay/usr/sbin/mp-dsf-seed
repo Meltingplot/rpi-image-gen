@@ -100,7 +100,7 @@ seed_plugin() {
    # image starts it; after that, a customer who stops it keeps it stopped.
    autostart="$DSF/conf/plugins.txt"
    grep -qxF "$id" "$SKEL/conf/plugins.txt" 2>/dev/null || return 0
-   grep -qxF "$id" "$autostart" 2>/dev/null && return 0
+   mp_dsf_autostart_has "$autostart" "$id" && return 0
    if [ -s "$autostart" ] && [ -n "$(tail -c 1 "$autostart")" ]; then
       echo >> "$autostart"
    fi

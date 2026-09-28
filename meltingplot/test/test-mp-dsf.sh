@@ -507,5 +507,19 @@ else
    check "group, chgrp fails, stamp"    0.1.0-rc.51 "$(cat "$MP_DSF_GROUP_STAMP")"
 fi
 
+# --- autostart list -------------------------------------------------------
+# As DuetControlServer writes it: UTF-8, with a byte order mark before the
+# first id.
+
+has() { mp_dsf_autostart_has "$1" "$2" && echo yes || echo no; }
+printf '\357\273\277QualityAssurance\nVigil\nCHX350\n' > "$tmp/plugins.txt"
+check "autostart, first id after the BOM" yes "$(has "$tmp/plugins.txt" QualityAssurance)"
+check "autostart, later id"               yes "$(has "$tmp/plugins.txt" CHX350)"
+check "autostart, id not listed"          no  "$(has "$tmp/plugins.txt" Other)"
+check "autostart, prefix of an id"        no  "$(has "$tmp/plugins.txt" Quality)"
+printf 'Vigil\n' > "$tmp/plugins-plain.txt"
+check "autostart, without a BOM"          yes "$(has "$tmp/plugins-plain.txt" Vigil)"
+check "autostart, no file"                no  "$(has "$tmp/none.txt" Vigil)"
+
 [ "$fail" -eq 0 ] && echo "all tests passed"
 exit "$fail"
