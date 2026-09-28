@@ -230,7 +230,7 @@ install -m 0644 "$ASSETS/skel/conf/plugins.txt" "$SKEL/conf/plugins.txt"
 # Every slot-shared path is bind mounted at boot, so the directory has to exist
 # in the read-only image even when the image ships nothing in it.
 
-for d in sys gcodes macros filaments menu www Vigil; do
+for d in sys gcodes macros filaments menu www Vigil QualityAssurance; do
    install -d -m 2770 "$SD/$d"
 done
 install -d -m 2770 "$DSF/plugins" "$DSF/conf"

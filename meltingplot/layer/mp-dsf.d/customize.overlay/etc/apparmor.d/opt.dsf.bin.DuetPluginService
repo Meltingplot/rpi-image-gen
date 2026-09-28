@@ -185,6 +185,26 @@ profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnec
     /opt/dsf/sd/gcodes/** r,
     /opt/dsf/sd/sys/eventlog.log r,
 
+    # QualityAssurance, the process data of every print job. Its SQLite
+    # database with the journal and locks, its settings, backups, a layer
+    # index of the job files, the timelapse frames and videos and temporary
+    # files are all in its own directory. It reads a job file for its CRC,
+    # the slicer settings at its end and the toolpath of the replay.
+    /opt/dsf/plugins/QualityAssurance.json r,
+    /opt/dsf/plugins/QualityAssurance/** mr,
+    owner /opt/dsf/plugins/QualityAssurance/dsf/__pycache__/ w,
+    owner /opt/dsf/plugins/QualityAssurance/dsf/__pycache__/* rw,
+    /opt/dsf/sd/QualityAssurance/ rw,
+    /opt/dsf/sd/QualityAssurance/** rwk,
+    /opt/dsf/sd/gcodes/ r,
+    /opt/dsf/sd/gcodes/** r,
+    # The CSVs of its own accelerometer recordings, which it reads and then
+    # deletes. RepRapFirmware writes them through DuetControlServer, so the
+    # plugin never creates a file there, and it names them qa-*.csv, so it
+    # cannot touch a recording someone else made.
+    /opt/dsf/sd/sys/accelerometer/ r,
+    /opt/dsf/sd/sys/accelerometer/qa-*.csv rw,
+
     # The control server socket, which the plugin connects to, and its own
     # HTTP endpoints, which it serves: DuetControlServer creates the namespace
     # directory under /run/dsf and the plugin binds one socket per endpoint in
@@ -199,6 +219,8 @@ profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnec
     /run/dsf/Vigil/** rw,
     /run/dsf/CHX350/{,**/} r,
     /run/dsf/CHX350/** rw,
+    /run/dsf/QualityAssurance/{,**/} r,
+    /run/dsf/QualityAssurance/** rw,
     unix (bind, listen, accept, connect, send, receive) type=stream,
 
     owner /tmp/** rw,

@@ -9,7 +9,7 @@ Phase 1 covers one target:
 
 | Config | Machine | Contents |
 |---|---|---|
-| `duet-pi5.yaml` | Raspberry Pi 5 on the Duet 3 mainboard of a CHX350 | DuetSoftwareFramework, Duet Web Control, the CHX350 printer configuration, the Vigil monitoring plugin, the backend of the CHX 350 operator interface |
+| `duet-pi5.yaml` | Raspberry Pi 5 on the Duet 3 mainboard of a CHX350 | DuetSoftwareFramework, Duet Web Control, the CHX350 printer configuration, the Vigil monitoring plugin, the backend of the CHX 350 operator interface, the QualityAssurance process data plugin |
 
 The operator panel (`hmi`) follows in phase 2 and shares `mp-base.yaml`.
 
@@ -28,7 +28,7 @@ and a rollback both keep it:
 | `/opt/dsf/conf/{config,plugins}.json` | the image | corrected by the update |
 | `/opt/dsf/sd/firmware` | the image | flashed to the Duet boards once the new slot is committed |
 | the files in `layer/mp-dsf.d/protected.list` | the machine | never touched |
-| `/opt/dsf/sd/gcodes`, calibration files, `/opt/dsf/sd/Vigil`, `/home` | the machine | never touched |
+| `/opt/dsf/sd/gcodes`, calibration files, `/opt/dsf/sd/{Vigil,QualityAssurance}`, `/home` | the machine | never touched |
 
 That split is the reason a printer configuration change reaches every printer
 through a release, while a customer's calibration, filament tuning and printer
@@ -342,7 +342,8 @@ medium, seeds the machine-owned configuration and starts the control server.
 
 Check afterwards: Duet Web Control answers on the printer address, `M115` and
 `M122` reply, the device is listed in Connect, the Vigil page shows counters,
-and `/machine/CHX350/status` answers.
+`/machine/CHX350/status` answers, and the Quality Assurance page shows the
+plugin as idle.
 
 ### The printer name
 
@@ -543,8 +544,8 @@ boot after the commit, or right away with
 Duet Web Control plugins can be installed as usual. Plugins that would run code
 on the printer cannot: they install, but never start. A printer placed on the
 market may only run software that is part of a released image, so the plugins
-that do run are the ones the image brought, currently Vigil and the backend
-of the CHX 350 operator interface.
+that do run are the ones the image brought, currently Vigil, the backend
+of the CHX 350 operator interface and QualityAssurance.
 
 The rule is enforced by an AppArmor profile
 (`layer/mp-dsf.d/customize.overlay/etc/apparmor.d/opt.dsf.bin.DuetPluginService`)
@@ -611,6 +612,12 @@ Adding a plugin therefore takes, besides its line in `plugins.list`:
 - a block in the `dsf_plugin_py` profile that lets it read its own code and
   serve its endpoint sockets below `/run/dsf/<id>`, plus whatever else it
   reads or writes;
+- a directory of its own on the virtual SD card, if it keeps data: `/opt/dsf/sd`
+  is part of the read-only root, and only its slot-shared subdirectories are
+  writable. The path goes into
+  `layer/mp-dsf.d/customize.overlay/etc/rpi-image-gen/slot-shared.d/dsf.conf`,
+  its mount point into `bin/mp-dsf-configure`, and into the list of the
+  post-build assert that checks the image ships nothing there;
 - its id in `layer/mp-dsf.d/skel/conf/plugins.txt`, if it is to start on its
   own. That file reaches a new printer only; DuetControlServer rewrites the
   device's copy whenever a plugin is started or stopped. A printer that gets
@@ -635,6 +642,16 @@ version. The two share that interface, so the post-build assert refuses a
 pair whose versions differ. The plugin has no web files and no data of its
 own, so it needs no entry in `dwc-defaults.json`: `CHX350` is in the default
 list of our Duet Web Control already.
+
+QualityAssurance records the process data of every print job: temperatures,
+flows, events and the job context in a SQLite database below
+`/opt/dsf/sd/QualityAssurance`, which the machine keeps across updates like
+Vigil's counters. It reads the job files and the CSVs of its own accelerometer
+recordings in `0:/sys/accelerometer`, and ships a page for Duet Web Control.
+Two of its settings depend on the machine and start out empty, so it records
+neither a timelapse nor accelerometer spectra until they are set once on that
+page: `timelapse.snapshotUrl` and `accelerometer.board` (see `docs/image.md`
+in dwc-quality-assurance).
 
 Build with `-- IGconf_dsf_plugin_policy=complain` to collect what a plugin
 needs first; never ship that.

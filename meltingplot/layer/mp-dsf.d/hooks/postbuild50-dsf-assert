@@ -37,7 +37,7 @@ done < "$ASSETS/protected.list"
 [[ -f $SKEL/conf/plugins.txt ]] || bad "the plugin autostart list is not in the skeleton"
 
 # Directories that only ever hold what the machine produced.
-for d in sd/gcodes sd/menu sd/Vigil plugins; do
+for d in sd/gcodes sd/menu sd/Vigil sd/QualityAssurance plugins; do
    [[ -d $DSF/$d ]] || { bad "/opt/dsf/$d is missing; it is a bind mount point"; continue; }
    [[ -z $(ls -A "$DSF/$d") ]] || bad "/opt/dsf/$d ships files, so the machine's would be overwritten"
 done
