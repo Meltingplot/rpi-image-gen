@@ -17,6 +17,7 @@ set -eu
 
 MP_TAG=mp-dsf-seed
 . /usr/lib/meltingplot/mp-common.sh
+. /usr/lib/meltingplot/mp-dsf.sh
 
 SKEL=/usr/share/meltingplot/dsf-skel
 DSF=/opt/dsf
@@ -120,6 +121,10 @@ fi
 
 chown -R dsf:dsf "$DSF/conf" "$DSF/plugins" 2>/dev/null || true
 chown dsf:dsf "$MP_PRINTER_NAME_FILE" 2>/dev/null || true
+
+# What older images left in the uid's group instead of dsf's, once per image.
+mp_dsf_fix_group "$(id -u dsf)" dsf ||
+   mp_log "not every file below $MP_DSF_SHARED is in the group dsf yet, trying again on the next boot"
 
 # --- bundled plugin code, read-only ---------------------------------------
 # The plugin policy lets a bundled plugin run the code below

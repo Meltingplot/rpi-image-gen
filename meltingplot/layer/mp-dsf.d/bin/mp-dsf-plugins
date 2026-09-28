@@ -18,6 +18,7 @@ LIST=${IGconf_dsf_plugins_list:?}
 DSF_VERSION=${IGconf_dsf_version:?}
 DSF_PYTHON_VERSION=${IGconf_dsf_python_version:?}
 DSF_UID=${IGconf_dsf_uid:?}
+DSF_GID=${IGconf_dsf_gid:?}
 
 SKEL="$ROOT/usr/share/meltingplot/dsf-skel"
 SD="$ROOT/opt/dsf/sd"
@@ -247,7 +248,7 @@ for entry in "${entries[@]}"; do
    install_plugin $entry
 done
 
-chown -R "$DSF_UID:$DSF_UID" "$SKEL/plugins" "$SD/www"
-[[ ! -f $SD/sys/dwc-defaults.json ]] || chown "$DSF_UID:$DSF_UID" "$SD/sys/dwc-defaults.json"
+chown -R "$DSF_UID:$DSF_GID" "$SKEL/plugins" "$SD/www"
+[[ ! -f $SD/sys/dwc-defaults.json ]] || chown "$DSF_UID:$DSF_GID" "$SD/sys/dwc-defaults.json"
 
 say "${#ids[@]} plugins staged: ${ids[*]}"

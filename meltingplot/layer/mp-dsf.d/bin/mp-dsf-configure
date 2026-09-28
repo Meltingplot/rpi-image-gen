@@ -20,6 +20,7 @@ ROOT=${1:?rootfs}
 ASSETS=${IGconf_dsf_assetdir:?}
 CONFIG_DIR=${IGconf_dsf_config_dir:?}
 DSF_UID=${IGconf_dsf_uid:?}
+DSF_GID=${IGconf_dsf_gid:?}
 DSF_VERSION=${IGconf_dsf_version:?}
 
 DSF="$ROOT/opt/dsf"
@@ -288,7 +289,7 @@ PY
 
 for d in "$SD" "$DSF/conf" "$DSF/plugins" "$SKEL"; do
    [[ -d $d ]] || continue
-   chown -R "$DSF_UID:$DSF_UID" "$d"
+   chown -R "$DSF_UID:$DSF_GID" "$d"
    find "$d" -type d -exec chmod 2770 {} +
    find "$d" -type f -exec chmod 0660 {} +
 done
