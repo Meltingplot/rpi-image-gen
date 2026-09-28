@@ -563,6 +563,18 @@ manifest, and the plugin is back on the next boot. `findmnt
 /opt/dsf/plugins/Vigil` shows the mount on the device. Only root can take it
 down (see Access).
 
+A final image also locks the policy once `apparmor.service` has loaded it
+(`mp-apparmor-lock.service`): until the machine restarts, no profile can be
+loaded, replaced or removed, by root neither, so a plugin the image did not
+ship cannot be given the rules it would need to run. A prerelease leaves the
+policy open, which is how a plugin is tried on a bench before it is released:
+the administrator loads a widened profile into the kernel only, and the next
+boot drops it again. That is all the lock takes from root. Root can still
+take the read-only mounts down or run code outside the plugin service; on a
+final image, what keeps that from happening is who holds an administrator
+key. The post-build assert checks that a final image enables the lock and a
+prerelease does not.
+
 The bundled plugins are listed in `layer/mp-dsf.d/plugins.list`, one line per
 plugin with its id, version, checksum and the published release asset:
 

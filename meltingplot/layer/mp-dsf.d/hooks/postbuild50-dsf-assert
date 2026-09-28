@@ -232,6 +232,15 @@ else
    bad "the AppArmor plugin policy is missing"
 fi
 
+# A final image locks the policy once it is loaded; a prerelease does not, so
+# a plugin can be tried on a bench before it is released.
+lock="$ROOT/etc/systemd/system/sysinit.target.wants/mp-apparmor-lock.service"
+if [[ ${IGconf_artefact_version:?} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+   [[ -L $lock ]] || bad "$IGconf_artefact_version is final, but the AppArmor policy is not locked after boot"
+else
+   [[ ! -e $lock ]] || bad "$IGconf_artefact_version is a prerelease, but the AppArmor policy is locked after boot"
+fi
+
 # --- restarts and firmware ------------------------------------------------
 # The update connector may only run while the printer is idle, which is
 # mp-ota-gate's job, and the firmware only follows a committed slot. The gate

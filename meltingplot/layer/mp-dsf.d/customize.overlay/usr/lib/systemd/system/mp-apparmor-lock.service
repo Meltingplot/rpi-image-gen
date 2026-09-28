@@ -1,0 +1,20 @@
+[Unit]
+Description=Lock the AppArmor policy until the next boot
+# Enabled on final images only (layer mp-dsf). Once apparmor.service has
+# loaded the image's profiles, no profile can be loaded, replaced or removed
+# any more, by root neither, until the machine restarts: a plugin the image
+# did not ship cannot be given a profile that lets it run code. The kernel
+# refuses to unset the flag.
+DefaultDependencies=no
+After=apparmor.service
+Requires=apparmor.service
+Before=duetpluginservice.service duetpluginservice-root.service sysinit.target
+ConditionSecurity=apparmor
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'echo 1 > /sys/module/apparmor/parameters/lock_policy'
+
+[Install]
+WantedBy=sysinit.target
