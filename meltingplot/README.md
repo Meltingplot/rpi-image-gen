@@ -617,7 +617,10 @@ Adding a plugin therefore takes, besides its line in `plugins.list`:
   writable. The path goes into
   `layer/mp-dsf.d/customize.overlay/etc/rpi-image-gen/slot-shared.d/dsf.conf`,
   its mount point into `bin/mp-dsf-configure`, and into the list of the
-  post-build assert that checks the image ships nothing there;
+  post-build assert that checks the image ships nothing there. Settings
+  that depend on the machine can be seeded there from
+  `layer/mp-dsf.d/skel/sd/<dir>`, once `mp-dsf-seed.service` waits for the
+  mount (`RequiresMountsFor`), which the assert checks;
 - its id in `layer/mp-dsf.d/skel/conf/plugins.txt`, if it is to start on its
   own. That file reaches a new printer only; DuetControlServer rewrites the
   device's copy whenever a plugin is started or stopped. A printer that gets
@@ -648,10 +651,14 @@ flows, events and the job context in a SQLite database below
 `/opt/dsf/sd/QualityAssurance`, which the machine keeps across updates like
 Vigil's counters. It reads the job files and the CSVs of its own accelerometer
 recordings in `0:/sys/accelerometer`, and ships a page for Duet Web Control.
-Two of its settings depend on the machine and start out empty, so it records
-neither a timelapse nor accelerometer spectra until they are set once on that
-page: `timelapse.snapshotUrl` and `accelerometer.board` (see `docs/image.md`
-in dwc-quality-assurance).
+Two of its settings depend on the machine, and without them it records
+neither a timelapse nor accelerometer spectra: `timelapse.snapshotUrl`, the
+camera of the operator panel at `http://10.42.0.1/snapshot`, and
+`accelerometer.board`, the scanning Z probe at CAN address 60. The image seeds
+both in `layer/mp-dsf.d/skel/sd/QualityAssurance/settings.json`. Like the
+calibration files, a printer gets that file once, on the first boot of an
+image that has the plugin, and a change made on the plugin's page stays; the
+plugin takes its defaults for everything the file does not name.
 
 Its timelapse takes the only two exceptions the plugin profile makes. At
 every layer the plugin fetches a camera snapshot from the operator panel over

@@ -36,6 +36,22 @@ done < "$ASSETS/protected.list"
 [[ -d $SKEL/sd ]] || bad "no seed skeleton below $SKEL/sd"
 [[ -f $SKEL/conf/plugins.txt ]] || bad "the plugin autostart list is not in the skeleton"
 
+# The seed copies the skeleton into the slot-shared directories below
+# /opt/dsf/sd, and fails without a word where it cannot write. A file for any
+# other place would land on the read-only root, and so would one copied before
+# its directory is mounted.
+shared="$ROOT/etc/rpi-image-gen/slot-shared.d/dsf.conf"
+seed_unit="$ROOT/usr/lib/systemd/system/mp-dsf-seed.service"
+for d in "$SKEL"/sd/*; do
+   [[ -e $d ]] || continue
+   at=/opt/dsf/sd/$(basename "$d")
+   if [[ ! -d $d ]] || ! grep -qx "Path=$at" "$shared" 2>/dev/null; then
+      bad "the seed skeleton has sd/$(basename "$d"), but $at is not a slot-shared directory, so it would be seeded into the read-only root"
+   elif ! grep -Eq "^RequiresMountsFor=(.* )?$at( |$)" "$seed_unit" 2>/dev/null; then
+      bad "mp-dsf-seed.service does not wait for the mount of $at, so it could seed the read-only root underneath"
+   fi
+done
+
 # Directories that only ever hold what the machine produced.
 for d in sd/gcodes sd/menu sd/Vigil sd/QualityAssurance plugins; do
    [[ -d $DSF/$d ]] || { bad "/opt/dsf/$d is missing; it is a bind mount point"; continue; }
