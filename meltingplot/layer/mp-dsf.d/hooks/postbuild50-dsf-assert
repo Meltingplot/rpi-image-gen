@@ -121,6 +121,13 @@ gid=$(awk -F: '$1=="dsf"{print $3}' "$ROOT/etc/group")
 [[ $gid == "$DSF_GID" ]] ||
    bad "the group dsf has gid ${gid:-none}, expected $DSF_GID; persistent files are owned numerically"
 
+# Whatever the image gives to dsf goes to the group dsf as well. The uid in
+# its place is kvm on the device, and the directories are setgid, so every
+# file DSF creates in them later would inherit the wrong group too.
+mapfile -t wrong < <(find "$DSF" "$SKEL" -uid "$DSF_UID" ! -gid "$DSF_GID")
+(( ${#wrong[@]} == 0 )) ||
+   bad "${#wrong[@]} files of dsf are not in the group dsf ($DSF_GID), ${wrong[0]#"$ROOT"} among them; persistent files are owned numerically"
+
 # --- licence notice -------------------------------------------------------
 
 lic="$ROOT/opt/dsf/sd/sys/LICENSES.txt"

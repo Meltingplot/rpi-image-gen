@@ -15,6 +15,8 @@ MP_AUTOBOOT=${MP_AUTOBOOT:-/bootfs/autoboot.txt}
 MP_OTA_STATE_FILE=${MP_OTA_STATE_FILE:-/bootfs/ota_state}
 MP_TRYBOOT_FLAG=${MP_TRYBOOT_FLAG:-/proc/device-tree/chosen/bootloader/tryboot}
 MP_DSF_CONF=${MP_DSF_CONF:-/etc/meltingplot/dsf.conf}
+MP_DSF_SHARED=${MP_DSF_SHARED:-/persistent/shared/opt/dsf}
+MP_DSF_GROUP_STAMP=${MP_DSF_GROUP_STAMP:-/var/lib/meltingplot/dsf-group}
 
 # Settings the image was built with (layer mp-dsf). MP_MAINBOARD_RESET=y makes
 # the first boot after an update reset the mainboard (mp-dsf-firmware).
@@ -205,4 +207,28 @@ mp_ota_failed_show() {
    mp_ota_notice_close || return 1
    _p=$(mp_ota_failed_text | sed 's/"/""/g')
    mp_dcs_code "M291 S1 T0 R\"$MP_OTA_NOTICE_TITLE\" P\"$_p\""
+}
+
+# Images before mp-dsf 1.16.0 gave everything they put below /opt/dsf the uid
+# of dsf as its group, which on the device is kvm and not dsf. An image that
+# ships its files with the right group puts those back on its own, because
+# persistent-shared-init copies ownership along, but not what the seed placed
+# once, and not what DSF created since: the directories are setgid, so every
+# new file inherited the wrong group. This hands whatever still carries gid $1
+# to the group $2, on the persistent copy itself, where the read-only mounts
+# over the bundled plugins are no obstacle. It walks every file on the virtual
+# SD card, so it runs once per image version; a rollback to an older image
+# brings the wrong group back, and the next update puts it right again.
+mp_dsf_fix_group() {
+   [ -d "$MP_DSF_SHARED" ] || return 0
+   if [ -f "$MP_DSF_GROUP_STAMP" ] && [ "$(cat "$MP_DSF_GROUP_STAMP")" = "$MP_VERSION" ]; then
+      return 0
+   fi
+   _n=$(find "$MP_DSF_SHARED" -xdev -gid "$1" -print | wc -l)
+   if [ "$_n" -gt 0 ]; then
+      find "$MP_DSF_SHARED" -xdev -gid "$1" -exec chgrp -h "$2" {} + || return 1
+      mp_log "$_n files below $MP_DSF_SHARED moved from gid $1 to the group $2"
+   fi
+   mkdir -p "$(dirname "$MP_DSF_GROUP_STAMP")"
+   printf '%s\n' "$MP_VERSION" > "$MP_DSF_GROUP_STAMP"
 }

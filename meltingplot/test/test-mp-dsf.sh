@@ -458,5 +458,54 @@ check "reset, update, not idle again, log" yes \
    "$(grep -q 'did not come back idle after the reset' "$tmp/fw.log" && echo yes || echo no)"
 fw_reset=n
 
+# --- group of the persistent DSF files ------------------------------------
+# Two groups of the account running the tests stand in for kvm (wrong) and dsf
+# (right); a chgrp needs nothing more than membership in both.
+
+right=$(id -g)
+wrong=$(id -G | tr ' ' '\n' | grep -vx "$right" | head -n 1)
+if [ -z "$wrong" ]; then
+   echo "skip group of the persistent DSF files: the test account has only one group"
+else
+   MP_DSF_SHARED="$tmp/shared"
+   MP_DSF_GROUP_STAMP="$tmp/var/dsf-group"
+   MP_VERSION=0.1.0-rc.50
+   in_wrong() { find "$MP_DSF_SHARED" -gid "$wrong" | wc -l; }
+
+   rc=0; mp_dsf_fix_group "$wrong" "$right" 2>/dev/null || rc=$?
+   check "group, no shared tree"        0 "$rc"
+   check "group, no shared tree, stamp" no "$([ -e "$MP_DSF_GROUP_STAMP" ] && echo yes || echo no)"
+
+   mkdir -p "$tmp/shared/sd/sys" "$tmp/shared/sd/Vigil" "$tmp/shared/sd/gcodes"
+   touch "$tmp/shared/sd/sys/config.g" "$tmp/shared/sd/Vigil/state.json" "$tmp/shared/sd/gcodes/job.gcode"
+   ln -s config.g "$tmp/shared/sd/sys/link.g"
+   chgrp "$wrong" "$tmp/shared/sd/sys/config.g" "$tmp/shared/sd/Vigil" "$tmp/shared/sd/Vigil/state.json"
+   chgrp -h "$wrong" "$tmp/shared/sd/sys/link.g"
+   check "group, before"                4 "$(in_wrong)"
+   rc=0; mp_dsf_fix_group "$wrong" "$right" 2>"$tmp/group.log" || rc=$?
+   check "group, fixed"                 0 "$rc"
+   check "group, none left"             0 "$(in_wrong)"
+   check "group, untouched file"        "$right" "$(stat -c %g "$tmp/shared/sd/gcodes/job.gcode")"
+   check "group, logged"                yes "$(grep -q ': 4 files below' "$tmp/group.log" && echo yes || echo no)"
+   check "group, stamp"                 "$MP_VERSION" "$(cat "$MP_DSF_GROUP_STAMP")"
+
+   # Once per image version: a file in the wrong group after that waits for
+   # the next version.
+   touch "$tmp/shared/sd/sys/late.g"
+   chgrp "$wrong" "$tmp/shared/sd/sys/late.g"
+   mp_dsf_fix_group "$wrong" "$right" 2>/dev/null
+   check "group, same version"          1 "$(in_wrong)"
+   MP_VERSION=0.1.0-rc.51
+   mp_dsf_fix_group "$wrong" "$right" 2>/dev/null
+   check "group, next version"          0 "$(in_wrong)"
+
+   # A chgrp that fails leaves the stamp alone, so the next boot tries again.
+   MP_VERSION=0.1.0-rc.52
+   chgrp "$wrong" "$tmp/shared/sd/sys/late.g"
+   rc=0; mp_dsf_fix_group "$wrong" mp-no-such-group 2>/dev/null || rc=$?
+   check "group, chgrp fails"           1 "$rc"
+   check "group, chgrp fails, stamp"    0.1.0-rc.51 "$(cat "$MP_DSF_GROUP_STAMP")"
+fi
+
 [ "$fail" -eq 0 ] && echo "all tests passed"
 exit "$fail"
