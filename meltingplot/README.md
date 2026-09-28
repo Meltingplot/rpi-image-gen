@@ -406,7 +406,7 @@ What support used to do as root over the Connect shell goes like this now:
 - The printer name is changed in Duet Web Control, or by the administrator.
 
 The post-build assert of `mp-admin` refuses an image in which `meltingplot`
-could become root or belongs to any group besides `adm`, or in which sshd
+could become root or belongs to a group that grants anything, or in which sshd
 would let the administrator in from anywhere else.
 
 ## Updating a fleet
