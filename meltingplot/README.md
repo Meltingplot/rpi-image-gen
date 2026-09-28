@@ -551,6 +551,18 @@ The rule is enforced by an AppArmor profile
 and a systemd sandbox around the plugin service. Refusals show up as
 `apparmor="DENIED"` in `journalctl -k`.
 
+The profile decides by path: a bundled plugin may run the code below
+`/opt/dsf/plugins/<id>`. That directory is on the persistent partition, so
+the rule is only as good as the guarantee that nothing there can change.
+`mp-dsf-seed` therefore mounts the image's own copy of each bundled plugin
+over it at boot, read-only, from the read-only root, where no remount makes
+it writable. An account in the `dsf` group cannot change the code, nor can
+DuetControlServer installing an uploaded plugin of the same id over a
+bundled one: that upload fails once it gets to the code, having removed the
+manifest, and the plugin is back on the next boot. `findmnt
+/opt/dsf/plugins/Vigil` shows the mount on the device. Only root can take it
+down (see Access).
+
 The bundled plugins are listed in `layer/mp-dsf.d/plugins.list`, one line per
 plugin with its id, version, checksum and the published release asset:
 

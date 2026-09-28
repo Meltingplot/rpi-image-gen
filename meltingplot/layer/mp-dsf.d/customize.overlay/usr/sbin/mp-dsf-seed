@@ -10,7 +10,8 @@
 #
 # The bundled plugins are handled the same way, except that a plugin is
 # replaced when the image carries a different version, because it is part of
-# the release rather than machine state.
+# the release rather than machine state. Their code then runs from the image
+# itself, mounted read-only over that copy.
 
 set -eu
 
@@ -78,7 +79,10 @@ seed_plugin() {
    [ "$have" = "$want" ] && return 0
 
    # Counters and history live on the virtual SD card, not in the manifest, so
-   # replacing the plugin wholesale keeps the machine's data.
+   # replacing the plugin wholesale keeps the machine's data. The read-only
+   # mount below is only there already when this runs a second time in one
+   # boot.
+   ! mountpoint -q "$DSF/plugins/${id}" || umount "$DSF/plugins/${id}"
    rm -rf "$DSF/plugins/${id}"
    cp -a "$SKEL/plugins/${id}" "$DSF/plugins/${id}"
    cp -a "$manifest" "$DSF/plugins/${id}.json"
@@ -116,5 +120,29 @@ fi
 
 chown -R dsf:dsf "$DSF/conf" "$DSF/plugins" 2>/dev/null || true
 chown dsf:dsf "$MP_PRINTER_NAME_FILE" 2>/dev/null || true
+
+# --- bundled plugin code, read-only ---------------------------------------
+# The plugin policy lets a bundled plugin run the code below
+# /opt/dsf/plugins/<id>, and it decides that by path. That directory is on the
+# persistent partition, so whatever can write there could change what runs:
+# an account in the dsf group, or DuetControlServer installing an uploaded
+# plugin of the same id over the bundled one. The image's own copy is
+# therefore mounted over it, read-only. It comes from the read-only root, so
+# no remount makes it writable, DuetPluginService's ReadWritePaths included;
+# only taking the mount down does, and that takes root. An upload of the same
+# id then fails halfway, having removed the manifest, and the plugin is back
+# on the next boot. The copy underneath stays as seeded above, for a slot
+# that starts without this mount.
+
+if [ -d "$SKEL/plugins" ]; then
+   for m in "$SKEL"/plugins/*.json; do
+      [ -f "$m" ] || continue
+      id=$(basename "$m" .json)
+      [ -d "$SKEL/plugins/$id" ] && [ -d "$DSF/plugins/$id" ] || continue
+      mountpoint -q "$DSF/plugins/$id" && continue
+      mount --bind "$SKEL/plugins/$id" "$DSF/plugins/$id"
+      mount -o remount,bind,ro "$DSF/plugins/$id"
+   done
+fi
 
 exit 0
