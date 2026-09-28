@@ -17,12 +17,17 @@ version=${IGconf_artefact_version:?}
 note() { echo "release gate: $*" >&2; }
 
 # --- an image nobody can log in to ----------------------------------------
-# Not fatal: Raspberry Pi Connect still reaches the device. Loud, because the
-# account has no password and this is the only other way in.
+# Not fatal: Raspberry Pi Connect still reaches the device, and an image
+# without an administrator key simply has no root. Loud, because neither
+# account has a password and these are the only other ways in.
 
 keys=${IGconf_ssh_pubkey_user1:-}
 if [[ -f $keys ]] && ! grep -qE '^(ssh|ecdsa|sk-)' "$keys"; then
    note "WARNING $keys holds no SSH key, so nobody can log in over SSH"
+fi
+keys=${IGconf_mpadmin_pubkeys:-}
+if [[ -f $keys ]] && ! grep -qE '^(ssh|ecdsa|sk-)' "$keys"; then
+   note "WARNING $keys holds no SSH key, so nobody can become root on this image"
 fi
 
 if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then

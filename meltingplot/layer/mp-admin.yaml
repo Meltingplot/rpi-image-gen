@@ -1,0 +1,133 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-admin
+# X-Env-Layer-Category: device
+# X-Env-Layer-Desc: The administrator account, the only way to root on a
+#  printer computer. It logs in over SSH with a key the image lists, only from
+#  the printer network and never from the machine itself, and has sudo without
+#  a password. The Raspberry Pi Connect account (user1) holds no privileges,
+#  so a Connect remote shell reaches neither root nor this account.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: device-user-admin,openssh-server
+# X-Env-Layer-RequiresProvider: systemd
+#
+# X-Env-VarRequires: IGconf_device_user1,IGconf_mpnet_address,IGconf_mpnet_gateway
+# X-Env-VarRequires-Valid: string,string,string
+#
+# X-Env-VarPrefix: mpadmin
+#
+# X-Env-Var-user: mpadmin
+# X-Env-Var-user-Desc: Name of the administrator account.
+# X-Env-Var-user-Required: n
+# X-Env-Var-user-Valid: regex:^[a-z_][a-z0-9_-]{0,31}$
+# X-Env-Var-user-Set: y
+#
+# X-Env-Var-uid: 1001
+# X-Env-Var-uid-Desc: Fixed uid and gid of the administrator account. Its
+#  home is on the persistent partition, which both slots share and which owns
+#  files numerically, so the id must not change between builds.
+# X-Env-Var-uid-Required: n
+# X-Env-Var-uid-Valid: int:1000-65533
+# X-Env-Var-uid-Set: y
+#
+# X-Env-Var-pubkeys:
+# X-Env-Var-pubkeys-Desc: File with the SSH public keys that may log in as the
+#  administrator, one per line as in authorized_keys. They are installed on the
+#  read-only root, so the image decides who is administrator: a key added on
+#  the device, in the home directory or anywhere else, is never accepted, and
+#  a key taken out of the file is gone with the next update.
+# X-Env-Var-pubkeys-Required: y
+# X-Env-Var-pubkeys-Valid: file
+# X-Env-Var-pubkeys-Set: y
+# METAEND
+---
+mmdebstrap:
+  customize-hooks:
+    # The account. Its password is locked like that of user1, so SSH with a
+    # listed key is the only way in, and sudo does not ask for one.
+    - |-
+      set -eu
+      u=$IGconf_mpadmin_user
+      chroot "$1" getent group "$u" >/dev/null ||
+        chroot "$1" groupadd -g "$IGconf_mpadmin_uid" "$u"
+      chroot "$1" getent passwd "$u" >/dev/null ||
+        chroot "$1" adduser --disabled-password --comment "Meltingplot administrator" \
+          --uid "$IGconf_mpadmin_uid" --gid "$IGconf_mpadmin_uid" "$u"
+      chroot "$1" adduser "$u" adm >/dev/null
+      printf '%s ALL=(ALL:ALL) NOPASSWD: ALL\n' "$u" > "$1/etc/sudoers.d/020_mp-admin"
+      chmod 0440 "$1/etc/sudoers.d/020_mp-admin"
+      chroot "$1" visudo -cq -f /etc/sudoers.d/020_mp-admin
+    # /home moves to the persistent partition when the image is made, and an
+    # update never touches it. A printer that gets this account by update has
+    # no home for it until this creates one.
+    - |-
+      set -eu
+      u=$IGconf_mpadmin_user
+      install -d -m 0755 "$1/usr/lib/tmpfiles.d"
+      cat > "$1/usr/lib/tmpfiles.d/mp-admin.conf" <<-EOF
+      # Written by rpi-image-gen layer mp-admin.
+      d /home/$u 0700 $u $u -
+      EOF
+    # The keys, on the read-only root. Every line has to be a public key.
+    - |-
+      set -eu
+      u=$IGconf_mpadmin_user
+      install -d -m 0755 "$1/etc/meltingplot/ssh"
+      install -m 0644 "$IGconf_mpadmin_pubkeys" "$1/etc/meltingplot/ssh/$u.keys"
+      n=0
+      while IFS= read -r line || [ -n "$line" ]; do
+        case $line in '' | \#*) continue ;; esac
+        printf '%s\n' "$line" | chroot "$1" ssh-keygen -l -f - >/dev/null 2>&1 ||
+          { echo "mp-admin: $IGconf_mpadmin_pubkeys: not an SSH public key: $line" >&2; exit 1; }
+        n=$((n + 1))
+      done < "$IGconf_mpadmin_pubkeys"
+      if [ "$n" -eq 0 ]; then
+        echo "mp-admin: WARNING $IGconf_mpadmin_pubkeys lists no key, nobody can become root on this image" >&2
+      else
+        echo "mp-admin: $n key(s) may log in as $u" >&2
+      fi
+    # Who may log in over SSH, and from where. /etc/ssh is shared by both
+    # slots; the image puts this file back on every boot.
+    - |-
+      set -eu
+      u=$IGconf_mpadmin_user
+      self=${IGconf_mpnet_address%/*}
+      net=$(python3 -c 'import ipaddress, sys; print(ipaddress.ip_interface(sys.argv[1]).network)' "$IGconf_mpnet_address")
+      install -d -m 0755 "$1/etc/ssh/sshd_config.d"
+      cat > "$1/etc/ssh/sshd_config.d/10-mp-admin.conf" <<-EOF
+      # Written by rpi-image-gen layer mp-admin. Put back on every boot.
+      #
+      # The Raspberry Pi Connect account logs in from anywhere, since it holds
+      # no privileges. The administrator, who can become root, only from the
+      # printer network.
+      AllowUsers $IGconf_device_user1 $u@$net
+
+      # ... and never from this machine itself, which is where a shell on it,
+      # a Connect remote shell included, would come from. The loopback is
+      # outside the network above already.
+      Match User $u Address $self
+          RefuseConnection yes
+
+      # Only the keys the image lists. A key in the home directory, which is
+      # on the persistent partition and outlives any update, is not accepted.
+      Match User $u
+          AuthorizedKeysFile /etc/meltingplot/ssh/%u.keys
+      EOF
+      # Check it with the sshd of the image, which needs a host key and its
+      # privilege separation directory for that; neither stays behind.
+      created_run=
+      [ -d "$1/run/sshd" ] || { mkdir -p "$1/run/sshd"; created_run=y; }
+      rm -f "$1/tmp/mp-admin-hostkey" "$1/tmp/mp-admin-hostkey.pub"
+      chroot "$1" ssh-keygen -q -t ed25519 -N "" -f /tmp/mp-admin-hostkey
+      effective() {  # rootfs user address
+        chroot "$1" /usr/sbin/sshd -T -h /tmp/mp-admin-hostkey \
+          -C "user=$2,addr=$3,host=$3,laddr=$self,lport=22"
+      }
+      ok=y
+      chroot "$1" /usr/sbin/sshd -t -h /tmp/mp-admin-hostkey || ok=
+      effective "$1" "$u" "$self" | grep -qx 'refuseconnection yes' || ok=
+      effective "$1" "$u" "$IGconf_mpnet_gateway" | grep -qx 'refuseconnection no' || ok=
+      effective "$1" "$u" "$IGconf_mpnet_gateway" | grep -qx "authorizedkeysfile /etc/meltingplot/ssh/%u.keys" || ok=
+      rm -f "$1/tmp/mp-admin-hostkey" "$1/tmp/mp-admin-hostkey.pub"
+      [ -z "$created_run" ] || rmdir "$1/run/sshd"
+      [ -n "$ok" ] || { echo "mp-admin: sshd does not apply the access rules as written" >&2; exit 1; }
+      echo "mp-admin: $u logs in from $net, not from $self" >&2

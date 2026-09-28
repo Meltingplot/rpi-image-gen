@@ -37,8 +37,14 @@
 # that this gate put the notice up, so it never closes a message box that a
 # later boot put up.
 #
-# Support can deploy to a printer whose control server is down by stopping
-# the timer and starting the connector by hand over the Connect shell.
+# A control server that stays unreachable, or a mainboard that stays
+# disconnected from it, lets the connector run once that has lasted
+# MP_DOWN_GRACE seconds without a break. No print runs meanwhile: in SBC mode
+# RepRapFirmware gets every line of a job from the control server. And it is
+# the only way a release that breaks either can be replaced remotely, since
+# the Connect shell cannot become root to start the connector by hand. The
+# time is counted from the uptime, not the clock, which jumps when the
+# machine, which has no RTC, first reaches its time server.
 
 set -eu
 
@@ -52,15 +58,34 @@ MP_LIB=${MP_LIB:-/usr/lib/meltingplot}
 SYSTEMCTL=${MP_SYSTEMCTL:-systemctl}
 UNIT=rpi-connect-ota.service
 NOTICE_FLAG=${MP_NOTICE_FLAG:-/run/mp-ota-gate.notice}
+DOWN_FLAG=${MP_DOWN_FLAG:-/run/mp-ota-gate.down}
+DOWN_GRACE=${MP_DOWN_GRACE:-600}
+UPTIME=${MP_UPTIME:-/proc/uptime}
 
 status=$(mp_dcs_status)
 active=$("$SYSTEMCTL" is-active "$UNIT" 2>/dev/null || true)
+
+# How long the printer has been out of reach, from the first check that found
+# it so. Any other answer starts the count again.
+now=$(cut -d. -f1 "$UPTIME")
+down=0
+case $status in
+   '' | disconnected)
+      [ -s "$DOWN_FLAG" ] || echo "$now" > "$DOWN_FLAG"
+      down=$((now - $(cat "$DOWN_FLAG")))
+      ;;
+   *)
+      rm -f "$DOWN_FLAG"
+      ;;
+esac
 
 if [ "$status" = idle ]; then
    want=running
 elif ! mp_slot_committed; then
    # Not the connector's restart to hold back: this slot was just trybooted
    # and the connector is the one that commits it.
+   want=running
+elif [ "$down" -ge "$DOWN_GRACE" ]; then
    want=running
 else
    want=stopped
@@ -70,7 +95,11 @@ case $want:$active in
    running:active | running:activating)
       ;;
    running:*)
-      mp_log "the printer is ${status:-unreachable}; the update connector runs"
+      if [ "$down" -ge "$DOWN_GRACE" ]; then
+         mp_log "the printer has been ${status:-unreachable} for $((down / 60)) minutes; the update connector runs"
+      else
+         mp_log "the printer is ${status:-unreachable}; the update connector runs"
+      fi
       "$SYSTEMCTL" start "$UNIT"
       ;;
    stopped:active | stopped:activating)

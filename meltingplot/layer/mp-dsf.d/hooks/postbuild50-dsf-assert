@@ -10,6 +10,7 @@ set -euo pipefail
 ROOT=${1:?rootfs}
 ASSETS=${IGconf_dsf_assetdir:?}
 DSF_UID=${IGconf_dsf_uid:?}
+DSF_GID=${IGconf_dsf_gid:?}
 
 DSF="$ROOT/opt/dsf"
 SD="$DSF/sd"
@@ -100,6 +101,9 @@ fi
 uid=$(awk -F: '$1=="dsf"{print $3}' "$ROOT/etc/passwd")
 [[ $uid == "$DSF_UID" ]] ||
    bad "dsf has uid ${uid:-none}, expected $DSF_UID; persistent files are owned numerically"
+gid=$(awk -F: '$1=="dsf"{print $3}' "$ROOT/etc/group")
+[[ $gid == "$DSF_GID" ]] ||
+   bad "the group dsf has gid ${gid:-none}, expected $DSF_GID; persistent files are owned numerically"
 
 # --- licence notice -------------------------------------------------------
 
@@ -169,6 +173,12 @@ if [[ -f $SKEL/conf/plugins.txt ]]; then
    done < "$SKEL/conf/plugins.txt"
 fi
 
+# The read rules go by path. What makes the path worth trusting is that the
+# seed mounts the image's own copy of each plugin over it, read-only; without
+# that, anything that can write to the persistent partition decides what runs.
+grep -qF 'mount -o remount,bind,ro "$DSF/plugins/$id"' "$ROOT/usr/sbin/mp-dsf-seed" 2>/dev/null ||
+   bad "mp-dsf-seed does not mount the bundled plugins read-only, so the plugin policy would trust writable code"
+
 # The CHX 350 backend serves /machine/CHX350/* to the operator interface built
 # into Duet Web Control. The two are released together, from one tag of our
 # Duet Web Control, and only a pair of the same version is known to agree on
@@ -220,6 +230,15 @@ if [[ -f $profile ]]; then
    fi
 else
    bad "the AppArmor plugin policy is missing"
+fi
+
+# A final image locks the policy once it is loaded; a prerelease does not, so
+# a plugin can be tried on a bench before it is released.
+lock="$ROOT/etc/systemd/system/sysinit.target.wants/mp-apparmor-lock.service"
+if [[ ${IGconf_artefact_version:?} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+   [[ -L $lock ]] || bad "$IGconf_artefact_version is final, but the AppArmor policy is not locked after boot"
+else
+   [[ ! -e $lock ]] || bad "$IGconf_artefact_version is a prerelease, but the AppArmor policy is locked after boot"
 fi
 
 # --- restarts and firmware ------------------------------------------------

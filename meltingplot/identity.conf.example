@@ -18,8 +18,8 @@ printer_serial=042
 # Display name shown by Duet Web Control and PanelDue (M550), and the source of
 # the Linux hostname. Optional - defaults to meltingplot-chx-350-<serial>-sbc.
 # Allowed: ASCII letters, digits, space and '-', at most 40 characters (limit
-# imposed by DuetControlServer). The customer can change this later in DWC or
-# with `sudo mp-set-printer-name "<name>"`.
+# imposed by DuetControlServer). The customer can change this later in DWC,
+# the administrator with `sudo mp-set-printer-name "<name>"`.
 #printer_name=Halle 2 links
 
 # Single-use Raspberry Pi Connect auth key for this device, taken from the
