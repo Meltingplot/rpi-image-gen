@@ -36,8 +36,24 @@ done < "$ASSETS/protected.list"
 [[ -d $SKEL/sd ]] || bad "no seed skeleton below $SKEL/sd"
 [[ -f $SKEL/conf/plugins.txt ]] || bad "the plugin autostart list is not in the skeleton"
 
+# The seed copies the skeleton into the slot-shared directories below
+# /opt/dsf/sd, and fails without a word where it cannot write. A file for any
+# other place would land on the read-only root, and so would one copied before
+# its directory is mounted.
+shared="$ROOT/etc/rpi-image-gen/slot-shared.d/dsf.conf"
+seed_unit="$ROOT/usr/lib/systemd/system/mp-dsf-seed.service"
+for d in "$SKEL"/sd/*; do
+   [[ -e $d ]] || continue
+   at=/opt/dsf/sd/$(basename "$d")
+   if [[ ! -d $d ]] || ! grep -qx "Path=$at" "$shared" 2>/dev/null; then
+      bad "the seed skeleton has sd/$(basename "$d"), but $at is not a slot-shared directory, so it would be seeded into the read-only root"
+   elif ! grep -Eq "^RequiresMountsFor=(.* )?$at( |$)" "$seed_unit" 2>/dev/null; then
+      bad "mp-dsf-seed.service does not wait for the mount of $at, so it could seed the read-only root underneath"
+   fi
+done
+
 # Directories that only ever hold what the machine produced.
-for d in sd/gcodes sd/menu sd/Vigil plugins; do
+for d in sd/gcodes sd/menu sd/Vigil sd/QualityAssurance plugins; do
    [[ -d $DSF/$d ]] || { bad "/opt/dsf/$d is missing; it is a bind mount point"; continue; }
    [[ -z $(ls -A "$DSF/$d") ]] || bad "/opt/dsf/$d ships files, so the machine's would be overwritten"
 done
@@ -203,14 +219,19 @@ if [[ -f $profile ]]; then
       bad "the AppArmor profile still carries its mode placeholder"
    fi
 
-   # A plugin must not be able to start another program. Everything the child
-   # profile may do is listed explicitly, so any exec permission in it is a
-   # mistake.
-   if awk '/profile dsf_plugin_py/,/^  }$/' "$profile" |
-        grep -v '^[[:space:]]*#' |
-        grep -Eq '[[:space:]][a-zA-Z]*x[a-zA-Z]*,[[:space:]]*$'; then
-      bad "the dsf_plugin_py profile grants an exec permission"
-   fi
+   # A plugin must not be able to start another program, with the exception of
+   # these, for the timelapse of QualityAssurance. They may only inherit the
+   # plugin profile ("ix"), so they can do nothing the plugin cannot. Any other
+   # exec permission in the child profile is a mistake, and so is a qualifier
+   # or a transition on one of these. An exec permission is any mode that
+   # contains x, wherever it stands in the rule.
+   plugin_programs=" /usr/bin/ffmpeg /usr/bin/ffprobe "
+   while read -r path mode rest; do
+      [[ $plugin_programs == *" $path "* && $mode == ix, && -z $rest ]] && continue
+      bad "the dsf_plugin_py profile grants an exec permission: $path $mode${rest:+ $rest}"
+   done < <(awk '/profile dsf_plugin_py/,/^  }$/' "$profile" |
+            grep -v '^[[:space:]]*#' | sed 's/[[:space:]]#.*//' |
+            grep -E '(^|[[:space:]])[rwaklmipuPUcC]*x[rwaklmipuPUcC]*(,|[[:space:]]|$)' || true)
 
    # The service runs with NoNewPrivileges, and under no_new_privs the kernel
    # denies an exec that leaves the current profile. Only a stacked transition

@@ -38,6 +38,10 @@ Meltingplot software
       GPL-3.0-or-later. Released with our Duet Web Control, from the same
       tag as the duetwebcontrol package named above.
       https://github.com/Meltingplot/DuetWebControl
+    QualityAssurance, the process data of every print job: MIT.
+      https://github.com/Meltingplot/dwc-quality-assurance
+    The web parts of Vigil and QualityAssurance include the libraries
+    Chart.js and @kurkle/color: MIT, see section 4.
   The image definition and build, based on rpi-image-gen by Raspberry Pi Ltd:
   BSD-3-Clause.
   https://github.com/Meltingplot/rpi-image-gen
@@ -170,3 +174,27 @@ Raspberry Pi 5 bootloader (package rpi-eeprom, files under firmware-2712)
 
 JPEG code (packages ffmpeg, libavcodec61 and libjpeg62-turbo)
   This software is based in part on the work of the Independent JPEG Group.
+
+Chart.js and @kurkle/color (in the web part of the plugins Vigil and
+QualityAssurance)
+  Copyright (c) 2014-2024 Chart.js Contributors
+  Copyright (c) 2018-2024 Jukka Kurkela
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software and associated documentation files (the
+  "Software"), to deal in the Software without restriction, including
+  without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to permit
+  persons to whom the Software is furnished to do so, subject to the
+  following conditions:
+
+  The above copyright notice and this permission notice shall be included
+  in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+  NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+  DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+  OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+  USE OR OTHER DEALINGS IN THE SOFTWARE.

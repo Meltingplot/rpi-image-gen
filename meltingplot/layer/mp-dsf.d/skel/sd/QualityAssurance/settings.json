@@ -1,0 +1,8 @@
+{
+  "timelapse": {
+    "snapshotUrl": "http://10.42.0.1/snapshot"
+  },
+  "accelerometer": {
+    "board": 60
+  }
+}
