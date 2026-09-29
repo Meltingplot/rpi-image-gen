@@ -12,7 +12,7 @@
 #  broken release can still be replaced remotely. The printer shows a message
 #  box while an update is in progress, and the Duet firmware follows the
 #  image once a slot is committed (mp-dsf-firmware).
-# X-Env-Layer-Version: 1.16.1
+# X-Env-Layer-Version: 1.17.0
 # X-Env-Layer-Requires: mp-duet-hw,mp-identity,device-user-admin,rpi-debian-trixie
 # X-Env-Layer-RequiresProvider: systemd
 #

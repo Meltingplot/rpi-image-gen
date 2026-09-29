@@ -201,6 +201,14 @@ profile DuetPluginService /opt/dsf/bin/DuetPluginService flags=(attach_disconnec
     /opt/dsf/sd/QualityAssurance/** rwk,
     /opt/dsf/sd/gcodes/ r,
     /opt/dsf/sd/gcodes/** r,
+    # The system directory, read only: the macros a job calls with M98, whose
+    # filament travel counts towards the gear passes, and the height map of
+    # the bed mesh. A macro name without a path lies anywhere below 0:/sys
+    # and may have no extension (meltingplot/print_end), so no narrower
+    # pattern holds them. It is the rule DuetPluginService itself writes for
+    # the readSystem permission the plugin declares. It lets every bundled
+    # plugin read config.g and the rest of 0:/sys.
+    /opt/dsf/sd/sys/** r,
     # The CSVs of its own accelerometer recordings, which it reads and then
     # deletes. RepRapFirmware writes them through DuetControlServer, so the
     # plugin never creates a file there, and it names them qa-*.csv, so it

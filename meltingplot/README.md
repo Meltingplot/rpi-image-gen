@@ -649,7 +649,8 @@ list of our Duet Web Control already.
 QualityAssurance records the process data of every print job: temperatures,
 flows, events and the job context in a SQLite database below
 `/opt/dsf/sd/QualityAssurance`, which the machine keeps across updates like
-Vigil's counters. It reads the job files and the CSVs of its own accelerometer
+Vigil's counters. It reads the job files and everything in `0:/sys` (the macros
+a job calls, the height map), deletes the CSVs of its own accelerometer
 recordings in `0:/sys/accelerometer`, and ships a page for Duet Web Control.
 Two of its settings depend on the machine, and without them it records
 neither a timelapse nor accelerometer spectra: `timelapse.snapshotUrl`, the
