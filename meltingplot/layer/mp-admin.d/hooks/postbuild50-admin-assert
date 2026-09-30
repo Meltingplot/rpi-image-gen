@@ -56,6 +56,21 @@ while IFS= read -r group; do
    esac
 done < <(awk -F: -v u="$USER1" '{ n = split($4, m, ","); for (i = 1; i <= n; i++) if (m[i] == u) print $1 }' "$ROOT/etc/group")
 
+# --- login accounts own nothing outside /home -----------------------------
+# A file belongs to whoever has its number on the device. A package built
+# as an unprivileged user keeps that user's number in its archive (the DSF
+# packages carried runner, 1001, until 3.7.0-rc.2+mp.9), and on the device
+# that number is an account of ours: the administrator owned /opt/dsf/bin and
+# /usr/lib/systemd/system. System accounts are below 1000, nobody is 65534.
+
+owned=$(find "$ROOT" -xdev -path "$ROOT/home" -prune -o \
+   \( -uid +999 -o -gid +999 \) ! -uid 65534 ! -gid 65534 -printf '%U:%G /%P\n' |
+   sort -k2)
+if [[ -n $owned ]]; then
+   bad "$(wc -l <<< "$owned") paths outside /home belong to a login account's id, for example:
+$(head -n 10 <<< "$owned")"
+fi
+
 # --- SSH ------------------------------------------------------------------
 
 grep -qx 'PermitRootLogin no' "$ROOT/etc/ssh/sshd_config.d/01pubkey-only.conf" 2>/dev/null ||
