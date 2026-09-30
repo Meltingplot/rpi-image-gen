@@ -23,6 +23,7 @@ and a rollback both keep it:
 | Path | Belongs to | What happens on an update |
 |---|---|---|
 | `/`, `/boot/firmware` | the image | replaced wholesale, read-only at runtime |
+| `/var` (without the journal) | the slot | reset to the new image's on the first boot of the slot |
 | `/opt/dsf/sd/{sys,macros,filaments}` | the image | the new printer configuration replaces the old one |
 | `/opt/dsf/sd/www` | the image | the new Duet Web Control replaces the old one |
 | `/opt/dsf/conf/{config,plugins}.json` | the image | corrected by the update |

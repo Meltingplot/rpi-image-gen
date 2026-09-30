@@ -36,6 +36,11 @@ This system uses an A/B, read‑only root with all writable state on a single pe
 * **Machine Identity (systemd)**
    ** `/etc/machine-id` is synchronised early with `/persistent/common/etc/machine-id` using a oneshot unit.
 
+* **Per-slot /var after an update**
+   ** An update replaces the system slot, not its `/var`. The immutable root therefore retains the image's `/var` under `/usr/lib/rpi-image-gen/slot-var`, identified by a hash of its content in `lib/rpi-image-gen/slot-var-id`.
+   ** Before `/var` is mounted, `slot-var-init.service` compares that id with the one in the slot's `/var`. If they differ, it replaces the slot's `/var` with the image's, leaving out `/var/log/journal`, and writes the id last. The package database, caches and state directories then match the running image, as on a freshly provisioned device.
+   ** The other slot's `/var` is not touched, so a rollback finds it as its image left it.
+
 
 [WARNING]
 ====

@@ -41,6 +41,7 @@ ln -s /etc/machine-id "${fs}/var/lib/dbus/machine-id"
 wants_dir="${fs}/etc/systemd/system/local-fs.target.wants"
 units=(
   "persistent-shared-init.service"
+  "slot-var-init.service"
 )
 install -d -m 0755 "${wants_dir}"
 for unit in "${units[@]}"; do
@@ -48,6 +49,19 @@ for unit in "${units[@]}"; do
   chmod 0644 "${fs}/etc/systemd/system/${unit}"
   ln -sf "../${unit}" "${wants_dir}/${unit}"
 done
+
+
+# An update replaces a system slot but not its /var, so retain this image's
+# /var in the immutable root for slot-var-init to put in place of a slot's
+# /var that came from another image. The id is a hash of the content.
+var_id=$(cd "${fs}/var" && {
+   find . -printf '%y %m %U %G %p %l\n'
+   find . -type f -print0 | xargs -0 -r sha256sum
+} | LC_ALL=C sort | sha256sum | cut -d' ' -f1)
+install -d -m 0755 "${fs}/var/lib/rpi-image-gen"
+printf '%s\n' "$var_id" > "${fs}/var/lib/rpi-image-gen/slot-var-id"
+install -d -m 0755 "${fs}/usr/lib/rpi-image-gen/slot-var"
+rsync -aHAXS --numeric-ids --delete "${fs}/var/" "${fs}/usr/lib/rpi-image-gen/slot-var/"
 
 
 # /var is per-slot, so synchronise
