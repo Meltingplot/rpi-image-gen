@@ -285,8 +285,11 @@ PY
 
 # --- ownership ------------------------------------------------------------
 # DSF runs with UMask=0002, so group write and setgid directories are what it
-# expects. /opt/dsf/bin stays root-owned and executable.
+# expects. /opt/dsf/bin stays root-owned and executable. /opt/dsf itself is
+# root's too: duetsd from the Duet3D archive is packaged as the build user
+# (1001, an account of ours on the device) and, unpacked first, creates it.
 
+chown root:root "$DSF"
 for d in "$SD" "$DSF/conf" "$DSF/plugins" "$SKEL"; do
    [[ -d $d ]] || continue
    chown -R "$DSF_UID:$DSF_GID" "$d"
