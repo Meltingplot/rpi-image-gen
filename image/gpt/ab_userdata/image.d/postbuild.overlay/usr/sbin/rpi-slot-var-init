@@ -1,0 +1,41 @@
+#!/bin/sh
+
+# Put this image's /var in place of the slot's /var when that came from
+# another image.
+#
+# The slot's /var lives on the persistent partition and is filled from the
+# image when the device is provisioned. An update replaces the system slot but
+# not its /var, which would keep the package database, caches and state
+# directories of whichever image first ran in the slot. The image retains its
+# own /var for this, identified by a hash of its content. Runs before var.mount
+# on the slot's directory in /persistent. The journal is a mount of its own
+# below /var and is left alone.
+
+set -eu
+
+FACTORY=/usr/lib/rpi-image-gen/slot-var
+ID=lib/rpi-image-gen/slot-var-id
+
+# The generator chose the slot's directory
+VAR_SRC=$(sed -n 's/^What=//p' /run/systemd/generator/var.mount 2>/dev/null || true)
+case "$VAR_SRC" in
+   /persistent/slots/*/var) ;;
+   *) printf 'slot-var-init: no per-slot /var in var.mount ("%s")\n' "$VAR_SRC" >&2
+      exit 1 ;;
+esac
+
+want=$(cat "${FACTORY}/${ID}")
+have=$(cat "${VAR_SRC}/${ID}" 2>/dev/null || true)
+[ "$want" != "$have" ] || exit 0
+
+printf 'slot-var-init: %s is from %s, resetting it to this image (%s)\n' \
+   "$VAR_SRC" "${have:-another image}" "$want"
+mkdir -p "$VAR_SRC"
+# By content: files of two images can agree in size and mtime
+rsync -aHAXS --numeric-ids --delete --checksum \
+   --exclude="/${ID}" --exclude=/log/journal/ \
+   "${FACTORY}/" "${VAR_SRC}/"
+sync -f "$VAR_SRC"
+# The id last, so that an interrupted reset is done again
+cp -p "${FACTORY}/${ID}" "${VAR_SRC}/${ID}"
+sync -f "$VAR_SRC"

@@ -1,0 +1,13 @@
+[Unit]
+Description=Reset the per-slot /var to this image after an update
+DefaultDependencies=no
+Requires=persistent.mount
+After=persistent.mount
+Before=local-fs.target
+Before=var.mount
+ConditionPathIsDirectory=/usr/lib/rpi-image-gen/slot-var
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/rpi-slot-var-init
