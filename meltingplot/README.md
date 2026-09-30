@@ -247,8 +247,8 @@ builds from the modified source, what Duet3D would have put in its archive:
 
 ```bash
 # in the fork, on the branch of the pinned generation (v3.7-dev for 3.7.0-rc.2)
-# Directory.Build.props: <Version>3.7.0-rc.2+mp.7</Version>
-# pkg/dwc-version:       v3.7.0-rc.2+mp.6
+# Directory.Build.props: <Version>3.7.0-rc.2+mp.8</Version>
+# pkg/dwc-version:       v3.7.0-rc.2+mp.7
 pkg/build.sh --target-arch=aarch64 --packages=progs,dwc,meta deb
 ```
 
@@ -302,8 +302,8 @@ that `pkg/dwc-version` in the fork names and stops when the `package.json`
 there carries a different version, so a DSF release carries a known Duet Web
 Control, and its release notes list the Duet Web Control changes it brings.
 The version of our Duet Web Control is that of the generation plus a suffix,
-`3.7.0-rc.2+mp.6` for DSF `3.7.0~rc.2`, which is what it shows as its version
-and what the package carries as `3.7.0~rc.2+mp.6`. A change to the web
+`3.7.0-rc.2+mp.7` for DSF `3.7.0~rc.2`, which is what it shows as its version
+and what the package carries as `3.7.0~rc.2+mp.7`. A change to the web
 interface therefore means a release of the fork of Duet Web Control (an
 annotated tag `v<version>` on the branch of the generation) and then one of
 the DuetSoftwareFramework fork with `pkg/dwc-version` set to that tag. The
