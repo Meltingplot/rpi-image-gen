@@ -27,7 +27,7 @@ Vigil 1.3.0-rc.2 sha256:58ac3aecc1d8b0536721d1416fb804ccb3f78ff719625682797fc3c2
 # Control. It is released with Duet Web Control, from the tag the
 # duetwebcontrol package in packages.list is built from, and carries its
 # version; the post-build assert refuses a pair that differs.
-CHX350 3.7.0-rc.2+mp.6 sha256:158d7f3224e56bc3fb44d094f13489136837db0a33289e2e4d423455596a2661 https://github.com/Meltingplot/DuetWebControl/releases/download/v3.7.0-rc.2%2Bmp.6/CHX350-SBC.zip
+CHX350 3.7.0-rc.2+mp.7 sha256:f91a68cf704a7d341f3854587797f3c3963a12d9161c83fd01a18966986d1302 https://github.com/Meltingplot/DuetWebControl/releases/download/v3.7.0-rc.2%2Bmp.7/CHX350-SBC.zip
 
 # QualityAssurance, the process data of every print job: temperatures, flows,
 # events, accelerometer spectra and a timelapse per job, kept in its own
