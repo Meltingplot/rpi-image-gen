@@ -17,9 +17,13 @@
 Duet3Firmware_TOOL1LC.bin sha256:c836cdc0ce9b2fa5975128b9221ebf860030190a9bc26c120d6e7a873fd599b7 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.2%2B1-mp.1/Duet3Firmware_TOOL1LC.bin
 Duet3Firmware_EXP1HCL.bin sha256:85ff094c61b3195296fd9549deba7f84f475cc1eba84e00adfd79fe7105e23cb https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.2%2B1-mp.1/Duet3Firmware_EXP1HCL.bin
 Duet3Firmware_SZP.bin sha256:0bc3bd5e5a3623e3e2e92fface721339f37911fa03f82de4ae7b9408d1743759 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.2%2B1-mp.1/Duet3Firmware_SZP.bin
-# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0-rc.2 (36388362c), built
+# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0-rc.2+1 (72032c51b), built
 # by us against the Meltingplot library forks with a version string of its
 # own, so DuetControlServer flashes it on an image update. The firmware
 # reports its accelerometers under sensors.accelerometers, where
 # DuetSoftwareFramework 3.7.0-rc.2 looks for them; 3.7.0-rc.1 does not.
-Duet3Firmware_MB6HC.bin sha256:617cb5c57949b2d96c0400042a20ff7e1270649ffb815c959a605d38c045d278 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0-rc.2-mp.1/Duet3Firmware_MB6HC.bin
+# Upstream 3.7.0-rc.2+1 moved the MB6HC's IAP load address past the end of
+# the SAME70's RAM, which would make every later update over the SBC fail;
+# mp.3 puts it back at 0x20458000, where the packaged Duet3_SBCiap32_MB6HC.bin
+# is linked.
+Duet3Firmware_MB6HC.bin sha256:e5edec56e113fcf8887528c6789d2cb5e0840bb3bba5239b1c2642e3d9744dc9 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0-rc.2%2B1-mp.3/Duet3Firmware_MB6HC.bin
