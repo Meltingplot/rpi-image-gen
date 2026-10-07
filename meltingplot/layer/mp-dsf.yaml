@@ -28,7 +28,7 @@
 # X-Env-Var-assetdir-Valid: dir
 # X-Env-Var-assetdir-Set: y
 #
-# X-Env-Var-version: 3.7.0~rc.2
+# X-Env-Var-version: 3.7.0
 # X-Env-Var-version-Desc: Exact DuetSoftwareFramework version to install. Every
 #  DSF package is pinned to it. A build of our own in packages.list is of this
 #  generation and carries this version plus a suffix.

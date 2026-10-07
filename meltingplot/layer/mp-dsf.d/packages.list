@@ -21,34 +21,36 @@
 # A board firmware file is not a package of the build; it goes through
 # firmware.list.
 
-# 3.7.0-rc.2+mp.9: upstream v3.7-dev at 3.7.0-rc.2, which moves the
-# accelerometers from boards[] to sensors.accelerometers (as the RepRapFirmware
-# build in firmware.list reports them), with the object model additions, the
-# query flag fix and the file info parser changes of upstream, plus our fix for
-# a DCS crash on a non-finite expression result and our fix that keeps the
-# patches coming for a model collection the firmware replaces, such as a
-# board's drivers after an M999. Since mp.9 the packages are built with root
-# as owner of every file. Duet Web Control comes from our fork,
-# 3.7.0-rc.2+mp.7, the tag pkg/dwc-version in the fork pins, with the CHX 350
-# operator interface, which leaves machine actions such as preheating, homing
-# and filament change to the flow macros of the printer configuration, reports
-# a flow as completed only when it reaches its `echo ";; Completed"` line,
-# which it keeps out of the notifications, moves the axes while a job is paused
-# and shows history and analysis from the QualityAssurance plugin. The release
-# of that Duet Web Control also carries the interface's SBC backend, which
-# plugins.list pins at the same version. The meta package accepts the firmware
-# of 3.7.0-rc.1 (pkg/firmware-version in the fork), which dsf.rrf_version
-# installs. Earlier builds: mp.8 brought the object model fix, packaged as
-# the build user (1001), mp.7 carried Duet Web Control 3.7.0-rc.2+mp.6 and
-# the object model changes of upstream, mp.6 3.7.0-rc.2+mp.5, mp.5
-# 3.7.0-rc.2+mp.4, mp.4 3.7.0-rc.2+mp.3, mp.3 3.7.0-rc.2+mp.2, mp.9 of
-# 3.7.0-rc.1 brought remote sensors on CAN expansion boards, mp.8 checked N
-# line numbers in job and macro files, mp.7 RRF-style checksums on numbered
-# lines, mp.6 kept the object model in step after an SPI transfer timeout.
-duetsoftwareframework sha256:f2402cebfb6b0c6149c9e9b23aece2de9dca95bb5a6bf5a4f36174d91fe29f4b https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.9/duetsoftwareframework_3.7.0.rc.2%2Bmp.9_arm64.deb
-duetcontrolserver sha256:001e112a00718016211f6d2f972e42a6a298ad4d34d18ec365e65e2b7458d643 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.9/duetcontrolserver_3.7.0.rc.2%2Bmp.9_arm64.deb
-duetwebserver sha256:44efaa3b3d4de654dfd4621a967b1a38d66196923d45d5851458f27dbcd5c82b https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.9/duetwebserver_3.7.0.rc.2%2Bmp.9_arm64.deb
-duetpluginservice sha256:fb3ec6251345185e6c568e6d1faa2694c71a5d4e8cd3bb262f6e55aa0206f2ca https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.9/duetpluginservice_3.7.0.rc.2%2Bmp.9_arm64.deb
-duettools sha256:d85ab8ed1e938476ad0885ecfd9c4a8de72eaba1e11a112c5d58bb5b5b682e19 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.9/duettools_3.7.0.rc.2%2Bmp.9_arm64.deb
-duetruntime sha256:b0764af154cfd4c193e8ee93627766c3140be61f739298fa5af6e4acb981359d https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.9/duetruntime_3.7.0.rc.2%2Bmp.9_arm64.deb
-duetwebcontrol sha256:ffc9831004c50c01aaebbf1755576ed4816d84fa02b38006c3f798c5fb5f6515 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0-rc.2%2Bmp.9/duetwebcontrol_3.7.0.rc.2%2Bmp.7_all.deb
+# 3.7.0+mp.1: upstream v3.7-dev at 3.7.0, which no longer rejects the skip
+# keyword outside G-code files and reads the layer count, the filament used,
+# the generator and the print time from the headers of more slicers (the
+# filters are in config.json, which the image puts over the printer's copy on
+# every boot), plus our fix for a DCS crash on a non-finite expression result
+# and our fix that keeps the patches coming for a model collection the
+# firmware replaces, such as a board's drivers after an M999. The packages are
+# built with root as owner of every file. Duet Web Control comes from our
+# fork, 3.7.0+mp.1, the tag pkg/dwc-version in the fork pins: upstream 3.7.0
+# with the CHX 350 operator interface, which leaves machine actions such as
+# preheating, homing and filament change to the flow macros of the printer
+# configuration, reports a flow as completed only when it reaches its
+# `echo ";; Completed"` line, which it keeps out of the notifications, moves
+# the axes while a job is paused and shows history and analysis from the
+# QualityAssurance plugin. The release of that Duet Web Control also carries
+# the interface's SBC backend, which plugins.list pins at the same version.
+# Duet3D has not published 3.7.0 yet, so the meta package still accepts the
+# firmware of 3.7.0-rc.1 (pkg/firmware-version in the fork), which
+# dsf.rrf_version installs. Earlier builds: mp.9 of 3.7.0-rc.2 brought the
+# root ownership, mp.8 the object model fix, packaged as the build user
+# (1001), mp.7 carried Duet Web Control 3.7.0-rc.2+mp.6 and the object model
+# changes of upstream, mp.6 3.7.0-rc.2+mp.5, mp.5 3.7.0-rc.2+mp.4, mp.4
+# 3.7.0-rc.2+mp.3, mp.3 3.7.0-rc.2+mp.2, mp.9 of 3.7.0-rc.1 brought remote
+# sensors on CAN expansion boards, mp.8 checked N line numbers in job and
+# macro files, mp.7 RRF-style checksums on numbered lines, mp.6 kept the
+# object model in step after an SPI transfer timeout.
+duetsoftwareframework sha256:3c52423b6620c8b3a3b58bbd6c02ba8f6d0ccbd11b6e0755572580cd48e4b142 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.1/duetsoftwareframework_3.7.0%2Bmp.1_arm64.deb
+duetcontrolserver sha256:be16ce8235e9a4e67f48e1449e35a04b9b6e749816687f66370c2fb82209a4a1 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.1/duetcontrolserver_3.7.0%2Bmp.1_arm64.deb
+duetwebserver sha256:831fb37795cc2c72f1eddfdbc9b4e9a469fbb1a7a0b277fd9371725d1a722c35 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.1/duetwebserver_3.7.0%2Bmp.1_arm64.deb
+duetpluginservice sha256:1a00c36318aa0b5591e0241b89cd0127a633bd8e949e7d89fd01eee6139d5102 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.1/duetpluginservice_3.7.0%2Bmp.1_arm64.deb
+duettools sha256:22206b15974cb9bce22097d2760a80bf76995925dee165c6027a546a0ec954e9 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.1/duettools_3.7.0%2Bmp.1_arm64.deb
+duetruntime sha256:341fefc3bf64a5eafca637fcebbde71ef1bec3e4f6dae57c3d1b5b4b81779cec https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.1/duetruntime_3.7.0%2Bmp.1_arm64.deb
+duetwebcontrol sha256:de172ee8002a4e5192cd70d15395a543c9fad96be7447fe68b585a09b84d942a https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.1/duetwebcontrol_3.7.0%2Bmp.1_all.deb
