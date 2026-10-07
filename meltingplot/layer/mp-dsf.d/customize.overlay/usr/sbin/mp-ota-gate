@@ -11,11 +11,15 @@
 # binaries after a restart in the middle of a print on 2026-09-12).
 #
 # So the gate is the connector's service itself. This runs every minute from
-# mp-ota-gate.timer. While RepRapFirmware reports the machine idle the
-# connector runs, and a deployment created in Connect is installed and
-# restarts the machine within minutes. While it reports anything else, or
-# cannot be asked, the connector is stopped and a deployment stays pending in
-# Connect until the print is over. The connector is enabled, so it runs at
+# mp-ota-gate.timer. While RepRapFirmware reports the machine idle or halted
+# the connector runs, and a deployment created in Connect is installed and
+# restarts the machine within minutes. A halted mainboard runs nothing until
+# it is reset, and mp-dsf-firmware resets it on the next boot. Our
+# RepRapFirmware (since 3.7.0-mp.2) halts whenever it loses the control
+# server, which every restart of the Pi does, so a printer left halted after
+# one would otherwise take no update until someone stands at it. While it
+# reports anything else, or cannot be asked, the connector is stopped and a
+# deployment stays pending in Connect until the print is over. The connector is enabled, so it runs at
 # boot regardless and commits a freshly trybooted slot before this timer
 # fires for the first time; until that commit is through it is left alone
 # whatever the printer does, since the restart this guards against has
@@ -79,7 +83,7 @@ case $status in
       ;;
 esac
 
-if [ "$status" = idle ]; then
+if [ "$status" = idle ] || [ "$status" = halted ]; then
    want=running
 elif ! mp_slot_committed; then
    # Not the connector's restart to hold back: this slot was just trybooted

@@ -6,13 +6,14 @@
 #  configuration and Duet Web Control, the printer owns its calibration, and
 #  only plugins that came with the image may run code, from the image's own
 #  copy mounted read-only, and on a final image under a policy that is locked
-#  once loaded. The update connector runs only while the printer is idle
-#  (mp-ota-gate), so an update is installed and restarted into between
+#  once loaded. The update connector runs only while the printer is idle or
+#  halted (mp-ota-gate), so an update is installed and restarted into between
 #  prints, or once the printer has been out of reach for ten minutes, so a
 #  broken release can still be replaced remotely. The printer shows a message
-#  box while an update is in progress, and the Duet firmware follows the
-#  image once a slot is committed (mp-dsf-firmware).
-# X-Env-Layer-Version: 1.17.0
+#  box while an update is in progress, a mainboard halted by the restart of
+#  the Pi is reset, and the Duet firmware follows the image once a slot is
+#  committed (mp-dsf-firmware).
+# X-Env-Layer-Version: 1.18.0
 # X-Env-Layer-Requires: mp-duet-hw,mp-identity,device-user-admin,rpi-debian-trixie
 # X-Env-Layer-RequiresProvider: systemd
 #
