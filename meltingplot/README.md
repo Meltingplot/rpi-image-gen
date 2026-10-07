@@ -444,11 +444,14 @@ To go back, deploy the previous artefact again. It stays registered.
 ### What happens on the device
 
 1. The update connector from `rpi-connect-ota` runs only while the printer is
-   idle. `mp-ota-gate` checks once a minute what RepRapFirmware reports and
-   stops the connector's service for anything but idle: a running, paused or
-   cancelling print, a firmware update, or a control server that cannot be
-   asked. A deployment created in Connect meanwhile stays pending there, for
-   as long as the print takes. The one exception is a printer that has been
+   idle or halted. `mp-ota-gate` checks once a minute what RepRapFirmware
+   reports and stops the connector's service for anything else: a running,
+   paused or cancelling print, a firmware update, or a control server that
+   cannot be asked. A deployment created in Connect meanwhile stays pending
+   there, for as long as the print takes. A halted mainboard runs nothing
+   until it is reset, and our RepRapFirmware (since 3.7.0-mp.2) halts on every
+   restart of the Pi (see step 4), so a printer left halted still takes the
+   next update. The one exception is a printer that has been
    out of reach for ten minutes without a break, with a control server that
    does not answer or a mainboard it reports disconnected: no print runs
    without the control server, since RepRapFirmware gets every line of a job
@@ -481,7 +484,14 @@ To go back, deploy the previous artefact again. It stays registered.
    slot to be committed, and then runs `DuetControlServer -u`, which
    flashes every Duet board whose firmware differs from the files under
    `/opt/dsf/sd/firmware`. Those files belong to the slot, so a rollback
-   flashes the previous firmware back the same way. Until that has happened,
+   flashes the previous firmware back the same way. A mainboard it finds
+   halted on the way to idle it resets once with `M999`. Our RepRapFirmware
+   (since 3.7.0-mp.2) does an emergency stop when it loses an established
+   connection to the control server, which every restart of the Pi does, and
+   then refuses every code but status requests, `M112` and `M999` until it is
+   reset; DuetControlServer connects to it as it is. After the reset it runs
+   `config.g` like after any `M999`. A mainboard that halts again stays
+   halted. Until the firmware is flashed,
    Duet Web Control shows a firmware mismatch warning. Waiting for the end of
    `config.g` matters because flashing takes a board off the CAN bus, and a
    `config.g` that cannot reach one of its boards ends in an emergency stop,
@@ -514,7 +524,8 @@ To go back, deploy the previous artefact again. It stays registered.
    the first boot after an update when every board was up to date at once,
    and waits for RepRapFirmware to come back idle before it puts up the
    message that the update is complete. A pass that flashed has reset the
-   mainboard already, and a normal boot never resets it. The reset clears the
+   mainboard already, and so has the reset of a halted mainboard (step 4);
+   otherwise a normal boot never resets it. The reset clears the
    homed state like any `M999`. If the printer is not idle at that point or
    does not come back idle, the message says that the firmware update did
    not complete.

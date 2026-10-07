@@ -205,9 +205,9 @@ check "committed: no autoboot.txt" no "$r"
 # --- update connector gate ------------------------------------------------
 # The gate script itself, with systemctl replaced by a stub that answers
 # is-active from a file and records every other call. The connector runs
-# while the printer is idle, and while the slot is not yet committed; it is
-# stopped for anything else, including a control server that cannot be
-# asked. While the connector installs, the printer shows the notice; when an
+# while the printer is idle or halted, and while the slot is not yet
+# committed; it is stopped for anything else, including a control server that
+# cannot be asked. While the connector installs, the printer shows the notice; when an
 # install the gate announced is over without a restart, the notice comes
 # down, and only then.
 
@@ -267,6 +267,8 @@ gate_case "printing, connector running"    '"processing"' active     committed  
 gate_case "printing, connector starting"   '"processing"' activating committed   IDLE "stop rpi-connect-ota.service"  ""
 gate_case "printing, connector stopped"    '"processing"' inactive   committed   ""   ""                             ""
 gate_case "paused, connector running"      '"paused"'     active     committed   IDLE "stop rpi-connect-ota.service"  ""
+gate_case "halted, connector stopped"      '"halted"'     inactive   committed   ""   "start rpi-connect-ota.service" ""
+gate_case "halted, connector running"      '"halted"'     active     committed   IDLE ""                             ""
 gate_case "unreachable, connector running" 'null'         active     committed   IDLE "stop rpi-connect-ota.service"  ""
 gate_case "printing, slot not committed"   '"processing"' active     uncommitted IDLE ""                             ""
 gate_case "unreachable, not committed"     'null'         inactive   uncommitted ""   "start rpi-connect-ota.service" ""
@@ -333,7 +335,8 @@ gate_case "no control server, 10 min"      '"idle"'       inactive   committed  
 # per pass; a pass that flashes resets the mainboard: the message box goes,
 # the boot time moves on (by a fixed step, so that passes in quick succession
 # still read as restarts) and the printer starts again. M999 does the same,
-# and with fw.stuck on file the printer never becomes idle after it.
+# and with fw.stuck on file the printer never becomes idle after it, with
+# fw.halts on file it halts again.
 
 cat > "$MP_CODECONSOLE" <<'EOF'
 #!/bin/sh
@@ -362,7 +365,9 @@ case $2 in
       echo M999 >> "$d/codes.log"
       echo $(($(cat "$d/fw.boot") + 1000)) > "$d/fw.boot"
       rm -f "$d/fw.title"
-      if [ -e "$d/fw.stuck" ]; then echo starting; else printf 'starting\nidle\n'; fi > "$d/fw.status" ;;
+      if [ -e "$d/fw.stuck" ]; then echo starting
+      elif [ -e "$d/fw.halts" ]; then printf 'starting\nhalted\n'
+      else printf 'starting\nidle\n'; fi > "$d/fw.status" ;;
 esac
 EOF
 chmod +x "$MP_CODECONSOLE"
@@ -427,10 +432,28 @@ fw_case "update, never up to date"   yes "idle" "flash flash flash" \
    1 "DCS -u,M291 S0 T,DCS -u,M291 S0 T,DCS -u,M291 S1 T"
 fw_case "normal boot, one flash"     no  "starting idle" "flash ok" \
    0 "DCS -u,DCS -u"
-MP_FIRMWARE_WAIT=3 fw_case "update, never idle" yes "halted" "" \
+MP_FIRMWARE_WAIT=3 fw_case "update, never idle" yes "starting" "" \
    1 "M291 S0 T,M292,M291 S1 T"
-MP_FIRMWARE_WAIT=3 fw_case "normal boot, never idle" no "halted" "" \
+MP_FIRMWARE_WAIT=3 fw_case "normal boot, never idle" no "starting" "" \
    0 ""
+
+# A mainboard halted by the restart of the Pi is reset once, before anything
+# else is sent, and then runs config.g like after any M999. One that halts
+# again is left halted.
+fw_case "update, halted"             yes "halted" "ok" \
+   0 "M999,M291 S0 T,DCS -u,M292,M291 S1 T"
+check "update, halted, log" yes \
+   "$(grep -q 'the mainboard is halted' "$tmp/fw.log" && echo yes || echo no)"
+fw_case "normal boot, halted"        no  "halted" "ok" \
+   0 "M999,DCS -u"
+fw_case "update, halted, one flash"  yes "halted" "flash ok" \
+   0 "M999,M291 S0 T,DCS -u,M291 S0 T,DCS -u,M292,M291 S1 T"
+touch "$tmp/fw.halts"
+MP_FIRMWARE_WAIT=3 fw_case "update, halts again" yes "halted" "" \
+   1 "M999,M291 S0 T,M292,M291 S1 T"
+MP_FIRMWARE_WAIT=3 fw_case "normal boot, halts again" no "halted" "" \
+   0 "M999"
+rm -f "$tmp/fw.halts"
 echo 3 > "$tmp/active"
 MP_FIRMWARE_WAIT=3 fw_case "update, slot not committed" yes "idle" "" \
    1 "M291 S0 T,M292,M291 S1 T"
@@ -450,6 +473,9 @@ fw_case "reset, update, flash fails"       yes "idle" "fail" \
    1 "DCS -u,M291 S1 T"
 fw_case "reset, update, busy at the reset" yes "idle idle processing" "ok" \
    1 "DCS -u,M291 S1 T"
+# The reset of a halted mainboard is the reset the setting asks for.
+fw_case "reset, update, halted"            yes "halted" "ok" \
+   0 "M999,M291 S0 T,DCS -u,M292,M291 S1 T"
 touch "$tmp/fw.stuck"
 MP_FIRMWARE_WAIT=3 fw_case "reset, update, not idle again" yes "idle" "ok" \
    1 "DCS -u,M999,M291 S0 T,M292,M291 S1 T"

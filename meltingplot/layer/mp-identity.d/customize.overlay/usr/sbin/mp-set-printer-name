@@ -54,9 +54,6 @@ cat <<EOF
 Printer name set to "$name", hostname is now $host.
 
 The name reaches RepRapFirmware when the machine configuration is read again.
-Restart the Duet Control Server when the printer is idle:
-
-    sudo systemctl restart duetcontrolserver
-
-or simply reboot. Do not do this during a print.
+Reset the mainboard when the printer is idle, with M999 or the reset button
+in Duet Web Control, or simply reboot. Do not do this during a print.
 EOF

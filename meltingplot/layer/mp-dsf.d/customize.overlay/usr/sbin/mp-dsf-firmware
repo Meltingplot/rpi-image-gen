@@ -21,6 +21,17 @@
 #     successful boot, so after an update this is a short wait.
 #   * The printer must be idle. Flashing resets the mainboard.
 #
+# A mainboard found halted on the way to idle is reset once. Our
+# RepRapFirmware (since 3.7.0-mp.2) does an emergency stop when it loses an
+# established connection to the control server, and every restart of the Pi
+# is such a loss. It then turns off heaters and motors, takes the expansion
+# boards off the CAN bus and refuses every code but status requests, M112 and
+# M999 until it is reset, and DuetControlServer connects to it as it is.
+# Nothing that ran before the restart can be carried on, so this resets it
+# with M999, as Duet Web Control's reset button does, and the mainboard starts
+# again with config.g. One that halts again stays halted, for someone to look
+# at, and this gives up once the wait is used up.
+#
 # `DuetControlServer -u` flashes the expansion boards one after the other,
 # then starts the mainboard flash, or a reset when only expansion boards were
 # flashed, and returns without waiting for the mainboard to come back. So
@@ -38,7 +49,8 @@
 # An image built with MP_MAINBOARD_RESET=y therefore resets the mainboard on
 # the first boot after an update when every board was up to date at once, as
 # Duet Web Control does with M999, and waits for it to come back idle. A pass
-# that flashed has reset the mainboard already.
+# that flashed has reset the mainboard already, and so has the reset of a
+# halted mainboard.
 #
 # A boot the bootloader started as a tryboot follows an update (or a rollback
 # by hand). The update notice the gate put up before the restart does not
@@ -86,6 +98,21 @@ wait_for() {
 
 printer_idle() { [ "$(mp_dcs_status)" = idle ]; }
 
+# printer_idle, except that a halted mainboard is reset the first time it is
+# seen. The reset is not waited for here: the mainboard reports starting and
+# then idle once it has run config.g, which is what the caller waits for.
+halt_reset=no
+printer_idle_after_halt() {
+   _status=$(mp_dcs_status)
+   if [ "$_status" = halted ] && [ "$halt_reset" = no ]; then
+      halt_reset=yes
+      mp_log "the mainboard is halted, as it is after it lost the control server; resetting it"
+      mp_dcs_code M999 || true
+      return 1
+   fi
+   [ "$_status" = idle ]
+}
+
 # True once RepRapFirmware reports a start later than $boot and is idle again.
 # The margin absorbs the jitter of the uptime round trip.
 printer_restarted() {
@@ -123,7 +150,7 @@ finish() {
    exit "$1"
 }
 
-if ! wait_for printer_idle; then
+if ! wait_for printer_idle_after_halt; then
    mp_log "the printer is '$(mp_dcs_status)', not idle; the firmware stays as it is"
    [ "$updated" = yes ] && finish 1
    exit 0
@@ -156,7 +183,7 @@ while :; do
    fi
    if grep -q 'up-to-date' "$out"; then
       mp_log "every board is up to date"
-      if [ "$updated" = yes ] && [ "$pass" -eq 1 ] && [ "$MP_MAINBOARD_RESET" = y ]; then
+      if [ "$updated" = yes ] && [ "$pass" -eq 1 ] && [ "$MP_MAINBOARD_RESET" = y ] && [ "$halt_reset" = no ]; then
          reset_mainboard || finish 1
       fi
       finish 0
