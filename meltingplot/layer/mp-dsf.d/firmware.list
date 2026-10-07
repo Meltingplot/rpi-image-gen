@@ -17,15 +17,18 @@
 Duet3Firmware_TOOL1LC.bin sha256:9ee7b514f5b7e06e5015522bc69e7f7b57eb0be8368b3f72129ad3a38be87d25 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.2%2B1-mp.2/Duet3Firmware_TOOL1LC.bin
 Duet3Firmware_EXP1HCL.bin sha256:8f2a0981b93594f4ce5d5093f53cc750e424814a09522a0b087b0301d272985a https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.2%2B1-mp.2/Duet3Firmware_EXP1HCL.bin
 Duet3Firmware_SZP.bin sha256:d3dc8eb789928353a8316ec28f1da0b1bd6ccb71c7f76b39170bfb90c6f4326e https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0-rc.2%2B1-mp.2/Duet3Firmware_SZP.bin
-# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0-rc.2+1 (72032c51b), built
-# by us against the Meltingplot library forks with a version string of its
-# own, so DuetControlServer flashes it on an image update. The firmware
-# reports its accelerometers under sensors.accelerometers, where
-# DuetSoftwareFramework 3.7.0-rc.2 looks for them; 3.7.0-rc.1 does not.
-# Upstream 3.7.0-rc.2+1 moved the MB6HC's IAP load address past the end of
-# the SAME70's RAM, which would make every later update over the SBC fail;
-# since mp.3 it is back at 0x20458000, where the packaged
-# Duet3_SBCiap32_MB6HC.bin is linked. mp.4 also discards the instructions the
-# SAME70 fetches from flash while reading the user signature, which made an
-# MB6HC on mp.3 hard-fault in M122.
-Duet3Firmware_MB6HC.bin sha256:8d8fef15947fbc72a03ca457ddffeca12905ce963c8fd769e54a0c5dcb35893f https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0-rc.2%2B1-mp.4/Duet3Firmware_MB6HC.bin
+# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0 (c83e79926), built by us
+# against the Meltingplot library forks with a version string of its own, so
+# DuetControlServer flashes it on an image update. The firmware reports its
+# accelerometers under sensors.accelerometers, where DuetSoftwareFramework
+# 3.7.0-rc.2 and later look for them; 3.7.0-rc.1 does not. Upstream 3.7.0
+# loads the MB6HC's IAP image at 0x20458000 again, where the packaged
+# Duet3_SBCiap32_MB6HC.bin is linked, and carries our fixes for macro and file
+# requests over the SBC. Our CoreN2G discards the instructions the SAME70
+# fetches from flash while reading the user signature, which made an MB6HC on
+# 3.7.0-rc.2+1-mp.3 hard-fault in M122. On top of upstream, mp.2 lets the main
+# task carry out G-code requests from other tasks, and does an emergency stop
+# when an established SBC connection is lost, so the mainboard resets
+# whenever DuetControlServer restarts or the Pi reboots and runs config.g
+# again once it reconnects.
+Duet3Firmware_MB6HC.bin sha256:fade0fb32603cdd083dd716afbc55c87506b8eaa71042e3c0b0850e32b0b6f6f https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0-mp.2/Duet3Firmware_MB6HC.bin
