@@ -37,7 +37,7 @@
 # X-Env-Var-version-Valid: string
 # X-Env-Var-version-Set: y
 #
-# X-Env-Var-rrf_version: 3.7.0~rc.1
+# X-Env-Var-rrf_version: 3.7.0~rc.2
 # X-Env-Var-rrf_version-Desc: Version of the reprapfirmware package from the
 #  Duet3D archive, without its Debian revision, so an image always carries a
 #  known pair of firmware and control software. It carries the firmware of
