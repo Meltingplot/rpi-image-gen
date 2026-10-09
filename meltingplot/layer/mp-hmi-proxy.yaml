@@ -82,6 +82,7 @@ mmdebstrap:
           http-request set-var(txn.origin) req.hdr(origin)
           acl own_origin var(txn.origin) -m str -f /run/mp-hmi-proxy/origins.lst
           http-request deny deny_status 403 if { req.hdr(origin) -m found } !own_origin
+          http-request redirect location /licenses/ code 301 if { path /licenses }
           http-request return status 204 hdr Access-Control-Allow-Origin "%[var(txn.origin)]" hdr Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE" hdr Access-Control-Allow-Headers "X-Session-Key, Content-Type" hdr Access-Control-Max-Age 600 hdr Vary Origin if METH_OPTIONS own_origin
           http-response set-header Access-Control-Allow-Origin "%[var(txn.origin)]" if own_origin
           http-response add-header Vary Origin if own_origin
@@ -90,12 +91,14 @@ mmdebstrap:
           acl is_code     path /machine/code
           acl is_webcam   path -i /webcam
           acl is_snapshot path -i /snapshot
+          acl is_licenses path_beg /licenses/
           acl sbc_busy    be_conn(backend_servers) ge 4
 
           use_backend websocket_backend     if is_ws
           use_backend gcode_backend         if is_code
           use_backend webcam_backend        if is_webcam
           use_backend snapshot_backend      if is_snapshot
+          use_backend licenses_backend      if is_licenses
           use_backend backend_servers_short if sbc_busy
           default_backend backend_servers
 
@@ -125,6 +128,11 @@ mmdebstrap:
       backend snapshot_backend
           http-request set-path /0/current
           server snap $cam
+
+      # The panel's licence page (mp-hmi-licences), when the image has it.
+      backend licenses_backend
+          http-request set-path %[path,regsub(^/licenses/,/)]
+          server licenses 127.0.0.1:8082
       EOF
       # The origin list only exists at runtime; a stand-in lets haproxy check
       # the rest.

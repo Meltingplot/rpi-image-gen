@@ -1,0 +1,24 @@
+[Unit]
+Description=Licence page of the operator panel, behind mp-hmi-proxy
+Documentation=file:///usr/share/meltingplot/licenses/LICENSES.txt
+
+[Service]
+ExecStart=/usr/lib/meltingplot/mp-hmi-licences-serve
+DynamicUser=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET
+SystemCallArchitectures=native
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

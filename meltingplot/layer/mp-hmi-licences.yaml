@@ -1,0 +1,28 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-hmi-licences
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: The operator panel's licence notice, where its operator can
+#  read it: at /licenses/ on the panel, through mp-hmi-proxy, in the printer's
+#  interface and in any browser on the customer network. A kiosk has no
+#  desktop to put a file on. The page holds the notice of the panel image
+#  (LICENSES.txt, for the version it is built into), the copyright file of
+#  every installed package, and an index the printer's interface reads. It
+#  is written once the root filesystem is complete, so it lists exactly what
+#  the image carries and is replaced with every update.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: mp-hmi-proxy
+# X-Env-Layer-RequiresProvider: systemd
+#
+# X-Env-VarPrefix: hmilic
+#
+# X-Env-Var-assetdir: ${DIRECTORY}/${STEM}.d
+# X-Env-Var-assetdir-Desc: Directory holding this layer's licence notice
+#  template and hooks.
+# X-Env-Var-assetdir-Required: n
+# X-Env-Var-assetdir-Valid: dir
+# X-Env-Var-assetdir-Set: y
+# METAEND
+---
+mmdebstrap:
+  customize-hooks:
+    - $BDEBSTRAP_HOOKS/enable-units "$1" mp-hmi-licences

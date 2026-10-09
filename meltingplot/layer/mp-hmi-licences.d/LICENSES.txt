@@ -1,0 +1,180 @@
+Meltingplot operator panel image mp-hmi-pi5, version @VERSION@
+Software licences and source code
+==============================================================================
+
+This file describes the licence terms of the software on the operator panel
+of this printer and where its source code is. It is part of the image and is
+replaced with every update, so it describes the software that is actually
+installed. The panel shows it at /licenses/, together with the licence file
+of every installed package. The printer's own computer, behind the panel,
+has its notice at 0:/sys/LICENSES.txt in Duet Web Control.
+
+
+1. What the software is and who licensed it
+------------------------------------------------------------------------------
+
+Operating system
+  Debian 13 (trixie) with the additions of Raspberry Pi OS, including the
+  Raspberry Pi Linux kernel (GPL-2.0). Every Debian package carries its own
+  licence file, shown at /licenses/packages/<package>; most are GPL, LGPL,
+  BSD or MIT.
+
+Operator panel
+  labwc, the compositor of the screen: GPL-2.0.
+  Chromium, the browser that shows the printer's interface: BSD-3-Clause,
+    with third-party parts under their own terms, among them LGPL, MPL and
+    the Microsoft Public License (Ms-PL), all listed at
+    /licenses/packages/chromium.
+  squeekboard, the on-screen keyboard: GPL-3.0-or-later.
+  wf-panel-pi, the panel at the top edge: MIT; its network applet
+    (wfplug-netman) and connection editor (lp-connection-editor):
+    GPL-2.0-or-later.
+  lisgd, the swipe that brings the panel down: MIT.
+  haproxy, which passes the printer's interface on: GPL-2.0-or-later.
+  motion, the camera stream: GPL-2.0-or-later. libcamera: LGPL-2.1-or-later.
+  NetworkManager: GPL-2.0-or-later. chrony, the time server of the printer
+    network: GPL-2.0. polkit: LGPL-2.0-or-later.
+
+Meltingplot software
+  The image definition and build, based on rpi-image-gen by Raspberry Pi Ltd:
+  BSD-3-Clause.
+  https://github.com/Meltingplot/rpi-image-gen
+  The interface the panel shows comes from the printer's computer and is
+  described in its notice.
+
+Raspberry Pi Connect (Raspberry Pi Ltd)
+  rpi-connect: distributed in binary form only. Raspberry Pi licenses the
+  binaries under BSD-3-Clause terms and does not publish their source; the
+  bundled Go modules are open source under MIT, BSD and Apache-2.0, each
+  listed at /licenses/packages/rpi-connect.
+  wayvnc, which shares the screen: ISC.
+  rpi-connect-ota: Apache-2.0, from rpi-sb-provisioner.
+
+Firmware
+  The boot firmware (raspi-firmware) and the bootloader of the Raspberry Pi 5
+  (rpi-eeprom) are not open source. They may be redistributed in binary form
+  for use on Raspberry Pi devices under the terms in section 4.
+  The firmware of the wifi chip (package firmware-brcm80211, files under
+  /usr/lib/firmware/brcm and /usr/lib/firmware/cypress) is not open source
+  either. It is distributed complete and unmodified, for use with that chip
+  only, under the licence agreements of Broadcom and Cypress, see section 4.
+
+
+2. Source code
+------------------------------------------------------------------------------
+
+The corresponding source code of this image version is public for every
+component except those named above as binary only, Raspberry Pi Connect and
+the firmware, which carry no source obligation:
+
+  Image definition and build
+    https://github.com/Meltingplot/rpi-image-gen
+    Release tag hmi-pi5/v@VERSION@. The file release.json in that release
+    names the exact commit of the image definition that this image was built
+    from, and the checksums of every delivered file.
+
+  Debian packages
+    https://deb.debian.org/debian (source packages, by the version named in
+    the software bill of materials of the release, and /licenses/index.json)
+    https://archive.raspberrypi.com/debian and
+    https://github.com/raspberrypi for the Raspberry Pi additions and kernel
+
+The software bill of materials (SBOM) of the release lists every component
+with its exact version.
+
+Written offer
+  For three years from the delivery of this machine, Meltingplot will provide
+  the complete corresponding source code of any component licensed under the
+  GPL or LGPL on a data carrier, for no more than the cost of doing so.
+  Contact: https://meltingplot.net
+
+
+3. Installing modified software
+------------------------------------------------------------------------------
+
+This computer starts only images signed by Meltingplot. To run a modified
+version of the software, build the image from the sources in section 2 and
+write it to a Raspberry Pi 5 that has not been provisioned for secure boot,
+then fit that Raspberry Pi in place of this one. The printer works with it.
+
+Whoever does so is responsible for the modified machine: under the Machinery
+Regulation (EU) 2023/1230, replacing the control software of a machine makes
+the person who does it the manufacturer of the resulting machine.
+
+
+4. Notices to be reproduced
+------------------------------------------------------------------------------
+
+Raspberry Pi boot firmware (package raspi-firmware, files under /boot)
+  Copyright 2006, Broadcom Corporation
+  Copyright 2015, Raspberry Pi (Trading) Ltd
+  All rights reserved.
+
+  Redistribution.  Redistribution and use in binary form, without
+  modification, are permitted provided that the following conditions are
+  met:
+
+  * This software may only be used for the purposes of developing for,
+    running or using a Raspberry Pi device.
+  * Redistributions must reproduce the above copyright notice and the
+    following disclaimer in the documentation and/or other materials
+    provided with the distribution.
+  * Neither the name of Broadcom Corporation nor the names of its suppliers
+    may be used to endorse or promote products derived from this software
+    without specific prior written permission.
+
+  DISCLAIMER.  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+  CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
+  BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+  FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+  DAMAGE.
+
+Raspberry Pi 5 bootloader (package rpi-eeprom, files under firmware-2712)
+  Copyright 2024, Raspberry Pi (Trading) Ltd.
+  All rights reserved.
+
+  Redistribution.  Redistribution and use in binary form, without
+  modification, are permitted provided that the following conditions are
+  met:
+
+  * This software may only be used for the purposes of developing for,
+    running or using a Raspberry Pi device.
+  * Redistributions must reproduce the above copyright notice and the
+    following disclaimer in the documentation and/or other materials
+    provided with the distribution.
+  * Neither the name of the copyright holder nor the names of its
+    contributors may be used to endorse or promote products derived
+    from this software without specific prior written permission.
+
+  DISCLAIMER.  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+  CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
+  BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+  FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+  DAMAGE.
+
+Wifi firmware (package firmware-brcm80211)
+  Copyright Broadcom Corporation
+  Copyright 2018 Cypress Semiconductor Corporation
+
+  The firmware of the wifi chip is distributed under the Broadcom Software
+  License Agreement and the Cypress Wireless Connectivity Devices Driver End
+  User License Agreement. Their full text accompanies this notice at
+  /licenses/packages/firmware-brcm80211, together with the terms of every
+  other file of the linux-firmware source this package comes from.
+
+JPEG code (package libjpeg62-turbo)
+  This software is based in part on the work of the Independent JPEG Group.
