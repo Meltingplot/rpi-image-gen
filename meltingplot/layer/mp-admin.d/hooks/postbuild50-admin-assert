@@ -46,12 +46,13 @@ done
 
 # adm reads the journal; sudo is where device.user1sudo passwd puts it, and
 # the locked password above is what keeps that harmless; users is where
-# adduser puts every account, and grants nothing. Any other group reaches past
-# the control server: dsf the printer's files and the plugins' code, gpio the
-# hardware, and so on.
+# adduser puts every account, and grants nothing; video is how Raspberry Pi
+# Connect, which runs as this account, reaches the device identity in OTP
+# (mp-connect). Any other group reaches past the control server: dsf the
+# printer's files and the plugins' code, gpio the hardware, and so on.
 while IFS= read -r group; do
    case $group in
-      adm | sudo | users | "$USER1") ;;
+      adm | sudo | users | video | "$USER1") ;;
       *) bad "$USER1 is in the group $group; the Connect account holds no privileges" ;;
    esac
 done < <(awk -F: -v u="$USER1" '{ n = split($4, m, ","); for (i = 1; i <= n; i++) if (m[i] == u) print $1 }' "$ROOT/etc/group")

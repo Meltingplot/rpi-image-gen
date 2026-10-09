@@ -13,9 +13,11 @@ device:
   # this account, reachable from wherever Connect is. It holds no privileges:
   # it may read the journal, and it touches neither the printer's files and
   # plugins (dsf) nor the hardware (spi, gpio, i2c) behind the control
-  # server's back. Root is for the administrator of mp-admin, from the
-  # printer network only.
-  user1groups: adm
+  # server's back. video is there because Connect signs in with the device
+  # identity, which the firmware hands out through /dev/vcio_crypto to that
+  # group only, as on Raspberry Pi OS (mp-connect). Root is for the
+  # administrator of mp-admin, from the printer network only.
+  user1groups: adm,video
   # passwd, not none: none has device-user-admin purge sudo, which the
   # administrator needs. The account has no password and the root filesystem
   # is read-only, so the password sudo asks for can never be given; the

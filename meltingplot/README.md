@@ -370,7 +370,7 @@ Two accounts log in, and only one of them can become root:
 
 | Account | Logs in | May |
 |---|---|---|
-| `meltingplot` | through the Raspberry Pi Connect remote shell, and over SSH with a key from `keys/authorized_keys` | read the journal, nothing else |
+| `meltingplot` | through the Raspberry Pi Connect remote shell, and over SSH with a key from `keys/authorized_keys` | read the journal, and the firmware services Raspberry Pi OS opens to `video` |
 | `mpadmin` | over SSH with a key from `keys/mpadmin.keys`, from the printer network only | `sudo` without a password |
 
 Raspberry Pi Connect runs as `meltingplot`, so its remote shell is that
@@ -378,7 +378,9 @@ account, reachable from wherever Connect is. That is why it holds no
 privileges: no sudo, and none of the groups that reach past the control
 server, such as `dsf`, which would let it change the printer's files and the
 code of the bundled plugins, or `spi` and `gpio`, which reach the mainboard
-directly. sudo is installed for the administrator; the rule upstream writes
+directly. It is in `video`, as on Raspberry Pi OS, because Connect signs in
+with the device identity in OTP, which the firmware hands out through
+`/dev/vcio_crypto` to that group only. sudo is installed for the administrator; the rule upstream writes
 for `meltingplot` (`device.user1sudo: passwd`) asks for a password the account
 does not have and, with `/etc/shadow` on the read-only root, never can have.
 

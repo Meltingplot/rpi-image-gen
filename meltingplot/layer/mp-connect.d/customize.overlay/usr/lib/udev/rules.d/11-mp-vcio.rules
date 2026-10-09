@@ -1,0 +1,11 @@
+# Written for rpi-image-gen layer mp-connect.
+#
+# Since kernel 6.18 the firmware's command and crypto services have device
+# nodes of their own. Raspberry Pi OS opens them to the video group
+# (raspberrypi-sys-mods, 10-vc.rules); the 10-vc.rules rpi-image-gen ships in
+# rpi-device-secpolicy predates them, which leaves both to root. Raspberry Pi
+# Connect runs as the Connect account and reads the device identity from OTP
+# through vcio_crypto; without it, signing in fails with "could not read
+# device identity". Same lines as Raspberry Pi OS.
+KERNEL=="vcio_gencmd", GROUP="video", MODE="0660"
+KERNEL=="vcio_crypto", GROUP="video", MODE="0660"
