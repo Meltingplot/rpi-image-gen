@@ -332,10 +332,12 @@ to the boot partition when the medium is flashed.
    ```
    Do not use the Imager's own customisation: it writes settings for Raspberry
    Pi OS, which this image does not read.
-3. Mount the first partition, labelled `BOOTCONFIG`, and put a file
-   `meltingplot/identity.conf` on it, from
-   [identity.conf.example](identity.conf.example): the printer serial, the name
-   the customer wants, and a Raspberry Pi Connect auth key for this device.
+3. Mount the first partition, labelled `BOOTCONFIG`, and edit
+   `meltingplot/identity.conf` on it. The image carries that file with every
+   line commented out
+   ([template](layer/mp-identity.d/customize.overlay/bootfs/meltingplot/identity.conf)):
+   set the printer serial, the name the customer wants, and a Raspberry Pi
+   Connect auth key for this device.
 4. Fit the medium, connect the Duet mainboard and the printer network, power up.
 
 The first boot stores the identity, signs in to Raspberry Pi Connect, removes

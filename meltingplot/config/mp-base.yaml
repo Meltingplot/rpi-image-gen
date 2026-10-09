@@ -2,7 +2,8 @@
 #
 # One image serves every printer of a kind: what makes a device unique arrives
 # at commissioning time in meltingplot/identity.conf on the boot partition, not
-# at build time. See identity.conf.example.
+# at build time. The image carries that file, every line commented out, see
+# layer/mp-identity.d/customize.overlay/bootfs/meltingplot/identity.conf.
 
 device:
   layer: rpi5
