@@ -271,11 +271,12 @@ jobs:
           sarif_file: ${{ steps.sbom.outputs.dir }}/grype.sarif
           category: duet-pi5-grype
 
-      # grant fails the run for any package whose licence is outside
-      # meltingplot/grant.yaml, so a new licence needs a decision before the
-      # image ships; the file says how to record one. grant complains once
-      # per Debian licence name it cannot map to SPDX, which is expected and
-      # filtered from the log.
+      # grant reports every package with its licences; ci/check-licences.py
+      # decides on them one licence at a time and fails the run for any that
+      # meltingplot/grant.yaml does not cover, so a new licence needs a
+      # decision before the image ships; the file says how to record one.
+      # grant complains once per Debian licence name it cannot map to SPDX,
+      # which is expected and filtered from the log.
       - name: Check licences
         env:
           GRANT_VERSION: 0.6.8
@@ -292,18 +293,14 @@ jobs:
              "https://github.com/anchore/grant/releases/download/v$GRANT_VERSION/grant_${GRANT_VERSION}_linux_amd64.tar.gz"
           echo "$GRANT_SHA256  $tgz" | sha256sum -c -
           tar -xzf "$tgz" -C "$RUNNER_TEMP/bin" grant
+          # grant's own verdict compares whole expressions; only its report
+          # is used.
           "$RUNNER_TEMP/bin/grant" check -c meltingplot/grant.yaml \
              --no-output -f "$AUDIT/grant.json" "$SBOM" \
-             2> >(grep -v 'no matching spdx id found' >&2) || rc=$?
-          jq -r '.run.targets[0].evaluation
-                 | "## Licences",
-                   "",
-                   "\(.summary.packages.denied) of \(.summary.packages.total) packages outside meltingplot/grant.yaml, \(.summary.packages.unlicensed) without licence data.",
-                   "",
-                   (.findings.packages[] | select(.decision != "allow")
-                    | "- \(.name) \(.version): \([.licenses[].id] | join(", "))")' \
-             "$AUDIT/grant.json" >> "$GITHUB_STEP_SUMMARY"
-          exit "${rc:-0}"
+             2> >(grep -v 'no matching spdx id found' >&2) || true
+          python3 -c 'import yaml' 2>/dev/null || sudo apt-get install -y -qq python3-yaml
+          python3 meltingplot/ci/check-licences.py meltingplot/grant.yaml \
+             "$AUDIT/grant.json" "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
