@@ -5,13 +5,18 @@ Images for the computers inside a Meltingplot printer, built with
 updated over the air through Raspberry Pi Connect, so a printer can be brought
 to a known software state and taken back off it if the new one misbehaves.
 
-Phase 1 covers one target:
+Two targets, both on `mp-base.yaml`:
 
 | Config | Machine | Contents |
 |---|---|---|
 | `duet-pi5.yaml` | Raspberry Pi 5 on the Duet 3 mainboard of a CHX350 | DuetSoftwareFramework, Duet Web Control, the CHX350 printer configuration, the Vigil monitoring plugin, the backend of the CHX 350 operator interface, the QualityAssurance process data plugin |
+| `hmi-pi5.yaml` | Raspberry Pi 5 operator panel of a CHX350, with touch display and camera | Duet Web Control from the printer SBC in a kiosk browser, the camera stream, and the router, DNS and time server for the printer network |
 
-The operator panel (`hmi`) follows in phase 2 and shares `mp-base.yaml`.
+The rest of this document describes the printer SBC. The operator panel is
+in development; its design and open points are in
+[docs/meltingplot-hmi-pi5-plan.md](../docs/meltingplot-hmi-pi5-plan.md). It
+is released under tags `hmi-pi5/v<X.Y.Z>` by
+`.github/workflows/meltingplot-hmi-pi5.yml`.
 
 ## How an image is put together
 

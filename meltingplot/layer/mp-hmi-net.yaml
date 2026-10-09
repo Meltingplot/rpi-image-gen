@@ -1,0 +1,153 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-hmi-net
+# X-Env-Layer-Category: connectivity
+# X-Env-Layer-Desc: Networking of the operator panel. One cable carries two
+#  networks: untagged the customer network, which the operator sets up on the
+#  touch screen (DHCP by default, a fixed address or wifi instead), and a VLAN
+#  with the printer network, where the panel is gateway, DHCP and DNS server
+#  and time source for the printer SBC. The printer network comes from the
+#  image and cannot be changed on the device.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: network-manager,mp-identity
+# X-Env-Layer-AfterProvider: device
+#
+# X-Env-VarRequires: IGconf_device_user1,IGconf_mpnet_address
+# X-Env-VarRequires-Valid: string,string
+#
+# X-Env-VarPrefix: hminet
+#
+# X-Env-Var-iface: eth0
+# X-Env-Var-iface-Desc: Wired interface that carries both networks.
+# X-Env-Var-iface-Required: n
+# X-Env-Var-iface-Valid: string
+# X-Env-Var-iface-Set: y
+#
+# X-Env-Var-vlan: 20
+# X-Env-Var-vlan-Desc: VLAN id of the printer network on that interface. The
+#  panel takes mpnet.address there.
+# X-Env-Var-vlan-Required: n
+# X-Env-Var-vlan-Valid: int:1-4094
+# X-Env-Var-vlan-Set: y
+#
+# X-Env-Var-ntp: ptbtime1.ptb.de ptbtime2.ptb.de ptbtime3.ptb.de
+# X-Env-Var-ntp-Desc: Space separated time servers the panel follows and passes
+#  on to the printer network. The same PTB servers the printer SBC lists behind
+#  the panel, see mp-net-static.
+# X-Env-Var-ntp-Required: n
+# X-Env-Var-ntp-Valid: string
+# X-Env-Var-ntp-Set: y
+# METAEND
+---
+mmdebstrap:
+  packages:
+    # NetworkManager's shared mode: dnsmasq answers DHCP and DNS in the
+    # printer network, nftables does the NAT towards the customer network
+    - dnsmasq-base
+    - nftables
+    # wifi in the customer network; the network applet asks iw for the bands
+    - wpasupplicant
+    - iw
+    # time for the printer network, which systemd-timesyncd cannot serve
+    - chrony
+    - polkitd
+  customize-hooks:
+    # rpi-device-base drops systemd-networkd files for eth0 and wlan0, which
+    # NetworkManager does not read. AfterProvider: device puts us behind it.
+    - rm -f "$1/etc/systemd/network/01-eth0.network" "$1/etc/systemd/network/02-wlan0.network"
+    # Keep the kernel's interface names, eth0 and wlan0, as systemd-net-min
+    # does on the printer SBC. udev would otherwise rename the wired port to
+    # end0, and the printer network names its parent.
+    - |-
+      set -eu
+      install -d -m 0755 "$1/etc/systemd/network"
+      ln -sf /dev/null "$1/etc/systemd/network/99-default.link"
+      ln -sf /dev/null "$1/etc/systemd/network/73-usb-net-by-mac.link"
+    # NetworkManager leaves the hostname to mp-hostname: left to itself it
+    # puts back the build host's name from /etc/hostname. DNS goes through
+    # systemd-resolved, which also answers mDNS, so the panel is
+    # <hostname>.local in the customer network.
+    - |-
+      set -eu
+      install -d -m 0755 "$1/etc/NetworkManager/conf.d" "$1/etc/systemd/resolved.conf.d"
+      cat > "$1/etc/NetworkManager/conf.d/mp-hmi-net.conf" <<-EOF
+      # Written by rpi-image-gen layer mp-hmi-net.
+      [main]
+      hostname-mode=none
+      dns=systemd-resolved
+
+      [connection]
+      connection.mdns=2
+      EOF
+      cat > "$1/etc/systemd/resolved.conf.d/mp-hmi-net.conf" <<-EOF
+      # Written by rpi-image-gen layer mp-hmi-net.
+      [Resolve]
+      MulticastDNS=yes
+      LLMNR=no
+      EOF
+    # The printer network. A keyfile under /usr/lib is read-only to
+    # NetworkManager: changing or deleting the connection on the device writes
+    # a copy or a tombstone under /etc instead, which mp-printer-net-guard
+    # removes on every boot, so the image alone decides this network.
+    # The customer network gets no keyfile here: /etc/NetworkManager is shared
+    # across slots, and one shipped there would be pushed over the operator's
+    # settings on every boot.
+    - |-
+      set -eu
+      net=$(python3 -c 'import ipaddress, sys; print(ipaddress.ip_interface(sys.argv[1]).network)' "$IGconf_mpnet_address")
+      dir="$1/usr/lib/NetworkManager/system-connections"
+      install -d -m 0755 "$dir"
+      cat > "$dir/mp-printer-net.nmconnection" <<-EOF
+      # Written by rpi-image-gen layer mp-hmi-net. Restored on every boot.
+      [connection]
+      id=Printer network
+      uuid=d7286c99-5c35-4362-8dab-6f5f33bac9a8
+      type=vlan
+      interface-name=${IGconf_hminet_iface}.${IGconf_hminet_vlan}
+      autoconnect=true
+
+      [vlan]
+      parent=${IGconf_hminet_iface}
+      id=${IGconf_hminet_vlan}
+
+      [ipv4]
+      method=shared
+      address1=${IGconf_mpnet_address}
+      never-default=true
+
+      [ipv6]
+      method=ignore
+      EOF
+      chmod 0600 "$dir/mp-printer-net.nmconnection"
+      echo "mp-hmi-net: printer network $net on ${IGconf_hminet_iface}.${IGconf_hminet_vlan}" >&2
+    # Time: the PTB servers instead of the Debian pool, served to the printer
+    # network. Servers a customer DHCP server announces still come in through
+    # the dispatcher script of the chrony package.
+    - |-
+      set -eu
+      net=$(python3 -c 'import ipaddress, sys; print(ipaddress.ip_interface(sys.argv[1]).network)' "$IGconf_mpnet_address")
+      sed -i 's/^pool /#pool /' "$1/etc/chrony/chrony.conf"
+      install -d -m 0755 "$1/etc/chrony/sources.d" "$1/etc/chrony/conf.d"
+      : > "$1/etc/chrony/sources.d/mp-hmi-net.sources"
+      for s in $IGconf_hminet_ntp; do
+        printf 'server %s iburst minpoll 6\n' "$s" >> "$1/etc/chrony/sources.d/mp-hmi-net.sources"
+      done
+      printf '# Written by rpi-image-gen layer mp-hmi-net.\nallow %s\n' "$net" \
+        > "$1/etc/chrony/conf.d/mp-hmi-net.conf"
+    # The operator sets the customer network up at the panel. The account the
+    # panel session runs as, the Connect account, may change NetworkManager
+    # from that session only: local and active on the seat. Not from a Connect
+    # remote shell or over SSH, which are neither, and without a group, which
+    # mp-admin forbids that account.
+    - |-
+      set -eu
+      install -d -m 0755 "$1/etc/polkit-1/rules.d"
+      cat > "$1/etc/polkit-1/rules.d/50-mp-hmi-net.rules" <<-EOF
+      // Written by rpi-image-gen layer mp-hmi-net.
+      polkit.addRule(function(action, subject) {
+          if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 &&
+              subject.user === "${IGconf_device_user1}" && subject.local && subject.active) {
+              return polkit.Result.YES;
+          }
+      });
+      EOF
+    - $BDEBSTRAP_HOOKS/enable-units "$1" chrony mp-printer-net-guard

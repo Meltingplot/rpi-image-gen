@@ -1,0 +1,140 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-hmi-proxy
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: The panel's web front: haproxy on port 80 of every address
+#  of the panel passes Duet Web Control through from the printer SBC and the
+#  camera from motion. Long requests (the object model WebSocket, G-code that
+#  runs a macro) get their own unlimited backends, so they can never hold up
+#  each other; everything else goes four at a time to the SBC and spills to a
+#  short backend beyond that. Cross-origin requests are answered only for the
+#  panel's own origins, so a page from the internet opened on the panel cannot
+#  drive the printer. While the SBC does not answer, the panel shows a waiting
+#  page that reloads itself.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: mp-identity,mp-hmi-net
+#
+# X-Env-VarRequires: IGconf_mpnet_address
+# X-Env-VarRequires-Valid: string
+#
+# X-Env-VarPrefix: hmiproxy
+#
+# X-Env-Var-sbc: 10.42.0.2
+# X-Env-Var-sbc-Desc: Address of the printer SBC in the printer network.
+# X-Env-Var-sbc-Required: n
+# X-Env-Var-sbc-Valid: regex:^[0-9]+(\.[0-9]+){3}$
+# X-Env-Var-sbc-Set: y
+#
+# X-Env-Var-camera: 127.0.0.1:8081
+# X-Env-Var-camera-Desc: Address and port of motion's stream, see
+#  mp-hmi-camera.
+# X-Env-Var-camera-Required: n
+# X-Env-Var-camera-Valid: string
+# X-Env-Var-camera-Set: y
+# METAEND
+---
+mmdebstrap:
+  packages:
+    - haproxy
+    # ip, for the panel's addresses in the origin list
+    - iproute2
+  customize-hooks:
+    # Backend names as on the hand-built lab panel, so the two compare line by
+    # line. One server, health checked once and tracked by the others: when the
+    # SBC is down every backend knows at once and haproxy answers with the
+    # waiting page instead of letting the browser wait for a connect timeout.
+    - |-
+      set -eu
+      sbc=$IGconf_hmiproxy_sbc:80
+      cam=$IGconf_hmiproxy_camera
+      cat > "$1/etc/haproxy/haproxy.cfg" <<-EOF
+      # Written by rpi-image-gen layer mp-hmi-proxy.
+      global
+          log /dev/log local0
+          chroot /var/lib/haproxy
+          stats socket /run/haproxy/admin.sock mode 660 level admin
+          user haproxy
+          group haproxy
+          daemon
+
+      defaults
+          log global
+          mode http
+          option httplog
+          option dontlognull
+          timeout connect 5s
+          timeout client  1h
+          timeout server  10m
+          timeout queue   10m
+          errorfile 503 /usr/share/meltingplot/hmi/waiting.http
+
+      frontend http_in
+          bind :80
+
+          # Only the panel's own names and origins, which mp-hmi-origins keeps
+          # current as addresses and the hostname change. A missing CORS header
+          # only keeps a foreign page from reading the answer; a simple POST to
+          # /machine/code would still run. So a request that carries a foreign
+          # origin is refused outright, and one for a foreign host name too:
+          # that is a name an attacker pointed at the panel (DNS rebinding),
+          # whose page the browser then counts as same-origin.
+          acl own_host req.hdr(host),lower,regsub(':[0-9]+\$','') -m str -f /run/mp-hmi-proxy/hosts.lst
+          http-request deny deny_status 403 if !own_host
+          http-request set-var(txn.origin) req.hdr(origin)
+          acl own_origin var(txn.origin) -m str -f /run/mp-hmi-proxy/origins.lst
+          http-request deny deny_status 403 if { req.hdr(origin) -m found } !own_origin
+          http-request return status 204 hdr Access-Control-Allow-Origin "%[var(txn.origin)]" hdr Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE" hdr Access-Control-Allow-Headers "X-Session-Key, Content-Type" hdr Access-Control-Max-Age 600 hdr Vary Origin if METH_OPTIONS own_origin
+          http-response set-header Access-Control-Allow-Origin "%[var(txn.origin)]" if own_origin
+          http-response add-header Vary Origin if own_origin
+
+          acl is_ws       hdr(upgrade) -i websocket
+          acl is_code     path /machine/code
+          acl is_webcam   path -i /webcam
+          acl is_snapshot path -i /snapshot
+          acl sbc_busy    be_conn(backend_servers) ge 4
+
+          use_backend websocket_backend     if is_ws
+          use_backend gcode_backend         if is_code
+          use_backend webcam_backend        if is_webcam
+          use_backend snapshot_backend      if is_snapshot
+          use_backend backend_servers_short if sbc_busy
+          default_backend backend_servers
+
+      # Everything else, at most four at a time on the SBC.
+      backend backend_servers
+          server duet $sbc maxconn 4 maxqueue 2 check inter 2s fall 2 rise 1
+
+      # Beyond four open: short requests only.
+      backend backend_servers_short
+          timeout server 10s
+          server duet $sbc maxconn 10 track backend_servers/duet
+
+      # The object model; Duet Web Control keeps it open for the whole session.
+      backend websocket_backend
+          timeout tunnel 1h
+          server duet $sbc track backend_servers/duet
+
+      # A macro holds the request until it has run, and M112 must never queue.
+      backend gcode_backend
+          timeout server 30m
+          server duet $sbc track backend_servers/duet
+
+      backend webcam_backend
+          http-request set-path /
+          server cam $cam
+
+      backend snapshot_backend
+          http-request set-path /0/current
+          server snap $cam
+      EOF
+      # The origin list only exists at runtime; a stand-in lets haproxy check
+      # the rest.
+      created_run=
+      [ -d "$1/run/mp-hmi-proxy" ] || { mkdir -p "$1/run/mp-hmi-proxy"; created_run=y; }
+      printf 'http://%s\n' "${IGconf_mpnet_address%/*}" > "$1/run/mp-hmi-proxy/origins.lst"
+      printf '%s\n' "${IGconf_mpnet_address%/*}" > "$1/run/mp-hmi-proxy/hosts.lst"
+      ok=y
+      chroot "$1" haproxy -c -f /etc/haproxy/haproxy.cfg >&2 || ok=
+      rm -f "$1/run/mp-hmi-proxy/origins.lst" "$1/run/mp-hmi-proxy/hosts.lst"
+      [ -z "$created_run" ] || rmdir "$1/run/mp-hmi-proxy"
+      [ -n "$ok" ] || { echo "mp-hmi-proxy: haproxy rejects the configuration" >&2; exit 1; }
+    - $BDEBSTRAP_HOOKS/enable-units "$1" haproxy mp-hmi-origins

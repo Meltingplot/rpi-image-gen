@@ -1,0 +1,47 @@
+# The operator panel of a CHX350: a Raspberry Pi 5 with a touch display and
+# a camera. It shows Duet Web Control from the printer SBC, routes between the
+# customer network and the printer network, and serves the camera picture.
+#
+# On a bench without the printer SBC the panel shows its waiting page instead
+# of Duet Web Control; everything else works. A panel whose display is not
+# mounted upside down, as on a bench, is built with
+#   -- IGconf_hmikiosk_rotation=0
+
+include:
+  file: mp-base.yaml
+
+image:
+  name: mp-hmi-pi5-${IGconf_image_version}
+  # Base system about 400 MB, labwc, Chromium and the GTK panel about 600 MB,
+  # the camera stack and NetworkManager about 100 MB, the rest is headroom for
+  # a release to grow into.
+  system_part_size: 2G
+
+mpid:
+  role: hmi
+
+# The panel's own address in the printer network. mp-admin lets the
+# administrator in from this network only, as on the printer SBC.
+mpnet:
+  address: 10.42.0.1/24
+
+locale:
+  timezone: Europe/Berlin
+  keyboard_keymap: de
+  keyboard_layout: German
+
+ieee80211:
+  regdom: DE
+
+splash:
+  image_path: ${@SRCROOT}/splash/hmi-splash.tga
+
+layer:
+  suite: mp-suite-trixie-hmi
+  connectclient: rpi-connect
+  net: mp-hmi-net
+  hw: mp-hmi-hw
+  proxy: mp-hmi-proxy
+  camera: mp-hmi-camera
+  app: mp-hmi-kiosk
+  splash: rpi-splash-screen

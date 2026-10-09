@@ -1,0 +1,301 @@
+name: meltingplot hmi-pi5
+
+# Builds the operator panel image and, for a tag, publishes it as a release.
+# The update bundle in that release is what Raspberry Pi Connect hands to a
+# panel, so the release is the record of what a machine received. Same steps
+# as meltingplot-duet-pi5.yml, for the other image.
+
+on:
+  push:
+    branches: [meltingplot]
+    tags: ['hmi-pi5/v*']
+  pull_request:
+    branches: [meltingplot]
+  workflow_dispatch:
+  # The vulnerability scan below only knows what it saw at the last build.
+  # A weekly build keeps the Security tab current when nothing was pushed.
+  schedule:
+    - cron: '0 3 * * 1'
+
+concurrency:
+  group: hmi-pi5-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  # For the grype results in the Security tab.
+  security-events: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        env:
+          # Through the environment rather than an expression: the tag name is
+          # input, and it ends up in shell commands.
+          GITHUB_REF: ${{ github.ref }}
+        run: |
+          if [[ $GITHUB_REF == refs/tags/hmi-pi5/v* ]]; then
+            version=${GITHUB_REF#refs/tags/hmi-pi5/v}
+            case $version in
+              *[!A-Za-z0-9.+-]*|'')
+                echo "::error::tag $GITHUB_REF does not carry a usable version"; exit 1 ;;
+            esac
+            release=true
+          else
+            version="0.0.0-ci.$(date -u +%Y%m%d%H%M)"
+            release=false
+          fi
+          # A version with a suffix is a prerelease, which is what allows the
+          # image to carry release candidates of its components.
+          if [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            prerelease=false
+          else
+            prerelease=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "Building $version (release=$release prerelease=$prerelease)"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo chmod o+x /home/runner
+          sudo ./install_deps.sh
+
+      - name: Test harness
+        run: ./test/run-all.sh
+
+      # The device helpers run under /bin/sh on the printer, so they are
+      # checked with dash rather than with the bash the runner defaults to.
+      - name: Device helper tests
+        run: |
+          for f in meltingplot/test/*.sh; do
+            dash "$f"
+          done
+
+      # Chromium and the desktop libraries are the bulk of the download.
+      - name: Restore apt cache
+        uses: actions/cache@v5
+        with:
+          path: meltingplot/.cache/apt
+          key: hmi-pi5-apt-${{ hashFiles('meltingplot/layer/**') }}-${{ github.run_id }}
+          restore-keys: |
+            hmi-pi5-apt-${{ hashFiles('meltingplot/layer/**') }}-
+            hmi-pi5-apt-
+
+      - name: Build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          RELEASE: ${{ steps.version.outputs.release }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # rpi-image-gen expects the build directory to exist already.
+          mkdir -p meltingplot/.cache/apt "$RUNNER_TEMP/work"
+          # The page the panel points its operator to after an update. The
+          # tag carries a slash, which GitHub wants encoded in the URL.
+          release_url=
+          if [ "$RELEASE" = true ]; then
+            release_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/${TAG//\//%2F}"
+          fi
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
+          ./rpi-image-gen build -S ./meltingplot -c hmi-pi5.yaml \
+            -B "$RUNNER_TEMP/work" \
+            -- IGconf_artefact_version="$VERSION" \
+               IGconf_mpid_release="$release_url" \
+               IGconf_sys_apt_cachedir="$PWD/meltingplot/.cache/apt"
+
+      # apt downloads as _apt inside the build's user namespace and leaves a
+      # partial/ directory only _apt may enter. The cache is saved as the
+      # runner user and would fail on it; apt recreates it on the next build.
+      - name: Drop apt's partial directory
+        run: sudo rm -rf meltingplot/.cache/apt/partial
+
+      - name: Collect artefacts
+        id: collect
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          version=$VERSION
+          deploy="$RUNNER_TEMP/work/deploy-$version"
+          out="$RUNNER_TEMP/release"
+          mkdir -p "$out"
+          # The artefacts carry their version in the name and release.json and
+          # SHA256SUMS were written beside them by hooks/deploy20-mp-release, so
+          # they are published as built. deployed.json is rpi-image-gen's own
+          # inventory; it is written after our hook and so is not in SHA256SUMS.
+          cp "$deploy"/* "$out"/
+          rm -f "$out/deployed.json"
+          echo "dir=$out" >> "$GITHUB_OUTPUT"
+          cat "$out/release.json"
+          cat "$out/SHA256SUMS"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: mp-hmi-pi5-${{ steps.version.outputs.version }}
+          path: ${{ steps.collect.outputs.dir }}
+          retention-days: 14
+
+      - name: Publish release
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          RELEASE_DIR: ${{ steps.collect.outputs.dir }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # The panel shows this page as the changelog after an update, so
+          # the pull requests since the previous release come first (GitHub's
+          # generated notes, fetched here so they can lead rather than trail),
+          # and the technical record of the build follows.
+          # The notes start at the previous release of this image. Two images
+          # release from this repository, and left to itself GitHub would start
+          # at the latest release of either.
+          prev=$(git tag -l 'hmi-pi5/v*' --sort=-creatordate | grep -vxF "$TAG" | head -n1 || true)
+          prev_args=()
+          [ -n "$prev" ] && prev_args=(-f previous_tag_name="$prev")
+          notes=$(mktemp)
+          {
+            gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" "${prev_args[@]}" --jq .body
+            echo
+            echo "## Image"
+            echo
+            echo "Image for the Raspberry Pi 5 operator panel (HMI) of a CHX350: touch display,"
+            echo "camera, and the router between the customer network and the printer network."
+            echo
+            echo "Deploy \`mp-hmi-pi5-$VERSION.update.tar.zst\` through Raspberry Pi"
+            echo "Connect, using the SHA-256 from \`SHA256SUMS\`. See meltingplot/README.md."
+            echo
+            echo '```'
+            cat "$RELEASE_DIR/release.json"
+            echo '```'
+          } > "$notes"
+          args=(--verify-tag --title "hmi-pi5 $VERSION" --notes-file "$notes")
+          [ "$PRERELEASE" = "true" ] && args+=(--prerelease)
+          gh release create "$TAG" "${args[@]}" "$RELEASE_DIR"/*
+
+      # Everything below checks the SBOM that was just published; the image
+      # itself is not touched. None of it gates the release. A scanner outage
+      # must not hold back an update, and a vulnerability in a Debian package is
+      # fixed by rebuilding once Debian ships the fix, not by failing this run.
+      - name: Unpack SBOM
+        id: sbom
+        env:
+          RELEASE_DIR: ${{ steps.collect.outputs.dir }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          audit="$RUNNER_TEMP/audit"
+          mkdir -p "$audit"
+          zstd -d "$RELEASE_DIR/filesystem-$VERSION.sbom.zst" \
+             -o "$audit/filesystem-$VERSION.spdx.json"
+          echo "dir=$audit" >> "$GITHUB_OUTPUT"
+          echo "file=$audit/filesystem-$VERSION.spdx.json" >> "$GITHUB_OUTPUT"
+          # syft percent-encodes the "+" of a Debian revision in the purl
+          # version, as the purl spec allows. The purl parser bundled with the
+          # submission action accepts a literal "+" there but rejects "%2B",
+          # and drops the package. The copy for the submission has it decoded
+          # in the version only; names and qualifiers are left as they are.
+          mkdir -p "$audit/submit"
+          jq '(.packages[].externalRefs[]? | select(.referenceType == "purl") | .referenceLocator)
+              |= (capture("^(?<head>[^@?#]*@?)(?<version>[^?#]*)(?<rest>.*)$")
+                  | .head + (.version | gsub("%2B"; "+")) + .rest)' \
+             "$audit/filesystem-$VERSION.spdx.json" \
+             > "$audit/submit/filesystem-$VERSION.spdx.json"
+
+      # Dependabot raises alerts from the dependency graph of the default
+      # branch, so the push to meltingplot is the submission that counts. A
+      # pull request holds no token that may write the graph.
+      - name: Submit SBOM to the dependency graph
+        if: github.event_name != 'pull_request'
+        uses: advanced-security/spdx-dependency-submission-action@v0.4.0
+        with:
+          filePath: ${{ steps.sbom.outputs.dir }}/submit
+          filePattern: '*.spdx.json'
+
+      # Dependabot knows nothing about Debian packages; grype covers them from
+      # the Debian security tracker. The full report goes into the audit
+      # artefact. The Security tab only gets what has a fix, which is what a
+      # rebuild can pick up, minus what meltingplot/vex.openvex.json records
+      # as not affecting the image. grype is run directly rather than through
+      # anchore/scan-action: the action always passes --fail-on and turns a
+      # finding into a warning on the run, which is not a verdict anyone acts
+      # on here. The database is downloaded once and shared by both runs.
+      - uses: anchore/scan-action/download-grype@v7
+        id: grype
+
+      - name: Scan SBOM for vulnerabilities
+        env:
+          GRYPE: ${{ steps.grype.outputs.cmd }}
+          GRYPE_CHECK_FOR_APP_UPDATE: 'false'
+          SBOM: ${{ steps.sbom.outputs.file }}
+          AUDIT: ${{ steps.sbom.outputs.dir }}
+        run: |
+          "$GRYPE" -v --vex meltingplot/vex.openvex.json \
+             -o json --file "$AUDIT/grype.json" "sbom:$SBOM"
+          "$GRYPE" -v --vex meltingplot/vex.openvex.json --only-fixed \
+             -o sarif --file "$AUDIT/grype.sarif" "sbom:$SBOM"
+
+      # The Go modules of Raspberry Pi Connect are in the SBOM once per binary,
+      # rpi-connect and rpi-connectd, so grype reports each finding twice and
+      # the two SARIF results are identical down to the fingerprint. GitHub
+      # would open two alerts for them; one is enough. The full report in the
+      # audit artefact keeps both.
+      - name: Fold identical SARIF results
+        env:
+          SARIF: ${{ steps.sbom.outputs.dir }}/grype.sarif
+        run: |
+          jq '.runs[].results |= unique' "$SARIF" > "$SARIF.tmp"
+          mv "$SARIF.tmp" "$SARIF"
+          jq -r '"\(.runs[0].results | length) findings for the Security tab"' "$SARIF"
+
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ steps.sbom.outputs.dir }}/grype.sarif
+          category: hmi-pi5-grype
+
+      # grant fails the run for any package whose licence is outside
+      # meltingplot/grant.yaml, so a new licence needs a decision before the
+      # image ships; the file says how to record one. grant complains once
+      # per Debian licence name it cannot map to SPDX, which is expected and
+      # filtered from the log.
+      - name: Check licences
+        env:
+          GRANT_VERSION: v0.6.8
+          SBOM: ${{ steps.sbom.outputs.file }}
+          AUDIT: ${{ steps.sbom.outputs.dir }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -sSfL https://get.anchore.io/grant \
+             | sh -s -- -b "$RUNNER_TEMP/bin" "$GRANT_VERSION"
+          "$RUNNER_TEMP/bin/grant" check -c meltingplot/grant.yaml \
+             --no-output -f "$AUDIT/grant.json" "$SBOM" \
+             2> >(grep -v 'no matching spdx id found' >&2) || rc=$?
+          jq -r '.run.targets[0].evaluation
+                 | "## Licences",
+                   "",
+                   "\(.summary.packages.denied) of \(.summary.packages.total) packages outside meltingplot/grant.yaml, \(.summary.packages.unlicensed) without licence data.",
+                   "",
+                   (.findings.packages[] | select(.decision != "allow")
+                    | "- \(.name) \(.version): \([.licenses[].id] | join(", "))")' \
+             "$AUDIT/grant.json" >> "$GITHUB_STEP_SUMMARY"
+          exit "${rc:-0}"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: mp-hmi-pi5-${{ steps.version.outputs.version }}-audit
+          path: |
+            ${{ steps.sbom.outputs.dir }}/grype.json
+            ${{ steps.sbom.outputs.dir }}/grype.sarif
+            ${{ steps.sbom.outputs.dir }}/grant.json
+          retention-days: 14

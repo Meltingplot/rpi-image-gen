@@ -1,0 +1,26 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-hmi-camera
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: The panel's camera module as an MJPEG stream and a
+#  snapshot, served by motion on the loopback for mp-hmi-proxy, which passes
+#  them on as /webcam and /snapshot. motion 4.7 in trixie reads no libcamera
+#  camera of its own, so the service preloads libcamera's V4L2 compatibility
+#  layer and motion reads the module as a V4L2 device. motion only passes the
+#  picture on: no motion detection, nothing written, and a JPEG is only encoded
+#  while somebody watches.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-RequiresProvider: systemd
+# METAEND
+---
+mmdebstrap:
+  packages:
+    - motion
+    - libcamera-v4l2
+  customize-hooks:
+    # The drop-in preloads this path; fail here rather than with a service
+    # that cannot see the camera.
+    - |-
+      set -eu
+      so=/usr/libexec/aarch64-linux-gnu/libcamera/v4l2-compat.so
+      [ -f "$1$so" ] || { echo "mp-hmi-camera: $so is missing, did libcamera-v4l2 move it?" >&2; exit 1; }
+    - $BDEBSTRAP_HOOKS/enable-units "$1" motion

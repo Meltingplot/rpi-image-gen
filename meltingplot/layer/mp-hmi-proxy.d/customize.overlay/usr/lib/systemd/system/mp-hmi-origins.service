@@ -1,0 +1,12 @@
+[Unit]
+Description=List the panel's own origins for haproxy
+After=mp-hostname.service
+Before=haproxy.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/mp-hmi-origins
+
+[Install]
+WantedBy=haproxy.service

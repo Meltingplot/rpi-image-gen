@@ -1,0 +1,9 @@
+# Written for rpi-image-gen layer mp-hmi-kiosk.
+#
+# The panel session reads the touch screen itself, for the swipe from the top
+# edge that brings the panel down (lisgd, mp-kiosk-gestures). Only the touch
+# screen, and only for the session on the seat: logind gives the user of the
+# active session an ACL, as it does for a camera or a sound card. Keyboards
+# stay closed, which the input group would open. Before 73-seat-late.rules,
+# which applies the tag.
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_TOUCHSCREEN}=="1", TAG+="uaccess", SYMLINK+="input/mp-touchscreen"

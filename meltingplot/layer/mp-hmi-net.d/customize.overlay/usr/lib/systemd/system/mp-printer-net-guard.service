@@ -1,0 +1,14 @@
+[Unit]
+Description=Put the printer network back as the image defines it
+Documentation=file:///usr/lib/NetworkManager/system-connections/mp-printer-net.nmconnection
+DefaultDependencies=no
+RequiresMountsFor=/etc/NetworkManager/system-connections
+Before=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/mp-printer-net-guard
+
+[Install]
+WantedBy=NetworkManager.service

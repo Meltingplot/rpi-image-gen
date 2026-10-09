@@ -1,0 +1,164 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-hmi-kiosk
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: The operator panel's screen. A labwc session of the
+#  Connect account on the display, started by systemd as a real logind session
+#  so Raspberry Pi Connect can share the screen and the operator may set the
+#  network up. It shows Duet Web Control in Chromium, maximized rather than
+#  fullscreen so the on-screen keyboard can appear over it, and a slim panel
+#  with network, keyboard and clock that stays hidden at the top edge until a
+#  swipe down from that edge brings it out. Not the Raspberry Pi desktop: no
+#  file manager, terminal or menu.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: device-user-admin,mp-hmi-proxy
+# X-Env-Layer-RequiresProvider: systemd
+#
+# X-Env-VarRequires: IGconf_device_user1
+# X-Env-VarRequires-Valid: string
+#
+# X-Env-VarPrefix: hmikiosk
+#
+# X-Env-Var-url: http://10.42.0.1
+# X-Env-Var-url-Desc: Page the panel shows: Duet Web Control through
+#  mp-hmi-proxy, at the panel's address in the printer network.
+# X-Env-Var-url-Required: n
+# X-Env-Var-url-Valid: regex:^https?://[^\s"']+$
+# X-Env-Var-url-Set: y
+#
+# X-Env-Var-output: DSI-1
+# X-Env-Var-output-Desc: Name of the display output, as wlr-randr lists it. The
+#  touch screen is mapped to it, so a touch follows the output's rotation.
+# X-Env-Var-output-Required: n
+# X-Env-Var-output-Valid: string
+# X-Env-Var-output-Set: y
+#
+# X-Env-Var-rotation: 180
+# X-Env-Var-rotation-Desc: Clockwise rotation of the picture in degrees. The
+#  CHX350 holds its display upside down; a display on a bench usually wants 0.
+# X-Env-Var-rotation-Required: n
+# X-Env-Var-rotation-Valid: 0,90,180,270
+# X-Env-Var-rotation-Set: y
+# METAEND
+---
+mmdebstrap:
+  packages:
+    - labwc
+    - wlr-randr
+    - chromium
+    # the Raspberry Pi preferences for Chromium, among them the system title
+    # bar, so the frame labwc leaves off is not drawn by Chromium instead
+    - rpi-chromium-mods
+    - squeekboard
+    - wf-panel-pi
+    - wfplug-netman
+    - wfplug-squeek
+    - wfplug-clock
+    # the swipe from the top edge that brings the panel down
+    - lisgd
+    # static addresses, which the network applet leaves to this editor
+    - lp-connection-editor
+    # a session bus for the keyboard and the panel; the logind session
+    - dbus-user-session
+    - libpam-systemd
+    # the Raspberry Pi look of the panel and the dialogs; without the icons
+    # the applets show none
+    - pixtrix-theme
+    - pixtrix-icons
+    - fonts-nunito-sans
+    - fonts-liberation2
+  essential-hooks:
+    # squeekboard's postinst writes its desktop autostart entry without
+    # creating the directory, which only a full desktop has
+    - mkdir -p "$1/etc/xdg/autostart"
+  customize-hooks:
+    # wayvnc enables a system VNC server for the whole machine, on every
+    # address, as Raspberry Pi OS uses it for its VNC setting. Connect shares
+    # the screen with a wayvnc of its own in the user session
+    # (rpi-connect-wayvnc), and nothing else may.
+    - chroot "$1" systemctl mask wayvnc.service wayvnc-control.service wayvnc-generate-keys.service
+    # The session. PAMName makes it a logind session on the seat, local and
+    # active: that is what Connect's screen sharing waits for and what the
+    # network rule of mp-hmi-net allows. labwc reads its configuration from
+    # the image (-C), not from the home directory, which lives on the
+    # persistent partition and would keep an old configuration through every
+    # update.
+    - |-
+      set -eu
+      cat > "$1/usr/lib/systemd/system/mp-kiosk.service" <<-EOF
+      [Unit]
+      Description=Operator panel session
+      After=systemd-user-sessions.service mp-hostname.service plymouth-quit-wait.service
+      After=getty@tty1.service
+      Conflicts=getty@tty1.service
+      StartLimitIntervalSec=0
+
+      [Service]
+      User=${IGconf_device_user1}
+      PAMName=login
+      TTYPath=/dev/tty1
+      TTYReset=yes
+      TTYVHangup=yes
+      TTYVTDisallocate=yes
+      StandardInput=tty-fail
+      StandardOutput=journal
+      StandardError=journal
+      UtmpIdentifier=tty1
+      UtmpMode=user
+      Environment=XDG_SESSION_TYPE=wayland
+      Environment=XDG_CURRENT_DESKTOP=labwc:wlroots
+      ExecStart=/usr/bin/labwc -C /etc/meltingplot/labwc
+      Restart=always
+      RestartSec=2
+
+      [Install]
+      WantedBy=graphical.target
+      EOF
+      chroot "$1" systemctl set-default graphical.target
+      $BDEBSTRAP_HOOKS/enable-units "$1" mp-kiosk
+    # What runs in the session, and how the display sits.
+    - |-
+      set -eu
+      dir="$1/etc/meltingplot/labwc"
+      install -d -m 0755 "$dir"
+      {
+        echo "# Written by rpi-image-gen layer mp-hmi-kiosk."
+        if [ "$IGconf_hmikiosk_rotation" != 0 ]; then
+          echo "wlr-randr --output ${IGconf_hmikiosk_output} --transform ${IGconf_hmikiosk_rotation}"
+        fi
+        echo "squeekboard &"
+        echo "/usr/lib/meltingplot/mp-kiosk-panel hide"
+        echo "wf-panel-pi &"
+        echo "/usr/lib/meltingplot/mp-kiosk-gestures ${IGconf_hmikiosk_rotation} &"
+        echo "/usr/lib/meltingplot/mp-kiosk-browser '${IGconf_hmikiosk_url}' &"
+      } > "$dir/autostart"
+      cat > "$dir/rc.xml" <<-EOF
+      <?xml version="1.0"?>
+      <!-- Written by rpi-image-gen layer mp-hmi-kiosk. -->
+      <labwc_config>
+        <!-- touches land where the rotated picture is -->
+        <touch mapToOutput="${IGconf_hmikiosk_output}" mouseEmulation="no"/>
+        <windowRules>
+          <!-- Chromium maximized without a frame looks fullscreen, but leaves
+               the layer the keyboard and the panel are drawn on visible -->
+          <windowRule identifier="chrom*" serverDecoration="no">
+            <action name="Maximize"/>
+          </windowRule>
+        </windowRules>
+      </labwc_config>
+      EOF
+      printf '# Written by rpi-image-gen layer mp-hmi-kiosk.\nXKB_DEFAULT_LAYOUT=%s\n' \
+        "${IGconf_locale_keyboard_keymap:-de}" > "$dir/environment"
+    # The kernel console turns with the picture, so boot messages read the
+    # right way up.
+    - |-
+      set -eu
+      case $IGconf_hmikiosk_rotation in
+        0) exit 0 ;;
+        90) r=1 ;;
+        180) r=2 ;;
+        270) r=3 ;;
+      esac
+      cmdline="$1/boot/firmware/cmdline.txt"
+      grep -q 'fbcon=rotate:' "$cmdline" || sed -i "s/\brootwait\b/fbcon=rotate:$r rootwait/" "$cmdline"
+      grep -q "fbcon=rotate:$r" "$cmdline" ||
+        { echo "mp-hmi-kiosk: could not add fbcon=rotate:$r to cmdline.txt" >&2; exit 1; }
