@@ -1,0 +1,51 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-hmi-hw
+# X-Env-Layer-Category: hw
+# X-Env-Layer-Desc: Hardware of the operator panel: the Waveshare 10.1 inch
+#  DSI touch display and the OV5647 camera module, both named in config.txt
+#  instead of detected, so a panel boots the same with or without them, and
+#  the full USB current for the peripherals. Bluetooth is off, as on the
+#  printer SBC: the panel has no use for it, and its firmware comes under the
+#  chip vendors' own terms. Wifi stays. The power supply's 5 A rating
+#  belongs into the bootloader configuration (PSU_MAX_CURRENT=5000), which
+#  commissioning writes together with the bootloader update; no image can.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: rpi-boot-firmware
+# X-Env-Layer-AfterProvider: device
+#
+# X-Env-VarPrefix: hmihw
+#
+# X-Env-Var-display: vc4-kms-dsi-waveshare-panel,10_1_inch,dsi0
+# X-Env-Var-display-Desc: dtoverlay line of the touch display, without
+#  dtoverlay=. Empty for a panel without a DSI display.
+# X-Env-Var-display-Required: n
+# X-Env-Var-display-Valid: string-or-empty
+# X-Env-Var-display-Set: y
+#
+# X-Env-Var-camera: ov5647
+# X-Env-Var-camera-Desc: dtoverlay line of the camera module, without
+#  dtoverlay=. Empty for a panel without a camera.
+# X-Env-Var-camera-Required: n
+# X-Env-Var-camera-Valid: string-or-empty
+# X-Env-Var-camera-Set: y
+# METAEND
+---
+mmdebstrap:
+  customize-hooks:
+    - |-
+      set -eu
+      cfg="$1/boot/firmware/config.txt"
+      sed -i -e 's/^camera_auto_detect=1/camera_auto_detect=0/' \
+             -e 's/^display_auto_detect=1/display_auto_detect=0/' "$cfg"
+      {
+        printf '\n# Meltingplot: operator panel\n[all]\n'
+        [ -z "$IGconf_hmihw_display" ] || printf 'dtoverlay=%s\n' "$IGconf_hmihw_display"
+        [ -z "$IGconf_hmihw_camera" ] || printf 'dtoverlay=%s\n' "$IGconf_hmihw_camera"
+        printf 'usb_max_current_enable=1\n'
+        printf 'dtoverlay=disable-bt\n'
+      } >> "$cfg"
+    # With Bluetooth off its firmware is dead weight under the Broadcom,
+    # Cypress and Synaptics licence agreements; nothing depends on it. Taken
+    # out as mp-net-static does on the printer SBC, so the SBOM does not list
+    # what the panel can never use. The wifi firmware stays.
+    - chroot "$1" dpkg --purge bluez-firmware

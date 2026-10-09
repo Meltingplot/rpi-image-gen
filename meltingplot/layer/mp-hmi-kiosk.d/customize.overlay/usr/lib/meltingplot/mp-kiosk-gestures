@@ -1,0 +1,35 @@
+#!/bin/sh
+# Swipes on the touch screen for the panel at the top edge.
+#
+# lisgd reads the touch screen directly, which 71-mp-kiosk-touch.rules opens
+# to the session on the seat, and sees it in its own orientation. The picture
+# is turned by the given degrees, so the top edge the operator sees, and the
+# direction of a swipe down, are turned the same way here. 0 and 180 are
+# worked out; for 90 and 270 lisgd's own rotation turns the direction.
+#
+#   mp-kiosk-gestures <rotation>
+
+set -u
+
+dev=/dev/input/mp-touchscreen
+panel=/usr/lib/meltingplot/mp-kiosk-panel
+
+if [ ! -e "$dev" ]; then
+   echo "mp-kiosk-gestures: no touch screen at $dev" >&2
+   exit 0
+fi
+
+o=0
+case ${1:-0} in
+   0) down=UD; edge=T; up=DU ;;
+   180) down=DU; edge=B; up=UD ;;
+   90) o=1; down=UD; edge=T; up=DU ;;
+   270) o=3; down=UD; edge=T; up=DU ;;
+   *) echo "mp-kiosk-gestures: rotation $1 is not one of 0 90 180 270" >&2; exit 2 ;;
+esac
+
+# down from the top edge shows the panel; up anywhere puts it away again,
+# which is also what scrolling a page down does
+exec lisgd -d "$dev" -o "$o" \
+   -g "1,$down,$edge,*,R,$panel show" \
+   -g "1,$up,*,*,R,$panel hide"

@@ -29,6 +29,13 @@
 # the device: IJG wants a sentence in the documentation, which the image's
 # licence file carries, and FreeType is FTL or GPL-2+, used under GPL-2+.
 #
+# Added 2026-10-09 for the operator panel (PR #84): 34 packages from the
+# Wayland session, Chromium, polkit, the GTK panel and NetworkManager's
+# helpers. Same result: nothing non-commercial or proprietary. NPES (colour
+# data in colord) wants the CGATS report named as the source, which belongs
+# into the panel's licence notice. The one proprietary package it brought
+# in, bluez-firmware, is not in the image: the panel has Bluetooth off.
+#
 # Components without licence metadata pass the check unseen, because
 # require-license is off. Their licences, from the upstream repositories:
 #  - DuetSoftwareFramework, Duet Web Control, RepRapFirmware and
@@ -114,6 +121,19 @@ allow:
   - "GPL AND GPL-1.0-only AND GPL-2.0-only AND GPL-2.0-or-later AND ISC AND LGPL-2.0-only AND LGPL-2.0-or-later AND LicenseRef-WTFPL-2"   # libcaca0
   - "APACHE-2-LLVM-EXCEPTIONS AND Apache-2.0 AND BSD-3-Clause AND BSD-3-Clause AND MIT AND LicenseRef-Python AND LicenseRef-solar-public-domain"   # libllvm19
   - "0BSD AND Apache-2.0 AND LicenseRef-Apache-2.0- AND BSD-2-Clause AND BSD-3-Clause AND LicenseRef-Boost-1.0 AND LicenseRef-CC-zero-waive-1.0-us AND LicenseRef-Expat AND FSFAP AND LGPL-2.0-only AND LGPL-2.0-or-later AND MPL-2.0 AND OFL-1.1 AND LicenseRef-Sun-permissive AND Unlicense AND Zlib"   # librsvg2-2, the vendored Rust crates
+  # Added 2026-10-09 for the operator panel.
+  - "Expat AND GPL-2.0-only AND LicenseRef-MIT-like"   # labwc
+  - "CC0-1.0 AND LicenseRef-Expat AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-only AND LGPL-2.1-or-later"   # libwlroots-0.20
+  - "Expat AND LGPL-2.1-only AND LGPL-2.1-or-later"   # libseat1
+  - "Expat AND LGPL-3.0-only AND LGPL-3.0-or-later AND LicenseRef-MIT-OldStyleWithLegalDisclaimer"   # libgtk-layer-shell0
+  - "CC-BY-4.0 AND LicenseRef-Expat AND GPL-3.0-only"   # libdisplay-info2
+  - "CC0-1.0 AND LicenseRef-Expat AND ISC AND Unlicense"   # wayvnc
+  - "Expat AND LGPL-2.0-only AND LGPL-2.0-or-later"   # polkitd, libpolkit-agent-1-0, libpolkit-gobject-1-0
+  - "CC0 AND CC0-1.0 AND LicenseRef-expat AND LicenseRef-unicode"   # libduktape207, polkit's JavaScript engine
+  - "MIT AND LicenseRef-permissive"   # libwacom9, libwacom-common
+  - "CC0-1.0 AND LicenseRef-GFDL-NIV AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND LicenseRef-NPES"   # libcolord2; NPES: CGATS colour data, source to be named
+  - "Expat AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.0-only AND LGPL-2.0-or-later AND LGPL-3.0-only AND LGPL-3.0-or-later"   # libgnome-desktop-3-20t64, gnome-desktop3-data (squeekboard)
+  - "Expat AND LicenseRef-Expat-Precision AND LicenseRef-Expat-RedHat AND GPL-2.0-only AND LicenseRef-other-MetroLink AND LicenseRef-other-XFree"   # libxnvctrl0: X11-style notices
 
   # Reviewed 2026-09-12: single licences outside the families.
   - CC-BY-SA-4.0   # documentation of cryptsetup and gpiod
@@ -135,6 +155,11 @@ allow:
   - ICU                        # pango: Unicode data, permission notice
   - TCL                        # pango: BSD-style
   - Linux-man-pages-copyleft   # lm-sensors: manual pages, free to copy
+  # Added 2026-10-09 for the operator panel.
+  - MS-PL                      # parts of Chromium: Microsoft Public License, weak copyleft
+  - ZPL-2.1                    # GTK 3, gtk-update-icon-cache: Zope Public License, permissive
+  - SWL                        # GTK 3 text widget: the University of California's Tcl/Tk licence, permissive
+  - Jam                        # Boost (log, thread, filesystem) for the panel: permissive
 
   # Reviewed 2026-09-12: licence texts syft could not name, by SHA-256.
   - 936728f4181718f42951b881c1e8f1386bf6b2723c4fbc533c374d6f42c71816  # krb5-multidev, libgssapi-krb5-2, libgssrpc4t64, libk5crypto3…: BSD | GPL-2 | MIT
@@ -167,6 +192,13 @@ allow:
   - 8179158680353631133a7339cdcd3637613cbc8f227b7681cdb1d9c1f874dad6  # libraw1394-11: LGPL-2.1+, some files GPL or MIT
   - 5145b47d997486e5327091374e807046a32216168b6f2bbf6d1816f60927686c  # shared-mime-info: GPL-2+
   - 77d13a5e6cbe7277b4721033f9ad15707241c2832baa8c74ec823c9ee5ebf71c  # libflite1: CMU/Edinburgh permission notices, free for any use
+  # Added 2026-10-09 for the operator panel.
+  - bcef5f5e953190234deaf1bb008deda18209bc31ac2a174e7bc6b3956ddf7bbb  # libgtk2.0-0t64, libgtk2.0-common, gtk2-engines-pixbuf: LGPL-2+
+  - e49d9732f261b3ffcb50c40914bd9d144de5557dad9b2ae20dbe8e3c5b3d17fb  # libxinerama1: MIT
+  - 45f2bd1337c3a154cc47b3e9dac295708f8eb8c919c8b821451a1214ad4e6ad1  # python3-yaml: MIT
+  - 9a3730df4bb18c8be5fdce05b9223f9b152b6bf40f7e45319529830ecd413eb2  # libnl-3-200, libnl-genl-3-200, libnl-route-3-200: LGPL-2.1
+  - 4feae258cab1ad4743fb569a77e0b2a5b7a0199520bdbc0a613916291b9aa8a8  # libgcrypt20: LGPL-2.1+ library, GPL-2+ tools
+  - b8058c6a4e62094c4c4a081b9681b3e67e2ffed995d6b8b5fe43a536745f04ba  # adwaita-icon-theme: GPL-2/GPL-3+, CC-BY-SA
 
 ignore-packages: []
 

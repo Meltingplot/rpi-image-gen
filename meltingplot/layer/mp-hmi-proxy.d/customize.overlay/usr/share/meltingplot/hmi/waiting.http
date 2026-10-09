@@ -1,0 +1,25 @@
+HTTP/1.1 503 Service Unavailable
+Content-Type: text/html; charset=utf-8
+Content-Length: 630
+Cache-Control: no-store
+Refresh: 5
+Connection: close
+
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CHX 350</title>
+<style>
+html, body { height: 100%; margin: 0; }
+body { display: flex; align-items: center; justify-content: center; background: #fff; color: #171615;
+       font: 600 2.4rem/1.3 "Nunito Sans", "Liberation Sans", sans-serif; }
+p { margin: 0; text-align: center; }
+small { display: block; margin-top: .5em; font-size: 1.2rem; font-weight: 400; color: #595958; }
+</style>
+</head>
+<body>
+<p>Drucker startet &hellip;<small>Printer is starting &hellip;</small></p>
+</body>
+</html>

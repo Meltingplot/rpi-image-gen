@@ -1,0 +1,22 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-suite-trixie-hmi
+# X-Env-Layer-Category: suite
+# X-Env-Layer-Desc: Meltingplot base suite for the operator panel. Debian
+#  Trixie with apt, utils and ssh like mp-suite-trixie, but with NetworkManager
+#  instead of systemd-networkd, because the operator sets the customer network
+#  and wifi up on the touch screen, and without systemd-timesyncd, because the
+#  panel serves time to the printer network, which only chrony (mp-hmi-net)
+#  can. systemd-resolved, which the printer SBC gets through systemd-net-min,
+#  comes in by name: it owns /etc/resolv.conf on the read-only root, where
+#  NetworkManager cannot write one, and answers mDNS for <hostname>.local.
+#  Also without rpi-misc-skel, for the same reason as mp-suite-trixie.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: debian-trixie-arm64-multi,
+#  rpi-debian-trixie,
+#  rpi-misc-utils,
+#  rpi-essential-base,
+#  openssh-server,
+#  network-manager,
+#  systemd-resolved,
+#  wireless-regulatory
+# METAEND

@@ -10,8 +10,8 @@
 # X-Env-Layer-Requires: device-user-admin,openssh-server
 # X-Env-Layer-RequiresProvider: systemd
 #
-# X-Env-VarRequires: IGconf_device_user1,IGconf_mpnet_address,IGconf_mpnet_gateway
-# X-Env-VarRequires-Valid: string,string,string
+# X-Env-VarRequires: IGconf_device_user1,IGconf_mpnet_address
+# X-Env-VarRequires-Valid: string,string
 #
 # X-Env-VarPrefix: mpadmin
 #
@@ -92,6 +92,10 @@ mmdebstrap:
       u=$IGconf_mpadmin_user
       self=${IGconf_mpnet_address%/*}
       net=$(python3 -c 'import ipaddress, sys; print(ipaddress.ip_interface(sys.argv[1]).network)' "$IGconf_mpnet_address")
+      # Another machine in the printer network, to check the rules against:
+      # the first address there that is not ours, the panel for the SBC and
+      # the SBC for the panel.
+      peer=$(python3 -c 'import ipaddress, sys; i = ipaddress.ip_interface(sys.argv[1]); print(next(h for h in i.network.hosts() if h != i.ip))' "$IGconf_mpnet_address")
       install -d -m 0755 "$1/etc/ssh/sshd_config.d"
       cat > "$1/etc/ssh/sshd_config.d/10-mp-admin.conf" <<-EOF
       # Written by rpi-image-gen layer mp-admin. Put back on every boot.
@@ -125,8 +129,8 @@ mmdebstrap:
       ok=y
       chroot "$1" /usr/sbin/sshd -t -h /tmp/mp-admin-hostkey || ok=
       effective "$1" "$u" "$self" | grep -qx 'refuseconnection yes' || ok=
-      effective "$1" "$u" "$IGconf_mpnet_gateway" | grep -qx 'refuseconnection no' || ok=
-      effective "$1" "$u" "$IGconf_mpnet_gateway" | grep -qx "authorizedkeysfile /etc/meltingplot/ssh/%u.keys" || ok=
+      effective "$1" "$u" "$peer" | grep -qx 'refuseconnection no' || ok=
+      effective "$1" "$u" "$peer" | grep -qx "authorizedkeysfile /etc/meltingplot/ssh/%u.keys" || ok=
       rm -f "$1/tmp/mp-admin-hostkey" "$1/tmp/mp-admin-hostkey.pub"
       [ -z "$created_run" ] || rmdir "$1/run/sshd"
       [ -n "$ok" ] || { echo "mp-admin: sshd does not apply the access rules as written" >&2; exit 1; }

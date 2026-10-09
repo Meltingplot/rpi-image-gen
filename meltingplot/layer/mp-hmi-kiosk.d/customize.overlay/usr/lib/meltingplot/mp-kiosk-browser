@@ -1,0 +1,32 @@
+#!/bin/sh
+# Duet Web Control in Chromium, for as long as the panel session runs.
+#
+# Maximized, not fullscreen: labwc hides the layer-shell top layer behind a
+# fullscreen window, and the on-screen keyboard and the panel are drawn there.
+# labwc leaves the frame off (rc.xml), so it looks the same.
+#
+# The profile lives in the session's runtime directory and starts fresh every
+# time: nothing is written to the card, and a crash or a power cut leaves no
+# restore prompt behind. Duet Web Control keeps its settings on the printer.
+
+set -u
+
+url=${1:?url}
+profile=${XDG_RUNTIME_DIR:?}/chromium
+
+while :; do
+   rm -rf "$profile"
+   /usr/bin/chromium \
+      --app="$url" \
+      --start-maximized \
+      --user-data-dir="$profile" \
+      --disk-cache-size=33554432 \
+      --no-first-run \
+      --noerrdialogs \
+      --hide-crash-restore-bubble \
+      --disable-features=CrashRecoveryBubble \
+      --password-store=basic \
+      --overscroll-history-navigation=0 \
+      --check-for-update-interval=31536000
+   sleep 2
+done

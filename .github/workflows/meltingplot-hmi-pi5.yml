@@ -1,13 +1,14 @@
-name: meltingplot duet-pi5
+name: meltingplot hmi-pi5
 
-# Builds the printer image and, for a tag, publishes it as a release. The
-# update bundle in that release is what Raspberry Pi Connect hands to a
-# printer, so the release is the record of what a machine received.
+# Builds the operator panel image and, for a tag, publishes it as a release.
+# The update bundle in that release is what Raspberry Pi Connect hands to a
+# panel, so the release is the record of what a machine received. Same steps
+# as meltingplot-duet-pi5.yml, for the other image.
 
 on:
   push:
     branches: [meltingplot]
-    tags: ['duet-pi5/v*']
+    tags: ['hmi-pi5/v*']
   pull_request:
     branches: [meltingplot]
   workflow_dispatch:
@@ -17,7 +18,7 @@ on:
     - cron: '0 3 * * 1'
 
 concurrency:
-  group: duet-pi5-${{ github.ref }}
+  group: hmi-pi5-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -42,8 +43,8 @@ jobs:
           # input, and it ends up in shell commands.
           GITHUB_REF: ${{ github.ref }}
         run: |
-          if [[ $GITHUB_REF == refs/tags/duet-pi5/v* ]]; then
-            version=${GITHUB_REF#refs/tags/duet-pi5/v}
+          if [[ $GITHUB_REF == refs/tags/hmi-pi5/v* ]]; then
+            version=${GITHUB_REF#refs/tags/hmi-pi5/v}
             case $version in
               *[!A-Za-z0-9.+-]*|'')
                 echo "::error::tag $GITHUB_REF does not carry a usable version"; exit 1 ;;
@@ -82,15 +83,15 @@ jobs:
             dash "$f"
           done
 
-      # The Duet packages and the .NET runtime are the bulk of the download.
+      # Chromium and the desktop libraries are the bulk of the download.
       - name: Restore apt cache
         uses: actions/cache@v5
         with:
           path: meltingplot/.cache/apt
-          key: duet-pi5-apt-${{ hashFiles('meltingplot/layer/**') }}-${{ github.run_id }}
+          key: hmi-pi5-apt-${{ hashFiles('meltingplot/layer/**') }}-${{ github.run_id }}
           restore-keys: |
-            duet-pi5-apt-${{ hashFiles('meltingplot/layer/**') }}-
-            duet-pi5-apt-
+            hmi-pi5-apt-${{ hashFiles('meltingplot/layer/**') }}-
+            hmi-pi5-apt-
 
       - name: Build
         env:
@@ -100,14 +101,14 @@ jobs:
         run: |
           # rpi-image-gen expects the build directory to exist already.
           mkdir -p meltingplot/.cache/apt "$RUNNER_TEMP/work"
-          # The page the printer points its operator to after an update. The
+          # The page the panel points its operator to after an update. The
           # tag carries a slash, which GitHub wants encoded in the URL.
           release_url=
           if [ "$RELEASE" = true ]; then
             release_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/${TAG//\//%2F}"
           fi
           SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
-          ./rpi-image-gen build -S ./meltingplot -c duet-pi5.yaml \
+          ./rpi-image-gen build -S ./meltingplot -c hmi-pi5.yaml \
             -B "$RUNNER_TEMP/work" \
             -- IGconf_artefact_version="$VERSION" \
                IGconf_mpid_release="$release_url" \
@@ -140,7 +141,7 @@ jobs:
 
       - uses: actions/upload-artifact@v6
         with:
-          name: mp-duet-pi5-${{ steps.version.outputs.version }}
+          name: mp-hmi-pi5-${{ steps.version.outputs.version }}
           path: ${{ steps.collect.outputs.dir }}
           retention-days: 14
 
@@ -153,14 +154,14 @@ jobs:
           RELEASE_DIR: ${{ steps.collect.outputs.dir }}
           TAG: ${{ github.ref_name }}
         run: |
-          # The printer shows this page as the changelog after an update, so
+          # The panel shows this page as the changelog after an update, so
           # the pull requests since the previous release come first (GitHub's
           # generated notes, fetched here so they can lead rather than trail),
           # and the technical record of the build follows.
           # The notes start at the previous release of this image. Two images
           # release from this repository, and left to itself GitHub would start
           # at the latest release of either.
-          prev=$(git tag -l 'duet-pi5/v*' --sort=-creatordate | grep -vxF "$TAG" | head -n1 || true)
+          prev=$(git tag -l 'hmi-pi5/v*' --sort=-creatordate | grep -vxF "$TAG" | head -n1 || true)
           prev_args=()
           [ -n "$prev" ] && prev_args=(-f previous_tag_name="$prev")
           notes=$(mktemp)
@@ -170,16 +171,17 @@ jobs:
             echo
             echo "## Image"
             echo
-            echo "Image for the Raspberry Pi 5 on the Duet 3 mainboard of a CHX350."
+            echo "Image for the Raspberry Pi 5 operator panel (HMI) of a CHX350: touch display,"
+            echo "camera, and the router between the customer network and the printer network."
             echo
-            echo "Deploy \`mp-duet-pi5-$VERSION.update.tar.zst\` through Raspberry Pi"
+            echo "Deploy \`mp-hmi-pi5-$VERSION.update.tar.zst\` through Raspberry Pi"
             echo "Connect, using the SHA-256 from \`SHA256SUMS\`. See meltingplot/README.md."
             echo
             echo '```'
             cat "$RELEASE_DIR/release.json"
             echo '```'
           } > "$notes"
-          args=(--verify-tag --title "duet-pi5 $VERSION" --notes-file "$notes")
+          args=(--verify-tag --title "hmi-pi5 $VERSION" --notes-file "$notes")
           [ "$PRERELEASE" = "true" ] && args+=(--prerelease)
           gh release create "$TAG" "${args[@]}" "$RELEASE_DIR"/*
 
@@ -260,7 +262,7 @@ jobs:
       - uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ steps.sbom.outputs.dir }}/grype.sarif
-          category: duet-pi5-grype
+          category: hmi-pi5-grype
 
       # grant fails the run for any package whose licence is outside
       # meltingplot/grant.yaml, so a new licence needs a decision before the
@@ -291,7 +293,7 @@ jobs:
 
       - uses: actions/upload-artifact@v6
         with:
-          name: mp-duet-pi5-${{ steps.version.outputs.version }}-audit
+          name: mp-hmi-pi5-${{ steps.version.outputs.version }}-audit
           path: |
             ${{ steps.sbom.outputs.dir }}/grype.json
             ${{ steps.sbom.outputs.dir }}/grype.sarif

@@ -1,0 +1,60 @@
+#!/bin/sh
+# Keep the panel's own names and origins current for haproxy.
+#
+# haproxy answers only requests for one of the panel's own host names and
+# lets a page call it only from one of the panel's own origins. Those change:
+# the customer network hands out addresses by DHCP, wifi adds one, the
+# hostname follows the printer name. This writes both lists anew and reloads
+# haproxy when they changed.
+#
+#   hosts.lst    host names as a Host header carries them, without the port
+#   origins.lst  origins as a browser sends them, http://<host>
+
+set -eu
+
+MP_TAG=mp-hmi-origins
+. /usr/lib/meltingplot/mp-common.sh
+
+dir=/run/mp-hmi-proxy
+install -d -m 0755 "$dir"
+
+names() {
+   # every address of the panel, the printer network's included; IPv6 in
+   # brackets, as in a URL
+   ip -o addr show scope global | awk '
+      $3 == "inet"  { split($4, a, "/"); print a[1] }
+      $3 == "inet6" { split($4, a, "/"); print "[" a[1] "]" }'
+   host=$(hostname)
+   printf '%s.local\n%s\n' "$host" "$host"
+}
+
+# haproxy compares the Host header in lower case, and browsers send origins so
+lower() {
+   tr '[:upper:]' '[:lower:]'
+}
+
+# Write the list $1 from stdin; true if that changed it.
+update() {
+   tmp=$(mktemp "$dir/.$1.XXXXXX")
+   sort -u > "$tmp"
+   chmod 0644 "$tmp"
+   if cmp -s "$tmp" "$dir/$1"; then
+      rm -f "$tmp"
+      return 1
+   fi
+   mv -f "$tmp" "$dir/$1"
+   mp_log "$1: $(tr '\n' ' ' < "$dir/$1")"
+}
+
+changed=
+# The loopback answers tools on the panel itself. No browser elsewhere reaches
+# it, and a page from a name pointed at it carries that name, not these.
+{ names; printf 'localhost\n127.0.0.1\n'; } | lower | update hosts.lst && changed=y
+names | lower | sed 's|^|http://|' | update origins.lst && changed=y
+
+# haproxy reads the lists when it starts; a running one takes new lists on
+# reload, which leaves open connections alone
+if [ -n "$changed" ] && systemctl -q is-active haproxy.service; then
+   systemctl reload haproxy.service
+fi
+exit 0

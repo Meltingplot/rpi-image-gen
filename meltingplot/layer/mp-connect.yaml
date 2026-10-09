@@ -1,22 +1,25 @@
 # METABEGIN
 # X-Env-Layer-Name: mp-connect
 # X-Env-Layer-Category: service
-# X-Env-Layer-Desc: Raspberry Pi Connect (shell only) with remote update
-#  support, as the delivery channel for OTA images. No auth key is baked into
-#  the image; a device signs in on first boot from the key that mp-identity
-#  drops for it, which rpi-connect-signin.path picks up. The update connector
-#  keeps its packaged behaviour: it installs a deployment as soon as it
-#  arrives, restarts into it at once, and commits the slot once that boots.
-#  Nothing in the packaged software can hold the restart back (AutoReboot=false
-#  makes the connector ask the Connect daemon, which does not implement the
-#  question, and a failed question counts as yes), so a printer image must
-#  keep the connector from running while the machine is busy; mp-ota-gate in
-#  mp-dsf does that. An image with this layer and no such gate restarts the
-#  moment an update is installed. Signing in reads the device identity from
-#  OTP through /dev/vcio_crypto, which this layer opens to the video group the
-#  way Raspberry Pi OS does; the Connect account is in that group.
-# X-Env-Layer-Version: 1.2.1
-# X-Env-Layer-Requires: rpi-connect-lite,rpi-connect-ota
+# X-Env-Layer-Desc: Raspberry Pi Connect with remote update support, as the
+#  delivery channel for OTA images. The client comes from the config: the
+#  printer SBC runs rpi-connect-lite (shell only), the operator panel
+#  rpi-connect, which shares its screen. No auth key is baked into the image;
+#  a device signs in on first boot from the key that mp-identity drops for it,
+#  which rpi-connect-signin.path picks up. The update connector keeps its
+#  packaged behaviour: it installs a deployment as soon as it arrives, restarts
+#  into it at once, and commits the slot once that boots. Nothing in the
+#  packaged software can hold the restart back (AutoReboot=false makes the
+#  connector ask the Connect daemon, which does not implement the question, and
+#  a failed question counts as yes), so the printer SBC keeps the connector
+#  from running while the machine is busy; mp-ota-gate in mp-dsf does that. The
+#  operator panel restarts the moment an update is installed, which leaves a
+#  running print alone. Signing in reads the device identity from OTP through
+#  /dev/vcio_crypto, which this layer opens to the video group the way
+#  Raspberry Pi OS does; the Connect account is in that group.
+# X-Env-Layer-Version: 1.3.0
+# X-Env-Layer-Requires: rpi-connect-ota
+# X-Env-Layer-RequiresProvider: rpi-connect-client
 # METAEND
 ---
 mmdebstrap:

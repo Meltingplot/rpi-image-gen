@@ -1,0 +1,2 @@
+# Served byte for byte: an HTTP response, whose header lines end in CRLF.
+*.http -text

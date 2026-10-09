@@ -66,6 +66,9 @@ sbom:
 
 layer:
   suite: mp-suite-trixie
+  # The Connect client: shell only on the printer SBC. The operator panel
+  # takes rpi-connect, which also shares the screen.
+  connectclient: rpi-connect-lite
   connect: mp-connect
   identity: mp-identity
   admin: mp-admin

@@ -1,0 +1,31 @@
+#!/bin/sh
+# Drop what the device made of the printer network.
+#
+# NetworkManager never writes to the read-only profile the image ships under
+# /usr/lib. Changing that connection writes a profile with the same uuid under
+# /etc, deleting it writes <uuid>.nmmeta there; either would outlive updates,
+# since /etc/NetworkManager/system-connections is shared across slots. Both go
+# before NetworkManager starts, so the image's profile applies again.
+
+set -eu
+
+MP_TAG=mp-printer-net-guard
+. /usr/lib/meltingplot/mp-common.sh
+
+shipped=/usr/lib/NetworkManager/system-connections/mp-printer-net.nmconnection
+etc=/etc/NetworkManager/system-connections
+
+uuid=$(mp_conf_get "$shipped" uuid)
+[ -n "$uuid" ] || mp_die "no uuid in $shipped"
+
+for f in "$etc"/*; do
+   [ -e "$f" ] || [ -L "$f" ] || continue
+   case $f in
+      "$etc/$uuid.nmmeta") ;;
+      *.nmconnection) [ "$(mp_conf_get "$f" uuid)" = "$uuid" ] || continue ;;
+      *) continue ;;
+   esac
+   rm -f "$f"
+   mp_log "removed $f, the printer network is the image's again"
+done
+exit 0

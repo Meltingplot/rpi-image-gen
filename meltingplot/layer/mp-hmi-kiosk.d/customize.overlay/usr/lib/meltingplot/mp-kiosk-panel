@@ -1,0 +1,40 @@
+#!/bin/sh
+# Bring the panel at the top edge down, or let it hide again.
+#
+# wf-panel-pi only comes down when a pointer enters the strip it leaves at the
+# edge, which a finger on a touch screen hardly hits. The swipe from the top
+# edge (mp-kiosk-gestures) switches its autohide off instead, which shows it,
+# and on again, which lets it hide. The panel watches its user configuration
+# and follows it at once; the rest of its settings comes from
+# /etc/xdg/wf-panel-pi/wf-panel-pi.ini.
+#
+#   mp-kiosk-panel show   down, and up again after a minute
+#   mp-kiosk-panel hide   up
+
+set -eu
+
+ini=${XDG_CONFIG_HOME:-$HOME/.config}/wf-panel-pi/wf-panel-pi.ini
+# which show the pending hide belongs to, so an older one leaves a newer alone
+token=${XDG_RUNTIME_DIR:?}/mp-kiosk-panel.token
+
+case ${1:-} in
+   show) auto=false ;;
+   hide) auto=true ;;
+   *) echo "usage: $0 show|hide" >&2; exit 2 ;;
+esac
+
+mkdir -p "$(dirname "$ini")"
+if ! grep -qx "autohide=$auto" "$ini" 2>/dev/null; then
+   # written in place: the panel watches the file
+   printf '[panel]\nautohide=%s\n' "$auto" > "$ini"
+fi
+
+if [ "$auto" = false ]; then
+   id=$$
+   echo "$id" > "$token"
+   (
+      sleep 60
+      [ "$(cat "$token" 2>/dev/null)" = "$id" ] && exec "$0" hide
+   ) >/dev/null 2>&1 &
+fi
+exit 0
