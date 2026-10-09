@@ -5,8 +5,10 @@
 #  meltingplot/identity.conf from the BOOTCONFIG partition, stores the printer
 #  serial and display name on persistent storage, hands a Raspberry Pi Connect
 #  auth key to the account, derives the hostname from the display name and
-#  grows the persistent partition to the size of the medium.
-# X-Env-Layer-Version: 1.1.1
+#  grows the persistent partition to the size of the medium. The image ships
+#  that file on BOOTCONFIG with every line commented out, so commissioning only
+#  edits it.
+# X-Env-Layer-Version: 1.2.0
 # X-Env-Layer-Requires: device-user-admin
 # X-Env-Layer-RequiresProvider: systemd
 #
