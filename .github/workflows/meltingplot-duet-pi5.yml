@@ -157,10 +157,16 @@ jobs:
           # the pull requests since the previous release come first (GitHub's
           # generated notes, fetched here so they can lead rather than trail),
           # and the technical record of the build follows.
+          # The notes start at the previous release of this image. Two images
+          # release from this repository, and left to itself GitHub would start
+          # at the latest release of either.
+          prev=$(git tag -l 'duet-pi5/v*' --sort=-creatordate | grep -vxF "$TAG" | head -n1 || true)
+          prev_args=()
+          [ -n "$prev" ] && prev_args=(-f previous_tag_name="$prev")
           notes=$(mktemp)
           {
             gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
-              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" --jq .body
+              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" "${prev_args[@]}" --jq .body
             echo
             echo "## Image"
             echo

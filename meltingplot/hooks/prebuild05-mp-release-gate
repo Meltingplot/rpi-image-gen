@@ -39,58 +39,63 @@ fi
 
 problems=()
 
-[[ ${IGconf_dsf_suite:-} == stable ]] ||
-   problems+=("dsf.suite is '${IGconf_dsf_suite:-}', a final image takes packages from stable")
+# What follows concerns Duet software and printer configuration, which only
+# an image with mp-dsf carries. The operator panel has none; its packages
+# come from the Debian and Raspberry Pi releases the suite pins.
+if [[ -n ${IGconf_dsf_suite:-} ]]; then
+   [[ ${IGconf_dsf_suite:-} == stable ]] ||
+      problems+=("dsf.suite is '${IGconf_dsf_suite:-}', a final image takes packages from stable")
 
-[[ ${IGconf_dsf_version:-} != *'~'* ]] ||
-   problems+=("dsf.version ${IGconf_dsf_version} is a prerelease")
-[[ ${IGconf_dsf_rrf_version:-} != *'~'* ]] ||
-   problems+=("dsf.rrf_version ${IGconf_dsf_rrf_version} is a prerelease")
+   [[ ${IGconf_dsf_version:-} != *'~'* ]] ||
+      problems+=("dsf.version ${IGconf_dsf_version} is a prerelease")
+   [[ ${IGconf_dsf_rrf_version:-} != *'~'* ]] ||
+      problems+=("dsf.rrf_version ${IGconf_dsf_rrf_version} is a prerelease")
 
-shopt -s nocasematch
-[[ ! ${IGconf_dsf_python_version:-} =~ (a|b|rc)[0-9]+$ ]] ||
-   problems+=("dsf.python_version ${IGconf_dsf_python_version} is a prerelease")
+   shopt -s nocasematch
+   [[ ! ${IGconf_dsf_python_version:-} =~ (a|b|rc)[0-9]+$ ]] ||
+      problems+=("dsf.python_version ${IGconf_dsf_python_version} is a prerelease")
 
-# A bundled plugin carries its version in the list.
-list=${IGconf_dsf_plugins_list:-}
-if [[ -f $list ]]; then
-   while read -r id version _ || [[ -n $id ]]; do
-      [[ -z $id || $id == \#* ]] && continue
-      [[ ! $version =~ -(rc|beta|alpha|dev|pre) ]] ||
-         problems+=("the bundled plugin $id is at the prerelease $version")
-   done < "$list"
-fi
+   # A bundled plugin carries its version in the list.
+   list=${IGconf_dsf_plugins_list:-}
+   if [[ -f $list ]]; then
+      while read -r id version _ || [[ -n $id ]]; do
+         [[ -z $id || $id == \#* ]] && continue
+         [[ ! $version =~ -(rc|beta|alpha|dev|pre) ]] ||
+            problems+=("the bundled plugin $id is at the prerelease $version")
+      done < "$list"
+   fi
 
-# A replaced firmware file is pinned by its published location; the release it
-# came from is the version segment of that path.
-list=${IGconf_dsf_firmware_list:-}
-if [[ -f $list ]]; then
-   while read -r name _ url || [[ -n $name ]]; do
-      [[ -z $name || $name == \#* ]] && continue
-      [[ ! $url =~ -(rc|beta|alpha|dev|pre) ]] ||
-         problems+=("$name is replaced by a prerelease build from $url")
-   done < "$list"
-fi
+   # A replaced firmware file is pinned by its published location; the release it
+   # came from is the version segment of that path.
+   list=${IGconf_dsf_firmware_list:-}
+   if [[ -f $list ]]; then
+      while read -r name _ url || [[ -n $name ]]; do
+         [[ -z $name || $name == \#* ]] && continue
+         [[ ! $url =~ -(rc|beta|alpha|dev|pre) ]] ||
+            problems+=("$name is replaced by a prerelease build from $url")
+      done < "$list"
+   fi
 
-# The same for a DuetSoftwareFramework package from a build of our own.
-list=${IGconf_dsf_packages_list:-}
-if [[ -f $list ]]; then
-   while read -r pkg _ url || [[ -n $pkg ]]; do
-      [[ -z $pkg || $pkg == \#* ]] && continue
-      [[ ! $url =~ -(rc|beta|alpha|dev|pre) ]] ||
-         problems+=("$pkg comes from a prerelease build at $url")
-   done < "$list"
-fi
-shopt -u nocasematch
+   # The same for a DuetSoftwareFramework package from a build of our own.
+   list=${IGconf_dsf_packages_list:-}
+   if [[ -f $list ]]; then
+      while read -r pkg _ url || [[ -n $pkg ]]; do
+         [[ -z $pkg || $pkg == \#* ]] && continue
+         [[ ! $url =~ -(rc|beta|alpha|dev|pre) ]] ||
+            problems+=("$pkg comes from a prerelease build at $url")
+      done < "$list"
+   fi
+   shopt -u nocasematch
 
-[[ ${IGconf_dsf_plugin_policy:-enforce} == enforce ]] ||
-   problems+=("dsf.plugin_policy is '${IGconf_dsf_plugin_policy}', a customer image enforces it")
+   [[ ${IGconf_dsf_plugin_policy:-enforce} == enforce ]] ||
+      problems+=("dsf.plugin_policy is '${IGconf_dsf_plugin_policy}', a customer image enforces it")
 
-config_dir=${IGconf_dsf_config_dir:-}
-if [[ -d $config_dir ]]; then
-   if ! git -C "$config_dir" describe --tags --exact-match HEAD >/dev/null 2>&1; then
-      commit=$(git -C "$config_dir" rev-parse --short HEAD 2>/dev/null || echo unknown)
-      problems+=("the printer configuration is at $commit, which carries no release tag")
+   config_dir=${IGconf_dsf_config_dir:-}
+   if [[ -d $config_dir ]]; then
+      if ! git -C "$config_dir" describe --tags --exact-match HEAD >/dev/null 2>&1; then
+         commit=$(git -C "$config_dir" rev-parse --short HEAD 2>/dev/null || echo unknown)
+         problems+=("the printer configuration is at $commit, which carries no release tag")
+      fi
    fi
 fi
 
