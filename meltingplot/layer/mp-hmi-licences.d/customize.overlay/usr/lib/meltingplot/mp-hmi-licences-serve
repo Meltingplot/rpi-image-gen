@@ -1,0 +1,28 @@
+#!/usr/bin/python3
+"""Serve the operator panel's licence page on the loopback, for mp-hmi-proxy.
+
+The page is static and written at build time (mp-hmi-licences); this only
+hands its files out, the texts marked as UTF-8 so a browser shows the
+copyright signs and names in them as written. No directory listings: the page
+has its own index.
+"""
+import functools
+import http.server
+
+DIR = "/usr/share/meltingplot/licenses"
+
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    extensions_map = {
+        ".txt": "text/plain; charset=utf-8",
+        ".html": "text/html; charset=utf-8",
+        ".json": "application/json",
+    }
+
+    def list_directory(self, path):
+        self.send_error(404)
+        return None
+
+
+http.server.ThreadingHTTPServer(
+    ("127.0.0.1", 8082), functools.partial(Handler, directory=DIR)).serve_forever()

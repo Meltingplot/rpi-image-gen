@@ -31,10 +31,11 @@
 #
 # Added 2026-10-09 for the operator panel (PR #84): 34 packages from the
 # Wayland session, Chromium, polkit, the GTK panel and NetworkManager's
-# helpers. Same result: nothing non-commercial or proprietary. NPES (colour
-# data in colord) wants the CGATS report named as the source, which belongs
-# into the panel's licence notice. The one proprietary package it brought
-# in, bluez-firmware, is not in the image: the panel has Bluetooth off.
+# helpers. Same result: nothing non-commercial or proprietary. NPES covers
+# the CGATS colour profiles in colord's source; libcolord2 installs none of
+# them, so there is no source to name. The one proprietary package it
+# brought in, bluez-firmware, is not in the image: the panel has Bluetooth
+# off.
 #
 # Components without licence metadata pass the check unseen, because
 # require-license is off. Their licences, from the upstream repositories:
@@ -131,7 +132,7 @@ allow:
   - "Expat AND LGPL-2.0-only AND LGPL-2.0-or-later"   # polkitd, libpolkit-agent-1-0, libpolkit-gobject-1-0
   - "CC0 AND CC0-1.0 AND LicenseRef-expat AND LicenseRef-unicode"   # libduktape207, polkit's JavaScript engine
   - "MIT AND LicenseRef-permissive"   # libwacom9, libwacom-common
-  - "CC0-1.0 AND LicenseRef-GFDL-NIV AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND LicenseRef-NPES"   # libcolord2; NPES: CGATS colour data, source to be named
+  - "CC0-1.0 AND LicenseRef-GFDL-NIV AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND LicenseRef-NPES"   # libcolord2; NPES: CGATS colour profiles, not installed
   - "Expat AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.0-only AND LGPL-2.0-or-later AND LGPL-3.0-only AND LGPL-3.0-or-later"   # libgnome-desktop-3-20t64, gnome-desktop3-data (squeekboard)
   - "Expat AND LicenseRef-Expat-Precision AND LicenseRef-Expat-RedHat AND GPL-2.0-only AND LicenseRef-other-MetroLink AND LicenseRef-other-XFree"   # libxnvctrl0: X11-style notices
 

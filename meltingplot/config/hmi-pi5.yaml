@@ -44,4 +44,5 @@ layer:
   proxy: mp-hmi-proxy
   camera: mp-hmi-camera
   app: mp-hmi-kiosk
+  licences: mp-hmi-licences
   splash: rpi-splash-screen

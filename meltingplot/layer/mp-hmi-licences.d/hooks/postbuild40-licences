@@ -1,0 +1,112 @@
+#!/bin/bash
+# Write the operator panel's licence page into the image.
+#
+# Runs once the root filesystem is complete, after every layer has installed
+# and purged its packages, so the page lists exactly what the image carries:
+#   LICENSES.txt          the notice of the panel image, for this version
+#   packages/<name>.txt   the copyright file of each installed package
+#   index.json            image, version and every package, for the printer's
+#                         interface
+#   index.html            the same for a browser
+# The copyright files stay where Debian put them; the page links to them.
+
+set -euo pipefail
+
+ROOT=${1:?root filesystem}
+ASSETS=${IGconf_hmilic_assetdir:?}
+VERSION=${IGconf_artefact_version:?}
+
+python3 - "$ROOT" "$ASSETS/LICENSES.txt" "$VERSION" "${IGconf_image_name:-}" <<'PY'
+import html, json, os, pathlib, sys
+
+root, template, version, image = sys.argv[1:5]
+root = pathlib.Path(root)
+out = root / "usr/share/meltingplot/licenses"
+DOC = "/usr/share/doc"
+
+def inside(path):
+    """Resolve a path of the image within the image, absolute links included."""
+    parts, p = pathlib.PurePosixPath(path).parts[1:], pathlib.PurePosixPath("/")
+    for depth, part in enumerate(parts):
+        p = p / part
+        for _ in range(40):
+            host = root / p.relative_to("/")
+            if not host.is_symlink():
+                break
+            target = pathlib.PurePosixPath(os.readlink(host))
+            p = target if target.is_absolute() else p.parent / target
+            p = pathlib.PurePosixPath(os.path.normpath(p))
+    return root / p.relative_to("/")
+
+text = pathlib.Path(template).read_text()
+if "@VERSION@" not in text:
+    sys.exit("mp-hmi-licences: LICENSES.txt has no @VERSION@ placeholder")
+text = text.replace("@VERSION@", version)
+
+status = next((p for p in (root / "var/lib/dpkg/status",
+                           root / "usr/lib/rpi-image-gen/slot-var/lib/dpkg/status")
+               if p.exists()), None)
+if status is None:
+    sys.exit("mp-hmi-licences: no dpkg status in the image")
+packages, cur = [], {}
+for line in status.read_text(errors="replace").splitlines() + [""]:
+    if not line.strip():
+        if cur.get("Status", "").endswith(" installed"):
+            packages.append(cur)
+        cur = {}
+    elif not line[0].isspace() and ":" in line:
+        k, _, v = line.partition(":")
+        cur[k] = v.strip()
+
+(out / "packages").mkdir(parents=True, exist_ok=True)
+(out / "LICENSES.txt").write_text(text)
+index, missing = [], []
+for p in sorted(packages, key=lambda p: p["Package"]):
+    name = p["Package"]
+    entry = {"name": name, "version": p.get("Version", ""),
+             "source": (p.get("Source") or name).split(" ")[0], "copyright": None}
+    if inside(f"{DOC}/{name}/copyright").is_file():
+        link = out / "packages" / f"{name}.txt"
+        if link.is_symlink() or link.exists():
+            link.unlink()
+        link.symlink_to(f"{DOC}/{name}/copyright")
+        entry["copyright"] = f"packages/{name}.txt"
+    else:
+        missing.append(name)
+    index.append(entry)
+
+(out / "index.json").write_text(json.dumps(
+    {"image": image, "version": version, "notice": "LICENSES.txt", "packages": index},
+    indent=1) + "\n")
+rows = "\n".join(
+    f'<li><a href="{html.escape(e["copyright"])}">{html.escape(e["name"])}</a> {html.escape(e["version"])}</li>'
+    if e["copyright"] else f'<li>{html.escape(e["name"])} {html.escape(e["version"])}</li>'
+    for e in index)
+(out / "index.html").write_text(f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licences, {html.escape(image or "operator panel")} {html.escape(version)}</title>
+<style>body{{font:15px/1.4 sans-serif;margin:1em;max-width:60em}}pre{{white-space:pre-wrap}}</style>
+</head><body>
+<pre>{html.escape(text)}</pre>
+<h2>Licence files of the installed packages</h2>
+<ul>
+{rows}
+</ul>
+</body></html>
+""")
+print(f"mp-hmi-licences: notice for {version}, {len(index)} packages, "
+      f"{len(index) - len(missing)} with a copyright file", file=sys.stderr)
+if missing:
+    print("mp-hmi-licences: no copyright file for " + ", ".join(missing), file=sys.stderr)
+PY
+
+# The page must name the version it describes and be complete.
+grep -q '@[A-Z]*@' "$ROOT/usr/share/meltingplot/licenses/LICENSES.txt" &&
+   { echo "mp-hmi-licences: LICENSES.txt still carries a placeholder" >&2; exit 1; }
+# The links point into /usr/share/doc of the device, where python checked
+# them; here only that they are there.
+for pkg in raspi-firmware rpi-eeprom firmware-brcm80211 chromium rpi-connect; do
+   [ -L "$ROOT/usr/share/meltingplot/licenses/packages/$pkg.txt" ] ||
+      { echo "mp-hmi-licences: the page lacks the licence file of $pkg" >&2; exit 1; }
+done
