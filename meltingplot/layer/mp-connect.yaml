@@ -12,8 +12,10 @@
 #  question, and a failed question counts as yes), so a printer image must
 #  keep the connector from running while the machine is busy; mp-ota-gate in
 #  mp-dsf does that. An image with this layer and no such gate restarts the
-#  moment an update is installed.
-# X-Env-Layer-Version: 1.2.0
+#  moment an update is installed. Signing in reads the device identity from
+#  OTP through /dev/vcio_crypto, which this layer opens to the video group the
+#  way Raspberry Pi OS does; the Connect account is in that group.
+# X-Env-Layer-Version: 1.2.1
 # X-Env-Layer-Requires: rpi-connect-lite,rpi-connect-ota
 # METAEND
 ---
