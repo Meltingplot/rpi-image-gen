@@ -145,4 +145,23 @@ mmdebstrap:
       rm -f "$1/run/mp-hmi-proxy/origins.lst" "$1/run/mp-hmi-proxy/hosts.lst"
       [ -z "$created_run" ] || rmdir "$1/run/mp-hmi-proxy"
       [ -n "$ok" ] || { echo "mp-hmi-proxy: haproxy rejects the configuration" >&2; exit 1; }
+    # haproxy listens on every address (bind :80) and needs none of them to
+    # start, but Debian's unit waits for network-online.target, which
+    # NetworkManager reaches only once every connection is up: eleven
+    # seconds into boot on the bench panel, long after the session had
+    # started its browser. A drop-in cannot take a dependency away, so the
+    # unit is derived from the packaged one without it.
+    - |-
+      set -eu
+      src="$1/usr/lib/systemd/system/haproxy.service"
+      dst="$1/etc/systemd/system/haproxy.service"
+      [ -f "$src" ] || { echo "mp-hmi-proxy: $src is missing" >&2; exit 1; }
+      sed -e '/^Wants=network-online.target$/d' \
+          -e '/^\(After\|Wants\)=/s/ *network-online\.target//' \
+          -e 's/^\(After\|Wants\)= */\1=/' \
+          -e '/^\(After\|Wants\)=$/d' "$src" > "$dst"
+      ! grep -q network-online "$dst" ||
+        { echo "mp-hmi-proxy: could not take network-online.target out of the haproxy unit" >&2; exit 1; }
+      grep -q '^ExecStart=' "$dst" ||
+        { echo "mp-hmi-proxy: the derived haproxy unit lost its ExecStart" >&2; exit 1; }
     - $BDEBSTRAP_HOOKS/enable-units "$1" haproxy mp-hmi-origins
