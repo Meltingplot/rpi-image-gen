@@ -1,0 +1,18 @@
+[Unit]
+Description=Refuse an image that is meant for the other printer computer
+Documentation=file:///etc/meltingplot/device.conf
+DefaultDependencies=no
+After=persistent.mount
+RequiresMountsFor=/bootfs /persistent
+# Before anything writes to the persistent partition or the boot partition
+# for this image, and long before the update connector could commit it.
+Before=persistent-shared-init.service slot-var-init.service mp-identity.service sysinit.target
+ConditionPathExists=/persistent/common/etc/mp-identity
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/mp-role-guard
+
+[Install]
+WantedBy=sysinit.target
