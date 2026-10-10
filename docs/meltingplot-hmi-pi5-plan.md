@@ -212,7 +212,7 @@ Dev-HMI am Bench, nur das HMI, Seriennummer 003. Gebaut wurde lokal, Ergebnisse 
 **Leiste:** Per Tipp auf den 5-px-Streifen war sie kaum zu treffen. Deshalb gibt es jetzt Kandidat B:
 - `lisgd` erkennt Wischen vom oberen Rand nach unten (zeigen) und nach oben (verstecken, sonst nach 60 s von selbst).
 - **Zugriff:** Den Touchscreen öffnet eine udev-Regel per `uaccess` nur der Sitzung am Seat (`71-mp-kiosk-touch.rules`), ohne Gruppe `input`.
-- **Drehung:** Sie wird im Build eingerechnet, bei 180° ist die Geste roh DU an der Kante B.
+- **Drehung:** lisgd übernimmt sie selbst aus Wayland. Die zusätzliche Umrechnung für 180° (roh DU an Kante B) legte die Geste am Bench auf den unteren Rand (2026-10-10). Seitdem gilt immer UD an der Oberkante.
 - Noch ungetestet.
 
 **Offen:**
