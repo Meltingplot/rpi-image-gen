@@ -10,7 +10,6 @@
 
 # Overridable so the logic can be exercised on a build host with stubs.
 MP_CODECONSOLE=${MP_CODECONSOLE:-/opt/dsf/bin/CodeConsole}
-MP_OTA_STATE_FILE=${MP_OTA_STATE_FILE:-/bootfs/ota_state}
 MP_DSF_CONF=${MP_DSF_CONF:-/etc/meltingplot/dsf.conf}
 MP_DSF_SHARED=${MP_DSF_SHARED:-/persistent/shared/opt/dsf}
 MP_DSF_GROUP_STAMP=${MP_DSF_GROUP_STAMP:-/var/lib/meltingplot/dsf-group}
@@ -69,32 +68,6 @@ mp_dcs_boot_time() {
 # control server cannot be reached.
 mp_dcs_code() {
    "$MP_CODECONSOLE" -c "$1" >/dev/null 2>&1
-}
-
-# The state of the update connector: IDLE, DOWNLOAD, INSTALL, TRYBOOT and so
-# on (rpi-ota-connector 1.3.14), read from the file the connector rewrites
-# on every transition, next to autoboot.txt on the boot partition. The
-# connector also answers the same over D-Bus (GetStatus), but not while it
-# streams an install, which is the one time the answer matters: the call
-# then hangs for busctl's 25 s timeout and fails (lab printer, 2026-09-16).
-# The file is only as current as the connector that wrote it, so callers
-# must check that the connector is running before believing it. Prints
-# nothing when the file is missing or has no state line.
-mp_ota_state() {
-   [ -r "$MP_OTA_STATE_FILE" ] || return 0
-   sed -n -e 's/\r$//' -e 's/^state=//p' "$MP_OTA_STATE_FILE" | head -n1
-}
-
-# True for the connector states between picking a deployment up and restarting
-# into it. Everything before (checking for a deployment) and after the restart
-# (committing, reporting) is not an install from the printer's point of view.
-mp_ota_installing() {
-   case $1 in
-      DOWNLOAD | PREINSTALL | INSTALL | REBOOTPROMPT | REBOOTWAIT | REBOOT | TRYBOOTPROMPT | TRYBOOTWAIT | TRYBOOT)
-         return 0 ;;
-      *)
-         return 1 ;;
-   esac
 }
 
 # The message box that tells whoever stands at the printer that an update is

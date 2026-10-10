@@ -1,0 +1,58 @@
+#!/bin/sh
+# Show the update page instead of the printer while the panel installs an
+# update.
+#
+# The panel takes an update whenever one arrives (it holds no print), and
+# restarts the moment it is installed. Whoever uses the printer's interface
+# through it, at its screen or from the customer network, should see that
+# coming rather than lose the interface mid-step. The update connector
+# rewrites /bootfs/ota_state on every transition; mp-hmi-ota-state.path runs
+# this for each, and once at boot before haproxy.
+#
+# While it installs, /run/mp-hmi-proxy/ota.lst holds "/", which every path
+# begins with, and haproxy answers with the update page; otherwise the file
+# is empty. On the switch to the update page haproxy restarts, which cuts the
+# printer's interface on every browser, and the panel's own browser restarts
+# so it shows the page. If the install ends without a restart, the page goes
+# and reloads itself into the interface.
+
+set -eu
+
+MP_TAG=mp-hmi-ota-state
+. /usr/lib/meltingplot/mp-common.sh
+
+MP_PROXY_DIR=${MP_PROXY_DIR:-/run/mp-hmi-proxy}
+list=$MP_PROXY_DIR/ota.lst
+
+state=$(mp_ota_state)
+want=
+# The file is only as current as the connector that wrote it.
+if mp_ota_installing "$state" && systemctl -q is-active rpi-connect-ota.service; then
+   want=/
+fi
+
+install -d -m 0755 "$MP_PROXY_DIR"
+have=$(cat "$list" 2>/dev/null || true)
+if [ -e "$list" ] && [ "$have" = "$want" ]; then
+   exit 0
+fi
+tmp=$(mktemp "$MP_PROXY_DIR/.ota.XXXXXX")
+[ -z "$want" ] || echo "$want" > "$tmp"
+chmod 0644 "$tmp"
+mv -f "$tmp" "$list"
+
+if [ -n "$want" ]; then
+   mp_log "update ${state}: showing the update page"
+   if systemctl -q is-active haproxy.service; then
+      systemctl restart haproxy.service
+   fi
+   # A browser showing the interface keeps it over its WebSocket; restarted,
+   # the panel's own browser loads the update page.
+   pkill -u "$MP_USER" -f '^/usr/lib/chromium/chromium' || true
+else
+   mp_log "update ${state:-none}: printer interface again"
+   if systemctl -q is-active haproxy.service; then
+      systemctl reload haproxy.service
+   fi
+fi
+exit 0

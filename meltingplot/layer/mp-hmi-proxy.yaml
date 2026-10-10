@@ -9,8 +9,9 @@
 #  short backend beyond that. Cross-origin requests are answered only for the
 #  panel's own origins, so a page from the internet opened on the panel cannot
 #  drive the printer. While the SBC does not answer, the panel shows a waiting
-#  page that reloads itself.
-# X-Env-Layer-Version: 1.0.0
+#  page that reloads itself; while the panel installs an update, an update
+#  page instead of the printer, on its screen and in every browser.
+# X-Env-Layer-Version: 1.1.0
 # X-Env-Layer-Requires: mp-identity,mp-hmi-net
 #
 # X-Env-VarRequires: IGconf_mpnet_address
@@ -92,6 +93,11 @@ mmdebstrap:
           acl is_webcam   path -i /webcam
           acl is_snapshot path -i /snapshot
           acl is_licenses path_beg /licenses/
+          # While an update installs, mp-hmi-ota-state puts "/" in this list,
+          # which every path begins with. The camera stays, so the printer's
+          # time-lapse goes on until the panel restarts.
+          acl ota_running path_beg -f /run/mp-hmi-proxy/ota.lst
+          http-request return status 503 content-type "text/html; charset=utf-8" file /usr/share/meltingplot/hmi/ota.html hdr Cache-Control no-store hdr Refresh 10 if ota_running !is_webcam !is_snapshot
           acl sbc_busy    be_conn(backend_servers) ge 4
 
           use_backend websocket_backend     if is_ws
@@ -140,9 +146,10 @@ mmdebstrap:
       [ -d "$1/run/mp-hmi-proxy" ] || { mkdir -p "$1/run/mp-hmi-proxy"; created_run=y; }
       printf 'http://%s\n' "${IGconf_mpnet_address%/*}" > "$1/run/mp-hmi-proxy/origins.lst"
       printf '%s\n' "${IGconf_mpnet_address%/*}" > "$1/run/mp-hmi-proxy/hosts.lst"
+      printf '/\n' > "$1/run/mp-hmi-proxy/ota.lst"
       ok=y
       chroot "$1" haproxy -c -f /etc/haproxy/haproxy.cfg >&2 || ok=
-      rm -f "$1/run/mp-hmi-proxy/origins.lst" "$1/run/mp-hmi-proxy/hosts.lst"
+      rm -f "$1/run/mp-hmi-proxy/origins.lst" "$1/run/mp-hmi-proxy/hosts.lst" "$1/run/mp-hmi-proxy/ota.lst"
       [ -z "$created_run" ] || rmdir "$1/run/mp-hmi-proxy"
       [ -n "$ok" ] || { echo "mp-hmi-proxy: haproxy rejects the configuration" >&2; exit 1; }
     # haproxy listens on every address (bind :80) and needs none of them to
@@ -164,4 +171,4 @@ mmdebstrap:
         { echo "mp-hmi-proxy: could not take network-online.target out of the haproxy unit" >&2; exit 1; }
       grep -q '^ExecStart=' "$dst" ||
         { echo "mp-hmi-proxy: the derived haproxy unit lost its ExecStart" >&2; exit 1; }
-    - $BDEBSTRAP_HOOKS/enable-units "$1" haproxy mp-hmi-origins
+    - $BDEBSTRAP_HOOKS/enable-units "$1" haproxy mp-hmi-origins mp-hmi-ota-state mp-hmi-ota-state.path

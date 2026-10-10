@@ -1,0 +1,12 @@
+[Unit]
+Description=Switch the panel's web front to the update page while an update installs
+After=mp-hmi-origins.service
+Before=haproxy.service
+RequiresMountsFor=/bootfs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/mp-hmi-ota-state
+
+[Install]
+WantedBy=haproxy.service

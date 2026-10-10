@@ -1,0 +1,10 @@
+[Unit]
+Description=Follow the update connector's state for the panel's web front
+RequiresMountsFor=/bootfs
+
+[Path]
+PathChanged=/bootfs/ota_state
+Unit=mp-hmi-ota-state.service
+
+[Install]
+WantedBy=paths.target
