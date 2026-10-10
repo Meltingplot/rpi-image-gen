@@ -1,16 +1,26 @@
-# Licence policy for the image, evaluated by grant against the SBOM of every
-# build, see the release workflow and README.md.
+# Licence policy for both images, checked against the SBOM of every build,
+# see the release workflows and README.md.
 #
-# grant allows a package when each of its licences matches a pattern below
-# and reports everything else. The list holds the licence families expected in a
-# Debian based product whose source is offered on request; each pattern is an
-# SPDX identifier or a glob over them, matched case-sensitively.
+# grant reads the SBOM and reports every package with its licences; the
+# decision is ci/check-licences.py's. grant compares a package's licence
+# string as a whole, so a Debian package whose copyright file names many
+# licences arrives as one expression, and a pattern like Apache-* used to let
+# all of it pass as soon as it began with Apache-2.0, vendor terms included.
+# The script takes each expression apart and decides per licence:
+#  - allow below lists the licence families expected in a Debian based
+#    product whose source is offered on request, and single licences
+#    outside them, each an SPDX identifier, Debian short name or glob,
+#    matched case-sensitively against one licence;
+#  - a LicenseRef-* passes as Debian's name for a licence text, unless it
+#    matches a review pattern under meltingplot at the end: those are a
+#    vendor's own terms, or say too little, and pass only for a package
+#    listed under accept, with the reason.
+# Whole expressions in allow are left from the reviews below; the script
+# skips them, grant's report still uses them.
 #
-# What the list does not cover shows up as denied in the report and fails the
-# release workflow. A new package with a licence outside the list therefore
-# needs a decision before it ships: extend the list with the full string
-# grant prints, or list the package under ignore-packages with the reason
-# next to it.
+# Anything else fails the release workflow, naming the packages. A new
+# licence therefore needs a decision before it ships: add it to allow, or
+# the package to accept, with the reason next to it.
 #
 # Reviewed 2026-09-12 (Tim Schneider): everything the first build reported,
 # 101 packages, was accepted, since nothing is non-commercial or proprietary
@@ -161,6 +171,19 @@ allow:
   - ZPL-2.1                    # GTK 3, gtk-update-icon-cache: Zope Public License, permissive
   - SWL                        # GTK 3 text widget: the University of California's Tcl/Tk licence, permissive
   - Jam                        # Boost (log, thread, filesystem) for the panel: permissive
+  # Added 2026-10-09 with the per-licence check. The first six were accepted
+  # inside the expressions of 2026-09-12 and 2026-09-26 already; the last
+  # four had passed under a prefix pattern unseen.
+  - APACHE-2-LLVM-EXCEPTIONS   # libllvm19: Apache-2.0 with the LLVM exception
+  - All-permissive             # sensible-utils: FSF all-permissive notice
+  - CC0                        # libplacebo, libduktape: CC0-1.0
+  - Chromium                   # libpsl: the Chromium BSD-style licence of its data
+  - FDL-1.2-                   # gettext documentation: GFDL-1.2
+  - JMVBSD                     # libcodec2: BSD-style
+  - PostgreSQL                 # rsync, libpq5: PostgreSQL licence, permissive
+  - snprintf                   # rsync: permission notice of its snprintf
+  - Sleepycat                  # libdb5.3: Berkeley DB, source has to be obtainable (section 2 of LICENSES.txt)
+  - libtiff                    # libopenjp2: libtiff permission notice
 
   # Reviewed 2026-09-12: licence texts syft could not name, by SHA-256.
   - 936728f4181718f42951b881c1e8f1386bf6b2723c4fbc533c374d6f42c71816  # krb5-multidev, libgssapi-krb5-2, libgssrpc4t64, libk5crypto3…: BSD | GPL-2 | MIT
@@ -209,3 +232,83 @@ require-license: false
 # Debian's short names (Expat, LicenseRef-*) are not SPDX identifiers and are
 # matched above as they are.
 require-known-license: false
+
+# Read by ci/check-licences.py, not by grant; see there. A licence whose name
+# matches one of these patterns is a vendor's own terms, or says too little to
+# tell, and passes only for a package listed under accept, with the reason.
+meltingplot:
+  review-patterns:
+    - '(?i)proprietary'
+    - '(?i)binary-redist'
+    - '(?i)eula'
+    - '(?i)custom'
+    - '(?i)other'
+    - '(?i)restrict'
+    - '(?i)commercial'
+    - '(?i)noderiv'
+    - '(?i)confidential'
+    - '(?i)evaluation'
+    - '(?i)non-?free'
+  # Proposed 2026-10-09 from the copyright files, for review. Unless noted,
+  # the term is a free permission notice under a name of its own.
+  accept:
+    raspi-firmware:
+      licences: [LicenseRef-Proprietary-1]
+      reason: Raspberry Pi boot firmware, Broadcom's binary redistribution terms for Raspberry Pi devices; notice in LICENSES.txt
+    rpi-eeprom:
+      licences: [LicenseRef-custom]
+      reason: Raspberry Pi 5 bootloader images, BSD-3-style for Raspberry Pi devices only; notice in LICENSES.txt
+    firmware-brcm80211:
+      licences: ['LicenseRef-binary-redist-*']
+      reason: >-
+        the copyright file covers all of linux-firmware; the package installs only the Broadcom and
+        Cypress wifi firmware (binary-redist-Broadcom-wifi, binary-redist-Cypress), redistributable in
+        binary form; operator panel only, the printer SBC purges it; notice in the panel's licence file
+    openssh-client: &openssh
+      licences: [LicenseRef-Expat-with-advertising-restriction]
+      reason: MIT with a clause on advertising; nothing advertises OpenSSH
+    openssh-server: *openssh
+    openssh-sftp-server: *openssh
+    liblzma5:
+      licences: [LicenseRef-noderivs]
+      reason: the text of a licence document, which may be copied but not changed; accepted 2026-09-12
+    libbluray2:
+      licences: [LicenseRef-custom]
+      reason: FSF all-permissive notice
+    sudo:
+      licences: [LicenseRef-other]
+      reason: FSF all-permissive notice
+    libgraphite2-3:
+      licences: [LicenseRef-custom-sil-open-font-license]
+      reason: SIL Open Font License for the bundled test fonts
+    libp11-kit0:
+      licences: [LicenseRef-customFSFUL, LicenseRef-customFSFULLRWD]
+      reason: FSF unlimited permission notices of the build scripts
+    libpulse0:
+      licences: [LicenseRef-other]
+      reason: Sun Microsystems code provided for unrestricted use
+    librubberband2:
+      licences: [LicenseRef-other-1]
+      reason: permission to use, copy, modify and distribute
+    libspeex1:
+      licences: [LicenseRef-custom-1]
+      reason: TU Berlin, any use permitted with the notice kept
+    libva2: &libva
+      licences: [LicenseRef-other]
+      reason: X11-style permission notice; accepted 2026-09-26
+    libva-drm2: *libva
+    libva-x11-2: *libva
+    libvdpau1: *libva
+    libgtk-3-0t64: &gtk3
+      licences: [LicenseRef-other]
+      reason: data that may be freely used, copied and distributed
+    libgtk-3-common: *gtk3
+    libpq5:
+      licences: [LicenseRef-Custom-Unicode, LicenseRef-Custom-pg-dump, LicenseRef-Custom-regex]
+      reason: PostgreSQL client library (for motion); a free table, the PostgreSQL terms and Henry Spencer's BSD-style regex
+    libxnvctrl0:
+      licences: [LicenseRef-other-MetroLink, LicenseRef-other-XFree]
+      reason: X11-style permission notices
+    libxtables12:
+      licences: [LicenseRef-custom]
+      reason: ISC-style permission notice
