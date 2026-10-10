@@ -18,7 +18,14 @@ MP_TAG=mp-hmi-origins
 dir=/run/mp-hmi-proxy
 install -d -m 0755 "$dir"
 
+# The panel's address in the printer network, from the profile the image
+# ships. It is listed from the start: haproxy comes up before NetworkManager
+# has put the address on the VLAN, and the panel's own browser asks for it.
+printer=$(sed -n 's/^address1=\([^/,]*\).*/\1/p' \
+   /usr/lib/NetworkManager/system-connections/mp-printer-net.nmconnection 2>/dev/null | head -n1)
+
 names() {
+   [ -z "$printer" ] || echo "$printer"
    # every address of the panel, the printer network's included; IPv6 in
    # brackets, as in a URL
    ip -o addr show scope global | awk '

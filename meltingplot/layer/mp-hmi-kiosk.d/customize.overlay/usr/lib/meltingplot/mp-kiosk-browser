@@ -14,6 +14,30 @@ set -u
 url=${1:?url}
 profile=${XDG_RUNTIME_DIR:?}/chromium
 
+# Right after boot the printer network and haproxy come up some seconds after
+# this session, and Chromium would show its own error pages until then: no
+# network, then the address unreachable. So it starts only once the panel's
+# web front answers, with the splash behind it meanwhile, and at the latest
+# after two minutes. The waiting page haproxy serves while the printer SBC is
+# not up yet (503) counts as an answer; a refusal (403) or no answer does not.
+answers() {
+   python3 -I - "$url" <<'PY'
+import sys, urllib.error, urllib.request
+try:
+    code = urllib.request.urlopen(sys.argv[1], timeout=2).status
+except urllib.error.HTTPError as e:
+    code = e.code
+except Exception:
+    code = 0
+sys.exit(0 if 200 <= code < 400 or code == 503 else 1)
+PY
+}
+i=0
+while [ "$i" -lt 120 ] && ! answers; do
+   i=$((i + 1))
+   sleep 1
+done
+
 while :; do
    rm -rf "$profile"
    /usr/bin/chromium \

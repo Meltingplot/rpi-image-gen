@@ -38,12 +38,23 @@
 # X-Env-Var-rotation-Required: n
 # X-Env-Var-rotation-Valid: 0,90,180,270
 # X-Env-Var-rotation-Set: y
+#
+# X-Env-Var-splash:
+# X-Env-Var-splash-Desc: Picture the session shows behind everything from
+#  its first moment, the boot splash as a PNG, so the screen goes from the
+#  kernel's boot logo to the printer's interface without going black. Empty
+#  leaves the background black.
+# X-Env-Var-splash-Required: n
+# X-Env-Var-splash-Valid: string-or-empty
+# X-Env-Var-splash-Set: y
 # METAEND
 ---
 mmdebstrap:
   packages:
     - labwc
     - wlr-randr
+    # the splash behind everything, while the browser starts
+    - swaybg
     - chromium
     # the Raspberry Pi preferences for Chromium, among them the system title
     # bar, so the frame labwc leaves off is not drawn by Chromium instead
@@ -120,8 +131,17 @@ mmdebstrap:
       set -eu
       dir="$1/etc/meltingplot/labwc"
       install -d -m 0755 "$dir"
+      if [ -n "${IGconf_hmikiosk_splash:-}" ]; then
+        [ -f "$IGconf_hmikiosk_splash" ] ||
+          { echo "mp-hmi-kiosk: splash $IGconf_hmikiosk_splash not found" >&2; exit 1; }
+        install -D -m 0644 "$IGconf_hmikiosk_splash" "$1/usr/share/meltingplot/hmi/splash.png"
+      fi
       {
         echo "# Written by rpi-image-gen layer mp-hmi-kiosk."
+        # first, so the screen shows the splash while the rest comes up
+        if [ -n "${IGconf_hmikiosk_splash:-}" ]; then
+          echo "swaybg -i /usr/share/meltingplot/hmi/splash.png -m fit -c '#ffffff' &"
+        fi
         if [ "$IGconf_hmikiosk_rotation" != 0 ]; then
           echo "wlr-randr --output ${IGconf_hmikiosk_output} --transform ${IGconf_hmikiosk_rotation}"
         fi

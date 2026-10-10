@@ -36,6 +36,10 @@ ieee80211:
 splash:
   image_path: ${@SRCROOT}/splash/hmi-splash.tga
 
+# The same picture behind the session, until the browser shows the printer.
+hmikiosk:
+  splash: ${@SRCROOT}/splash/hmi-splash.png
+
 layer:
   suite: mp-suite-trixie-hmi
   connectclient: rpi-connect
