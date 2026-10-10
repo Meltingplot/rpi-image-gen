@@ -483,6 +483,16 @@ To go back, deploy the previous artefact again. It stays registered.
    message is gone. The gate learns of the install on its next check, so the
    message can appear up to a minute after the download has started, and it
    takes it down again when an install ends without a restart.
+   While the bundle downloads, `mp-bundle-guard` compares its file name, which
+   the connector writes to its state file, with the image the device runs.
+   A release names its bundle `<image>-<version>.update.tar.zst`, and a
+   Meltingplot bundle of another image (`mp-hmi-pi5-…` on a printer SBC,
+   `mp-duet-pi5-…` on an operator panel) is stopped before anything restarts:
+   the connector and the applicator writing the other slot stop, the
+   connector's state goes back to idle, Connect shows the deployment as
+   failed with the reason, and the connector runs again. A bundle named in
+   any other way goes ahead, with a line in the journal, so that a change in
+   where the bundles are kept cannot cut the devices off from updates.
 3. The bootloader starts the new slot once. If it does not come up, the next
    reset returns to the old one. If it comes up, the connector commits it
    within seconds of boot and reports the deployment as succeeded. That is the
@@ -495,9 +505,10 @@ To go back, deploy the previous artefact again. It stays registered.
    device, and the other computer's image would take this one off the
    network. On a mismatch the guard restarts at once, which returns to the
    old slot, so the connector never commits the new one and Connect shows
-   the deployment as failed. Images before this guard do not check, so do
-   not deploy a printer SBC release up to 0.1.0-rc.60 to an operator panel,
-   nor the operator panel's 0.1.0-rc.1 to a printer SBC.
+   the deployment as failed. Images before this guard do not check. A device
+   with `mp-bundle-guard` stops them at the download; on a device without it,
+   do not deploy a printer SBC release up to 0.1.0-rc.60 to an operator
+   panel, nor the operator panel's 0.1.0-rc.1 to a printer SBC.
 4. `mp-dsf-firmware` runs on every boot, waits for the printer to report
    idle, which RepRapFirmware does only once `config.g` is through (it reports
    *starting* until then, and `config.g` waits for every board), then for the

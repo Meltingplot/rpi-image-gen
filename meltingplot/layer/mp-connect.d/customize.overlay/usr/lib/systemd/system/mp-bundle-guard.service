@@ -1,0 +1,10 @@
+[Unit]
+Description=Stop a deployment of the other printer computer's image
+RequiresMountsFor=/bootfs
+# No ordering against rpi-connect-ota.service: this stops and starts it.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/mp-bundle-guard
+# Stopping the connector, waiting for the applicator, asking Connect (30 s)
+TimeoutStartSec=3min
