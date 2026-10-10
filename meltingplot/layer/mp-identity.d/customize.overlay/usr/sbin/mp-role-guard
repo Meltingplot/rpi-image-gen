@@ -9,7 +9,9 @@
 # checks, first thing on boot, that it is meant for the computer it starts
 # on: the role baked into the image against the role the device was
 # commissioned as, which mp-identity has kept on the persistent partition
-# since the first image.
+# since the first image. mp-bundle-guard in mp-connect stops most such
+# deployments while they download; this catches what gets past it: a bundle
+# not named like ours, or a device whose image is older than that guard.
 #
 # A wrong image on a freshly written slot, which the bootloader started as a
 # tryboot and nobody has committed yet, restarts at once, before anything has

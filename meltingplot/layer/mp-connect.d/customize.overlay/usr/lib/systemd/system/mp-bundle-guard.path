@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch the update connector for a bundle of the other printer computer
+RequiresMountsFor=/bootfs
+
+[Path]
+PathChanged=/bootfs/ota_state
+Unit=mp-bundle-guard.service
+
+[Install]
+WantedBy=paths.target

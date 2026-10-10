@@ -10,12 +10,12 @@
 #  edits it. On every boot, before anything else, it refuses an image built
 #  for the other computer of the printer (mp-role-guard): Connect deploys any
 #  bundle to any device.
-# X-Env-Layer-Version: 1.3.0
+# X-Env-Layer-Version: 1.4.0
 # X-Env-Layer-Requires: device-user-admin
 # X-Env-Layer-RequiresProvider: systemd
 #
-# X-Env-VarRequires: IGconf_device_user1
-# X-Env-VarRequires-Valid: string
+# X-Env-VarRequires: IGconf_device_user1,IGconf_image_name,IGconf_image_version
+# X-Env-VarRequires-Valid: string,string,string
 #
 # X-Env-VarPrefix: mpid
 #
@@ -54,15 +54,24 @@ mmdebstrap:
     # rewrite on a read-only root
     - libnss-myhostname
   customize-hooks:
-    # Identity of this image, read by the mp-* scripts at runtime.
+    # Identity of this image, read by the mp-* scripts at runtime. MP_IMAGE
+    # is the image name without its version (mp-hmi-pi5), which every
+    # release names its update bundle after; mp-bundle-guard in mp-connect
+    # compares a deployment's bundle with it.
     - |-
       set -eu
+      image=${IGconf_image_name%-"$IGconf_image_version"}
+      if [ -z "$IGconf_image_version" ] || [ "$image" = "$IGconf_image_name" ]; then
+        echo "mp-identity: image name $IGconf_image_name does not end in -$IGconf_image_version" >&2
+        exit 1
+      fi
       install -d -m 0755 "$1/etc/meltingplot"
       cat > "$1/etc/meltingplot/device.conf" <<-EOF
       # Written by rpi-image-gen layer mp-identity. Do not edit on the device.
       MP_USER=${IGconf_device_user1}
       MP_PRODUCT=${IGconf_mpid_product}
       MP_ROLE=${IGconf_mpid_role}
+      MP_IMAGE=${image}
       MP_VERSION=${IGconf_artefact_version:-}
       MP_RELEASE_URL=${IGconf_mpid_release:-}
       EOF
