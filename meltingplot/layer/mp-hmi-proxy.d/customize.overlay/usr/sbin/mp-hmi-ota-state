@@ -26,8 +26,13 @@ list=$MP_PROXY_DIR/ota.lst
 
 state=$(mp_ota_state)
 want=
-# The file is only as current as the connector that wrote it.
-if mp_ota_installing "$state" && systemctl -q is-active rpi-connect-ota.service; then
+# An install writes the other slot while this one, committed, runs. In a slot
+# the bootloader has just trybooted and nobody has committed yet, the state
+# is what the install left behind that brought the panel here: the connector
+# reads it on start and moves on, but until then it still says TRYBOOT. And
+# the file is only as current as the connector that wrote it.
+if mp_ota_installing "$state" && mp_slot_committed &&
+   systemctl -q is-active rpi-connect-ota.service; then
    want=/
 fi
 
