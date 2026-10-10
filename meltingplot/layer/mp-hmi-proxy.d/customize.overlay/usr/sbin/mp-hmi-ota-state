@@ -7,7 +7,7 @@
 # through it, at its screen or from the customer network, should see that
 # coming rather than lose the interface mid-step. The update connector
 # rewrites /bootfs/ota_state on every transition; mp-hmi-ota-state.path runs
-# this for each, and once at boot before haproxy.
+# this for each, and once at boot.
 #
 # While it installs, /run/mp-hmi-proxy/ota.lst holds "/", which every path
 # begins with, and haproxy answers with the update page; otherwise the file

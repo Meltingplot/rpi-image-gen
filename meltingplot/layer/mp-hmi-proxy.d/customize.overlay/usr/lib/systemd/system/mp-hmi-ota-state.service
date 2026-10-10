@@ -1,12 +1,13 @@
 [Unit]
 Description=Switch the panel's web front to the update page while an update installs
-After=mp-hmi-origins.service
-Before=haproxy.service
 RequiresMountsFor=/bootfs
+# No ordering against haproxy: this restarts haproxy and waits for it, and
+# haproxy waiting for this in turn left both stuck (bench, 2026-10-10).
 
 [Service]
 Type=oneshot
 ExecStart=/usr/sbin/mp-hmi-ota-state
+TimeoutStartSec=90
 
 [Install]
-WantedBy=haproxy.service
+WantedBy=multi-user.target

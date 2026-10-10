@@ -18,6 +18,10 @@ MP_TAG=mp-hmi-origins
 dir=/run/mp-hmi-proxy
 install -d -m 0755 "$dir"
 
+# haproxy reads the update flag as well (mp-hmi-ota-state); an empty one
+# means no update, and haproxy must not wait for that script to start.
+[ -e "$dir/ota.lst" ] || : > "$dir/ota.lst"
+
 # The panel's address in the printer network, from the profile the image
 # ships. It is listed from the start: haproxy comes up before NetworkManager
 # has put the address on the VLAN, and the panel's own browser asks for it.
