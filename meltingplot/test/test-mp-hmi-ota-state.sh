@@ -33,9 +33,21 @@ echo "pkill $*" >> "$(dirname "$0")/../calls"
 STUB
 chmod +x "$tmp/bin/systemctl" "$tmp/bin/pkill"
 
+# the slot this boot runs is 2; autoboot.txt says which slot is committed
+cat > "$tmp/bin/rpi-slot-tryboot" <<'STUB'
+#!/bin/sh
+printf '[all]\ntryboot_a_b=1\nboot_partition=2\n[tryboot]\nboot_partition=3\n'
+STUB
+chmod +x "$tmp/bin/rpi-slot-tryboot"
+committed() {
+   printf '[all]\ntryboot_a_b=1\nboot_partition=%s\n[tryboot]\nboot_partition=9\n' "$1" > "$tmp/autoboot.txt"
+}
+committed 2
+
 printf 'MP_USER=meltingplot\n' > "$tmp/device.conf"
 export PATH="$tmp/bin:$PATH" MP_DEVICE_CONF="$tmp/device.conf" \
-   MP_OTA_STATE_FILE="$tmp/ota_state" MP_PROXY_DIR="$tmp/proxy"
+   MP_OTA_STATE_FILE="$tmp/ota_state" MP_PROXY_DIR="$tmp/proxy" \
+   MP_SLOT_TRYBOOT="$tmp/bin/rpi-slot-tryboot" MP_AUTOBOOT="$tmp/autoboot.txt"
 
 fail=0
 check() {
@@ -65,6 +77,15 @@ check "install goes on, nothing new" "/|" "$(step INSTALL)"
 check "install fails"               "|systemctl reload haproxy.service;" "$(step FAILURE)"
 rm "$tmp/active.rpi-connect-ota.service"
 check "stale state, connector down" "|"  "$(step INSTALL)"
+touch "$tmp/active.rpi-connect-ota.service"
+
+# The boot after the restart into the update: the slot is not committed yet
+# and the state file still says TRYBOOT until the connector moves on.
+committed 3
+check "trybooted slot, state left over" "|" "$(step TRYBOOT)"
+check "trybooted slot, connector on"    "|" "$(step TRYBOOTED)"
+committed 2
+check "committed, back to idle"         "|" "$(step IDLE)"
 
 [ "$fail" -eq 0 ] && echo "all tests passed"
 exit "$fail"
