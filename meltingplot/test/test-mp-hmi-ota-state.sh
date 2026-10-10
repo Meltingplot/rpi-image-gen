@@ -87,5 +87,19 @@ check "trybooted slot, connector on"    "|" "$(step TRYBOOTED)"
 committed 2
 check "committed, back to idle"         "|" "$(step IDLE)"
 
+# mp-hmi-ota-state restarts haproxy and waits for it. If haproxy's start
+# waited for mp-hmi-ota-state in turn, through After= on haproxy or Before= on
+# mp-hmi-ota-state, both would hang for good, as on the bench (2026-10-10).
+units="$here/../layer/mp-hmi-proxy.d/customize.overlay"
+order=$(cat "$units/etc/systemd/system/haproxy.service.d/"*.conf 2>/dev/null |
+   grep -E '^(After|Wants|Requires)=' | grep -c mp-hmi-ota-state || true)
+check "haproxy does not wait for the switch" 0 "$order"
+order=$(grep -E '^Before=' "$units/usr/lib/systemd/system/mp-hmi-ota-state.service" |
+   grep -c haproxy || true)
+check "the switch is not ordered before it"  0 "$order"
+grep -q '^TimeoutStartSec=' "$units/usr/lib/systemd/system/mp-hmi-ota-state.service" &&
+   r=yes || r=no
+check "the switch cannot hang for ever"     yes "$r"
+
 [ "$fail" -eq 0 ] && echo "all tests passed"
 exit "$fail"
