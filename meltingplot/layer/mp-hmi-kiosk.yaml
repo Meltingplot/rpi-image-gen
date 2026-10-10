@@ -128,7 +128,7 @@ mmdebstrap:
         echo "squeekboard &"
         echo "/usr/lib/meltingplot/mp-kiosk-panel hide"
         echo "wf-panel-pi &"
-        echo "/usr/lib/meltingplot/mp-kiosk-gestures ${IGconf_hmikiosk_rotation} &"
+        echo "/usr/lib/meltingplot/mp-kiosk-gestures &"
         echo "/usr/lib/meltingplot/mp-kiosk-browser '${IGconf_hmikiosk_url}' &"
       } > "$dir/autostart"
       cat > "$dir/rc.xml" <<-EOF
