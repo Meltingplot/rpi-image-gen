@@ -1,0 +1,46 @@
+#!/bin/sh
+# Refuse to run on a printer computer of the other kind.
+#
+# Both computers of a printer update through Raspberry Pi Connect, which
+# installs whatever bundle a deployment names: nothing in Connect ties a
+# bundle to a kind of device. The operator panel image on the printer SBC,
+# or the printer SBC image on the panel, would bring the other's network
+# setup and take that computer off the network for good. So every image
+# checks, first thing on boot, that it is meant for the computer it starts
+# on: the role baked into the image against the role the device was
+# commissioned as, which mp-identity has kept on the persistent partition
+# since the first image.
+#
+# A wrong image on a freshly written slot, which the bootloader started as a
+# tryboot and nobody has committed yet, restarts at once, before anything has
+# touched the persistent partition. A tryboot is good for one start, so the
+# restart comes back to the slot that ran before, and the update connector,
+# which commits a new slot only once it has booted, never gets to. Connect
+# then shows the deployment as failed. A wrong image on a committed slot
+# cannot be undone from here: it is logged and the boot goes on, rather than
+# restarting for ever.
+
+set -eu
+
+MP_TAG=mp-role-guard
+. /usr/lib/meltingplot/mp-common.sh
+
+MP_REBOOT=${MP_REBOOT:-systemctl --force reboot}
+
+# A device that is not commissioned yet has no role to compare.
+[ -r "$MP_IDENTITY_FILE" ] || exit 0
+role=$(mp_conf_get "$MP_IDENTITY_FILE" ROLE)
+[ -n "$role" ] || exit 0
+
+if [ "$role" = "$MP_ROLE" ]; then
+   exit 0
+fi
+
+mp_log "this image is for the $MP_ROLE, but this computer was commissioned as the $role"
+if mp_slot_committed; then
+   mp_log "the slot is committed already, so there is nothing to go back to; booting on"
+   exit 0
+fi
+mp_log "not committing it: restarting into the slot that ran before"
+# shellcheck disable=SC2086
+exec $MP_REBOOT

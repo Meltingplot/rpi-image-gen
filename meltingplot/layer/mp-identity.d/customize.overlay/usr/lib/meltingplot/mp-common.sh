@@ -7,9 +7,15 @@
 #   <printer name file>                       the customer's display name
 # Everything below reads those and nothing else.
 
-MP_DEVICE_CONF=/etc/meltingplot/device.conf
-MP_IDENTITY_FILE=/persistent/common/etc/mp-identity
-MP_HOSTNAME_CACHE=/persistent/common/etc/hostname
+MP_DEVICE_CONF=${MP_DEVICE_CONF:-/etc/meltingplot/device.conf}
+MP_IDENTITY_FILE=${MP_IDENTITY_FILE:-/persistent/common/etc/mp-identity}
+MP_HOSTNAME_CACHE=${MP_HOSTNAME_CACHE:-/persistent/common/etc/hostname}
+
+# The A/B slots: what the bootloader starts, and how this boot came about.
+# Overridable so the logic can be exercised on a build host with stubs.
+MP_SLOT_TRYBOOT=${MP_SLOT_TRYBOOT:-/usr/bin/rpi-slot-tryboot}
+MP_AUTOBOOT=${MP_AUTOBOOT:-/bootfs/autoboot.txt}
+MP_TRYBOOT_FLAG=${MP_TRYBOOT_FLAG:-/proc/device-tree/chosen/bootloader/tryboot}
 
 # The display name is a DSF config file, shared across A/B slots. It is the
 # single source of both the M550 machine name and the Linux hostname, because
@@ -124,4 +130,31 @@ mp_valid_printer_name() {
    [ "${#1}" -le 40 ] || return 1
    [ -n "$(mp_slug "$1")" ] || return 1
    return 0
+}
+
+# The partition named by the [all] section of a tryboot configuration, which
+# is the one the bootloader starts when nothing says otherwise. Reads stdin.
+mp_default_boot_partition() {
+   tr -d '\r' | awk -F= '
+      /^\[/ { section = $0 }
+      section == "[all]" && $1 == "boot_partition" { print $2; exit }'
+}
+
+# True when the running slot is committed: autoboot.txt already names it as
+# the default, so a reset comes back here. During a tryboot, before the update
+# connector or an operator commits the slot, this is false.
+mp_slot_committed() {
+   [ -r "$MP_AUTOBOOT" ] || return 1
+   _have=$(mp_default_boot_partition < "$MP_AUTOBOOT")
+   _want=$("$MP_SLOT_TRYBOOT" 2>/dev/null | mp_default_boot_partition)
+   [ -n "$_want" ] && [ "$_have" = "$_want" ]
+}
+
+# True when the bootloader started this boot as a tryboot, which is how the
+# update connector activates a freshly written slot and how an operator rolls
+# back by hand. The flag describes the boot, not the slot: it stays set after
+# the slot has been committed, until the next reset.
+mp_boot_trybooted() {
+   _flag=$(od -An -tu1 "$MP_TRYBOOT_FLAG" 2>/dev/null | tr -d ' \n')
+   [ -n "$_flag" ] && [ "$_flag" -eq 1 ]
 }

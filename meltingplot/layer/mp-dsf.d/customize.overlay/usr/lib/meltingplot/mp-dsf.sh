@@ -10,10 +10,7 @@
 
 # Overridable so the logic can be exercised on a build host with stubs.
 MP_CODECONSOLE=${MP_CODECONSOLE:-/opt/dsf/bin/CodeConsole}
-MP_SLOT_TRYBOOT=${MP_SLOT_TRYBOOT:-/usr/bin/rpi-slot-tryboot}
-MP_AUTOBOOT=${MP_AUTOBOOT:-/bootfs/autoboot.txt}
 MP_OTA_STATE_FILE=${MP_OTA_STATE_FILE:-/bootfs/ota_state}
-MP_TRYBOOT_FLAG=${MP_TRYBOOT_FLAG:-/proc/device-tree/chosen/bootloader/tryboot}
 MP_DSF_CONF=${MP_DSF_CONF:-/etc/meltingplot/dsf.conf}
 MP_DSF_SHARED=${MP_DSF_SHARED:-/persistent/shared/opt/dsf}
 MP_DSF_GROUP_STAMP=${MP_DSF_GROUP_STAMP:-/var/lib/meltingplot/dsf-group}
@@ -72,33 +69,6 @@ mp_dcs_boot_time() {
 # control server cannot be reached.
 mp_dcs_code() {
    "$MP_CODECONSOLE" -c "$1" >/dev/null 2>&1
-}
-
-# The partition named by the [all] section of a tryboot configuration, which
-# is the one the bootloader starts when nothing says otherwise. Reads stdin.
-mp_default_boot_partition() {
-   tr -d '\r' | awk -F= '
-      /^\[/ { section = $0 }
-      section == "[all]" && $1 == "boot_partition" { print $2; exit }'
-}
-
-# True when the running slot is committed: autoboot.txt already names it as
-# the default, so a reset comes back here. During a tryboot, before the update
-# connector or an operator commits the slot, this is false.
-mp_slot_committed() {
-   [ -r "$MP_AUTOBOOT" ] || return 1
-   _have=$(mp_default_boot_partition < "$MP_AUTOBOOT")
-   _want=$("$MP_SLOT_TRYBOOT" 2>/dev/null | mp_default_boot_partition)
-   [ -n "$_want" ] && [ "$_have" = "$_want" ]
-}
-
-# True when the bootloader started this boot as a tryboot, which is how the
-# update connector activates a freshly written slot and how an operator rolls
-# back by hand. The flag describes the boot, not the slot: it stays set after
-# the slot has been committed, until the next reset.
-mp_boot_trybooted() {
-   _flag=$(od -An -tu1 "$MP_TRYBOOT_FLAG" 2>/dev/null | tr -d ' \n')
-   [ -n "$_flag" ] && [ "$_flag" -eq 1 ]
 }
 
 # The state of the update connector: IDLE, DOWNLOAD, INSTALL, TRYBOOT and so

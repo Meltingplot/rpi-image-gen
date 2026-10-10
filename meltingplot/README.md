@@ -487,6 +487,17 @@ To go back, deploy the previous artefact again. It stays registered.
    reset returns to the old one. If it comes up, the connector commits it
    within seconds of boot and reports the deployment as succeeded. That is the
    whole health check: Linux booted far enough to run the connector.
+   Before that, and before anything touches the persistent partition,
+   `mp-role-guard` checks that the image is meant for this computer: the
+   role it was built for (`sbc` or `hmi`) against the role the device was
+   commissioned as, which `mp-identity` keeps in
+   `/persistent/common/etc/mp-identity`. Connect hands any bundle to any
+   device, and the other computer's image would take this one off the
+   network. On a mismatch the guard restarts at once, which returns to the
+   old slot, so the connector never commits the new one and Connect shows
+   the deployment as failed. Images before this guard do not check, so do
+   not deploy a printer SBC release up to 0.1.0-rc.60 to an operator panel,
+   nor the operator panel's 0.1.0-rc.1 to a printer SBC.
 4. `mp-dsf-firmware` runs on every boot, waits for the printer to report
    idle, which RepRapFirmware does only once `config.g` is through (it reports
    *starting* until then, and `config.g` waits for every board), then for the
