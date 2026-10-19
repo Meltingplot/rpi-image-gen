@@ -32,4 +32,4 @@ CHX350 3.7.0+mp.1 sha256:b73721cf6b94fb928a39719e1670a0aba38e6191d13835eff771c70
 # QualityAssurance, the process data of every print job: temperatures, flows,
 # events, accelerometer spectra and a timelapse per job, kept in its own
 # directory on the virtual SD card.
-QualityAssurance 0.1.0-rc.5 sha256:84d703d4b4f3cc6eb04d415058097e8dc0049e491c5039dba3426daff5f3fc15 https://github.com/Meltingplot/dwc-quality-assurance/releases/download/v0.1.0-rc.5/QualityAssurance-0.1.0-rc.5.zip
+QualityAssurance 0.1.0-rc.6 sha256:67f637947b0a4687321aa0141976aee63e381ec120a85ded7ca910d18364d3a6 https://github.com/Meltingplot/dwc-quality-assurance/releases/download/v0.1.0-rc.6/QualityAssurance-0.1.0-rc.6.zip
