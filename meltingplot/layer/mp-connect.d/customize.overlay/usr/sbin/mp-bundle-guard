@@ -1,0 +1,93 @@
+#!/bin/sh
+# Stop a deployment of the other printer computer's image while it is still
+# being downloaded.
+#
+# Raspberry Pi Connect hands any bundle to any device, so deploying the
+# operator panel's release to the printer SBC, or the other way round, takes
+# one wrong pick in a list. mp-role-guard catches such an image when it first
+# boots, but only an image that has that guard, and only after the install
+# and a restart. This runs in the image the device already has, as soon as
+# the update connector names the bundle: the connector writes the bundle's
+# URL to its state file (depurl=) when it picks a deployment up
+# (rpi-connect-ota 1.3.16), minutes before it restarts into it. So it also
+# stops the releases built before mp-role-guard.
+#
+# The bundle's file name tells the image. The release workflow names it
+# <image>-<version>.update.tar.zst, and device.conf holds this image's
+# <image>. A Meltingplot bundle of another image (mp-*) is stopped. A file
+# named in any other way goes ahead and is only logged, so that a change in
+# where the bundles are kept cannot cut every device off from updates. The
+# boot check still applies to it.
+#
+# Stopping it takes four steps:
+# - the connector stops, and so does the applicator, which streams the
+#   bundle into the other slot and outlives the connector
+#   (KillMode=process). Nothing written so far is a slot the bootloader
+#   would start, since that takes a tryboot, and only the connector asks
+#   for one;
+# - the connector would pick the deployment up again once it runs, so its
+#   state file is set back to what it says when idle;
+# - Connect is told the deployment failed, and why;
+# - the connector runs again.
+
+set -eu
+
+MP_TAG=mp-bundle-guard
+. /usr/lib/meltingplot/mp-common.sh
+
+SYSTEMCTL=${MP_SYSTEMCTL:-systemctl}
+BUSCTL=${MP_BUSCTL:-busctl}
+KILL_WAIT=${MP_KILL_WAIT:-5}
+UNIT=rpi-connect-ota.service
+RUM=com.raspberrypi.Connect1.RemoteUpdateManager
+
+# The state file is only current while the connector runs.
+mp_ota_installing "$(mp_ota_state)" || exit 0
+"$SYSTEMCTL" -q is-active "$UNIT" || exit 0
+url=$(mp_ota_field depurl)
+[ -n "$url" ] || exit 0
+id=$(mp_ota_field depid)
+
+# The file name of the bundle, without query or fragment.
+name=${url%%[?#]*}
+name=${name##*/}
+
+if [ -z "$MP_IMAGE" ]; then
+   mp_log "this image does not know its name; deployment $id ($name) goes ahead unchecked"
+   exit 0
+fi
+case $name in
+   "$MP_IMAGE"-*)
+      exit 0 ;;
+   mp-*)
+      ;;
+   *)
+      mp_log "deployment $id installs $name, which is not named like a Meltingplot bundle; it goes ahead"
+      exit 0 ;;
+esac
+
+mp_log "deployment $id installs $name, but this computer runs $MP_IMAGE; stopping it"
+
+"$SYSTEMCTL" stop "$UNIT"
+"$SYSTEMCTL" kill --kill-whom=all "$UNIT" 2>/dev/null || true
+sleep "$KILL_WAIT"
+"$SYSTEMCTL" kill --kill-whom=all --signal=SIGKILL "$UNIT" 2>/dev/null || true
+
+# What the connector itself writes when it is idle: the state and the boot
+# and tryboot it has seen, without the deployment.
+{
+   echo state=IDLE
+   grep -E '^(bootid|trybooktoken)=' "$MP_OTA_STATE_FILE" || true
+} > "$MP_OTA_STATE_FILE.new"
+mv -f "$MP_OTA_STATE_FILE.new" "$MP_OTA_STATE_FILE"
+
+reason="$name is not an image for this device, which runs $MP_IMAGE"
+if [ -n "$id" ] &&
+   "$BUSCTL" --timeout=30 call "$RUM" /com/raspberrypi/Connect1/RemoteUpdateManager \
+      "$RUM" FailDeployment ss "$id" "$reason" > /dev/null; then
+   mp_log "Connect shows deployment $id as failed"
+else
+   mp_log "Connect could not be told; deployment ${id:-?} stays in progress there until it is cancelled"
+fi
+
+"$SYSTEMCTL" --no-block start "$UNIT"

@@ -2,7 +2,8 @@
 #
 # The identity of a printer computer lives in three places:
 #   /etc/meltingplot/device.conf              baked into the image (user, role,
-#                                             version and release page)
+#                                             image name, version and release
+#                                             page)
 #   /persistent/common/etc/mp-identity        written at commissioning
 #   <printer name file>                       the customer's display name
 # Everything below reads those and nothing else.
@@ -30,6 +31,7 @@ MP_PRINTER_NAME_FILE_OLD=/persistent/shared/opt/dsf/sd/sys/meltingplot/printer-n
 MP_USER=root
 MP_PRODUCT=unknown
 MP_ROLE=sbc
+MP_IMAGE=
 MP_VERSION=
 MP_RELEASE_URL=
 # shellcheck source=/dev/null
@@ -170,8 +172,16 @@ mp_boot_trybooted() {
 # must check that the connector is running before believing it. Prints
 # nothing when the file is missing or has no state line.
 mp_ota_state() {
+   mp_ota_field state
+}
+
+# One line of the connector's state file. Besides the state it holds, from
+# picking a deployment up until it is over, the deployment's id (depid), the
+# URL of its bundle (depurl) and the bundle's checksum (dephash). Prints
+# nothing when the file or the line is missing.
+mp_ota_field() {
    [ -r "$MP_OTA_STATE_FILE" ] || return 0
-   sed -n -e 's/\r$//' -e 's/^state=//p' "$MP_OTA_STATE_FILE" | head -n1
+   sed -n -e 's/\r$//' -e "s/^$1=//p" "$MP_OTA_STATE_FILE" | head -n1
 }
 
 # True for the connector states between picking a deployment up and restarting
