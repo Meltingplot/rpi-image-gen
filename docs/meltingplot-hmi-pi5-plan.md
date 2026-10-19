@@ -22,7 +22,7 @@ Das Labor-HMI (CHX350-002) wurde von Hand eingerichtet (bookworm, haproxy, motio
 | Root | `mpadmin` nur aus dem Druckernetz (VLAN 20), wie am Duet-Pi |
 | Name im Kundennetz | Hostname und mDNS folgen dem Kundennamen aus `printer-name.g` des Duet-Pi |
 | CORS | Regel auf allen HMI-Adressen, auch 10.42.0.1. Erlaubt sind nur die eigenen Origins des HMI. Der DWC-Dev-Server (`localhost:3000`) ist nicht erlaubt. |
-| Strom | `usb_max_current_enable=1` im Image. `PSU_MAX_CURRENT=5000` setzt die Inbetriebnahme im EEPROM, zusammen mit dem Bootloader-Update. |
+| Strom | `usb_max_current_enable=1` im Image. `PSU_MAX_CURRENT=5000` schreibt die Installerkarte (`hmi-pi5-installer.yaml`, Layer `mp-installer`) ins EEPROM, zusammen mit dem Bootloader-Update. |
 | Splash | eigenes Bild beim Boot, die Datei liefert Tim |
 | Land und Tastatur | WLAN-Land DE und Tastaturlayout de als Standard, pro Gerät per `identity.conf` änderbar |
 | Hostname | Kundenname mit Rollenendung, z. B. `halle-2-links-hmi` |
@@ -78,7 +78,7 @@ config.txt-Zeilen per Layer, wie `mp-duet-hw`:
 - **Touch:** `<touch mapToOutput="DSI-1"/>` in `rc.xml`, damit die Touch-Koordinaten der Drehung des Ausgangs folgen. Sonst die Invertierungsparameter des Overlays.
 - **Kernel-Bootlogo:** Folgt es der Panel-Orientierung nicht, dreht der Build das TGA beim Umwandeln um 180°. Im Labor war das PNG deshalb von Hand gedreht.
 
-`PSU_MAX_CURRENT=5000` gehört ins EEPROM und kommt in die Inbetriebnahme, in denselben Schritt wie das Bootloader-Update auf ≥ 2026-05-26 (Voraussetzung für Connect, siehe Duet-Plan).
+`PSU_MAX_CURRENT=5000` gehört ins EEPROM. Die Installerkarte schreibt es in beiden Rechnern des CHX350, weil beide ohne USB-PD an der 5-V-Schiene hängen, zusammen mit dem Bootloader-Update auf ≥ 2026-05-26 (Voraussetzung für Connect, siehe Duet-Plan) und `BOOT_ORDER=0xf416`.
 
 ## Kiosk (`mp-hmi-kiosk`)
 

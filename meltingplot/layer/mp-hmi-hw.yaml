@@ -8,7 +8,8 @@
 #  printer SBC: the panel has no use for it, and its firmware comes under the
 #  chip vendors' own terms. Wifi stays. The power supply's 5 A rating
 #  belongs into the bootloader configuration (PSU_MAX_CURRENT=5000), which
-#  commissioning writes together with the bootloader update; no image can.
+#  the installer card writes together with the bootloader update
+#  (mp-installer, hmi-pi5-installer.yaml); no A/B image can.
 # X-Env-Layer-Version: 1.0.0
 # X-Env-Layer-Requires: rpi-boot-firmware
 # X-Env-Layer-AfterProvider: device

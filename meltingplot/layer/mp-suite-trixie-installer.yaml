@@ -1,0 +1,19 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-suite-trixie-installer
+# X-Env-Layer-Category: suite
+# X-Env-Layer-Desc: Meltingplot base suite for the installer card. Debian
+#  Trixie with apt and the Raspberry Pi archive, which brings the kernel, the
+#  boot firmware and rpi-eeprom, and nothing else: no ssh, no wifi, no
+#  utilities. The card works without anyone at the machine and needs no
+#  network, so systemd-networkd, which the device layers require as a
+#  network activator, is installed but not started, and the card answers
+#  nothing on the wire.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: debian-trixie-arm64-multi,
+#  rpi-debian-trixie,
+#  systemd-net-min
+# METAEND
+---
+mmdebstrap:
+  customize-hooks:
+    - $BDEBSTRAP_HOOKS/disable-units "$1" systemd-networkd systemd-networkd.socket

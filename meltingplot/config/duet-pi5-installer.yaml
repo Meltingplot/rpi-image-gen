@@ -1,0 +1,11 @@
+# Installer card for the Raspberry Pi 5 on the Duet 3 mainboard of a CHX350:
+# writes mp-duet-pi5 to its NVMe drive. See mp-installer.yaml for the build.
+
+include:
+  file: mp-installer.yaml
+
+image:
+  name: mp-duet-pi5-installer-${IGconf_image_version}
+
+mpinst:
+  target: mp-duet-pi5

@@ -1,0 +1,17 @@
+[Unit]
+Description=Install the Meltingplot image on the NVMe drive
+Documentation=file:///etc/meltingplot/installer.conf
+After=local-fs.target systemd-udev-trigger.service
+RequiresMountsFor=/boot/firmware
+
+[Service]
+# Not oneshot: a failed installation keeps blinking its code on the LED until
+# power is removed, and the rest of the system need not wait for that.
+Type=exec
+ExecStart=/usr/sbin/mp-installer
+# A panel with a display shows the progress on the console as well.
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
