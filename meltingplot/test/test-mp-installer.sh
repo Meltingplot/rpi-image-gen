@@ -20,6 +20,7 @@ MPI_CARD="$tmp/card"
 MPI_SYS_BLOCK="$tmp/sys/block"
 MPI_LED="$tmp/led/ACT"
 MPI_LED_STOP="$tmp/led/PWR"
+MPI_PHASE="$tmp/run/phase"
 MPI_BOOTLOADER_TS="$tmp/build-timestamp"
 . "$here/../layer/mp-installer.d/customize.overlay/usr/lib/meltingplot/mp-installer.sh"
 mkdir -p "$MPI_CARD" "$MPI_SYS_BLOCK"
@@ -155,7 +156,9 @@ for f in trigger brightness delay_on delay_off; do : > "$MPI_LED/$f"; : > "$MPI_
 mpi_led busy
 check "busy: green flickers evenly"   "timer 100 100" "$(cat "$MPI_LED/trigger" "$MPI_LED/delay_on" "$MPI_LED/delay_off" | tr '\n' ' ' | sed 's/ $//')"
 check "busy: red off"                 "none 0"        "$(cat "$MPI_LED_STOP/trigger" "$MPI_LED_STOP/brightness" | tr '\n' ' ' | sed 's/ $//')"
+check "busy: screen told"             busy            "$(cat "$MPI_PHASE")"
 mpi_led steady
+check "steady: screen told"           steady          "$(cat "$MPI_PHASE")"
 check "steady: green on"                "none 1"        "$(cat "$MPI_LED/trigger" "$MPI_LED/brightness" | tr '\n' ' ' | sed 's/ $//')"
 
 # --- bootloader configuration -----------------------------------------------------
@@ -197,5 +200,25 @@ printf '\152\025\213\100' > "$MPI_BOOTLOADER_TS"
 check "running bootloader date" 2026-05-26 "$(mpi_bootloader_date)"
 rm -f "$MPI_BOOTLOADER_TS"
 check "unknown bootloader date" ""         "$(mpi_bootloader_date)"
+
+# --- test pictures -----------------------------------------------------------------
+# The framebuffer of the panel's KMS driver takes RGB565 or XRGB8888, little
+# endian. A wrong encoding shows the wrong colour, which is what the pictures
+# are there to check for.
+
+screen="$here/../layer/mp-installer-screen.d/customize.overlay/usr/lib/meltingplot/mp-installer-screen"
+pixels=$(python3 -I -B - "$screen" <<'PY'
+import importlib.machinery, importlib.util, sys
+loader = importlib.machinery.SourceFileLoader("screen", sys.argv[1])
+m = importlib.util.module_from_spec(importlib.util.spec_from_loader("screen", loader))
+loader.exec_module(m)
+out = []
+for bpp in (16, 32):
+    out += [m.picture(rgb, 2, bpp, 8)[: bpp // 8].hex() for rgb in m.PICTURES]
+    out.append(str(len(m.picture((0, 0, 0), 3, bpp, 10))))
+print(" ".join(out))
+PY
+)
+check "pictures white red green blue" "ffff 00f8 e007 1f00 30 ffffff00 0000ff00 00ff0000 ff000000 30" "$pixels"
 
 exit $fail

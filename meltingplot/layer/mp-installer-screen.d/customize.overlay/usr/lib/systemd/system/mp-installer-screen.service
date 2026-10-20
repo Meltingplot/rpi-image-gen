@@ -1,0 +1,15 @@
+[Unit]
+Description=Show test pictures and the installer's progress on the display
+# console-setup sets the console font of its own configuration at boot; the
+# larger font below has to come after it.
+After=console-setup.service systemd-vconsole-setup.service
+
+[Service]
+Type=exec
+# 80 by 25 characters on a 1280 by 800 panel, readable at arm's length. The
+# kernel only has 8x16 built in.
+ExecStartPre=-/usr/bin/setfont -C /dev/tty1 /usr/share/consolefonts/Uni2-Terminus32x16.psf.gz
+ExecStart=/usr/lib/meltingplot/mp-installer-screen
+
+[Install]
+WantedBy=multi-user.target

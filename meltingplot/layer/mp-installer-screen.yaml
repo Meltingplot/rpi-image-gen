@@ -1,0 +1,48 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-installer-screen
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: The installer card on a machine with a display. While the
+#  card works, the screen shows full white, red, green and blue in turn, to
+#  check the panel for dead pixels and colour faults, and between them the
+#  console with the installer's progress, in a font large enough to read
+#  from arm's length; once the card writes the bootloader or stops, the
+#  console stays. The console turns with the panel, and neither a login
+#  prompt nor kernel messages or screen blanking get in the way. The
+#  display itself is named by the machine's hardware layer.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: mp-installer
+# X-Env-Layer-RequiresProvider: systemd
+#
+# X-Env-VarPrefix: mpscreen
+#
+# X-Env-Var-rotation: 0
+# X-Env-Var-rotation-Desc: Clockwise rotation of the console in degrees, as
+#  the panel is mounted. The CHX350 holds its display upside down.
+# X-Env-Var-rotation-Required: n
+# X-Env-Var-rotation-Valid: 0,90,180,270
+# X-Env-Var-rotation-Set: y
+# METAEND
+---
+mmdebstrap:
+  packages:
+    - python3
+    # setfont, and the Terminus console fonts
+    - kbd
+    - console-setup-linux
+  customize-hooks:
+    - |-
+      set -eu
+      case $IGconf_mpscreen_rotation in
+        0) r= ;;
+        90) r=1 ;;
+        180) r=2 ;;
+        270) r=3 ;;
+      esac
+      cmdline="$1/boot/firmware/cmdline.txt"
+      add="quiet consoleblank=0${r:+ fbcon=rotate:$r}"
+      sed -i "s/\brootwait\b/$add rootwait/" "$cmdline"
+      grep -q "consoleblank=0" "$cmdline" ||
+        { echo "mp-installer-screen: could not extend cmdline.txt" >&2; exit 1; }
+    # The console shows the installer; nobody logs in to the card.
+    - $BDEBSTRAP_HOOKS/disable-units "$1" getty@tty1
+    - $BDEBSTRAP_HOOKS/enable-units "$1" mp-installer-screen
