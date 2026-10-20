@@ -1,0 +1,9 @@
+# Written for rpi-image-gen layer mp-hmi-net.
+#
+# The printer camera, a Meltingplot rpi-camera, is a Raspberry Pi that the
+# panel sees on USB as a network adapter. Name it mpcam0, so that the camera
+# network goes to the camera only and not to whatever else turns up as usb0,
+# such as a phone sharing its connection. Before 80-net-setup-link.rules,
+# which would name it otherwise. The strings are those of the camera's USB
+# device, the parent of its network interface.
+SUBSYSTEM=="net", ACTION=="add", SUBSYSTEMS=="usb", ATTRS{manufacturer}=="meltingplot", ATTRS{product}=="Pi Cam", NAME="mpcam0"

@@ -31,7 +31,7 @@ Operator panel
     GPL-2.0-or-later.
   lisgd, the swipe that brings the panel down: MIT.
   haproxy, which passes the printer's interface on: GPL-2.0-or-later.
-  motion, the camera stream: GPL-2.0-or-later. libcamera: LGPL-2.1-or-later.
+  motion, the camera stream: GPL-2.0-or-later.
   NetworkManager: GPL-2.0-or-later. chrony, the time server of the printer
     network: GPL-2.0. polkit: LGPL-2.0-or-later.
 

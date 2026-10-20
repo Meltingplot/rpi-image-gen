@@ -1,6 +1,7 @@
 [Unit]
-Description=Put the printer network back as the image defines it
+Description=Put the printer and camera networks back as the image defines them
 Documentation=file:///usr/lib/NetworkManager/system-connections/mp-printer-net.nmconnection
+Documentation=file:///usr/lib/NetworkManager/system-connections/mp-camera-net.nmconnection
 DefaultDependencies=no
 RequiresMountsFor=/etc/NetworkManager/system-connections
 Before=NetworkManager.service
@@ -8,7 +9,7 @@ Before=NetworkManager.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/sbin/mp-printer-net-guard
+ExecStart=/usr/sbin/mp-hmi-net-guard
 
 [Install]
 WantedBy=NetworkManager.service

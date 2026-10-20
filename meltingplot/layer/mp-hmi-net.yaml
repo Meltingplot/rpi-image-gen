@@ -5,9 +5,13 @@
 #  networks: untagged the customer network, which the operator sets up on the
 #  touch screen (DHCP by default, a fixed address or wifi instead), and a VLAN
 #  with the printer network, where the panel is gateway, DHCP and DNS server
-#  and time source for the printer SBC. The printer network comes from the
-#  image and cannot be changed on the device.
-# X-Env-Layer-Version: 1.0.0
+#  and time source for the printer SBC. On USB, the camera network to the
+#  printer camera, a Meltingplot rpi-camera that shows up as a network
+#  adapter: the camera keeps its fixed 10.55.0.1, the panel joins as
+#  10.55.0.2 and gives the camera's uplink an address and the internet. The
+#  printer and camera networks come from the image and cannot be changed on
+#  the device.
+# X-Env-Layer-Version: 1.1.0
 # X-Env-Layer-Requires: network-manager,mp-identity
 # X-Env-Layer-AfterProvider: device
 #
@@ -86,7 +90,7 @@ mmdebstrap:
       EOF
     # The printer network. A keyfile under /usr/lib is read-only to
     # NetworkManager: changing or deleting the connection on the device writes
-    # a copy or a tombstone under /etc instead, which mp-printer-net-guard
+    # a copy or a tombstone under /etc instead, which mp-hmi-net-guard
     # removes on every boot, so the image alone decides this network.
     # The customer network gets no keyfile here: /etc/NetworkManager is shared
     # across slots, and one shipped there would be pushed over the operator's
@@ -119,6 +123,40 @@ mmdebstrap:
       EOF
       chmod 0600 "$dir/mp-printer-net.nmconnection"
       echo "mp-hmi-net: printer network $net on ${IGconf_hminet_iface}.${IGconf_hminet_vlan}" >&2
+    # The camera network, on the interface 70-mp-camera-net.rules names after
+    # the camera. The camera itself is 10.55.0.1 there, as on every
+    # rpi-camera, and serves that network to a laptop plugged into it. Next to
+    # that it runs a DHCP client on a second interface of its own (a macvlan
+    # child of its USB interface, pi-cam-gen usb0-uplink), and that is what
+    # this network serves: an address and the way out through the panel, for
+    # the camera's updates. Nobody needs to know that address, since the
+    # child picks a new MAC each time it comes up; the panel reaches the
+    # camera at 10.55.0.1 (mp-hmi-camera).
+    - |-
+      set -eu
+      dir="$1/usr/lib/NetworkManager/system-connections"
+      cat > "$dir/mp-camera-net.nmconnection" <<-EOF
+      # Written by rpi-image-gen layer mp-hmi-net. Restored on every boot.
+      [connection]
+      id=Camera network
+      uuid=b6f77c33-467e-480f-a3e6-1603e411d15a
+      type=ethernet
+      interface-name=mpcam0
+      autoconnect=true
+
+      [ethernet]
+
+      [ipv4]
+      method=shared
+      address1=10.55.0.2/24
+      shared-dhcp-range=10.55.0.100,10.55.0.200
+      never-default=true
+
+      [ipv6]
+      method=ignore
+      EOF
+      chmod 0600 "$dir/mp-camera-net.nmconnection"
+      echo "mp-hmi-net: camera network 10.55.0.0/24 on mpcam0" >&2
     # Time: the PTB servers instead of the Debian pool, served to the printer
     # network. Servers a customer DHCP server announces still come in through
     # the dispatcher script of the chrony package.
@@ -150,4 +188,4 @@ mmdebstrap:
           }
       });
       EOF
-    - $BDEBSTRAP_HOOKS/enable-units "$1" chrony mp-printer-net-guard
+    - $BDEBSTRAP_HOOKS/enable-units "$1" chrony mp-hmi-net-guard
