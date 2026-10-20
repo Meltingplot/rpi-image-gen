@@ -25,7 +25,9 @@
 #
 # X-Env-Var-camera: ov5647
 # X-Env-Var-camera-Desc: dtoverlay line of the camera module, without
-#  dtoverlay=. Empty for a panel without a camera.
+#  dtoverlay=. Empty for a panel without a camera. The module is kept for
+#  scanning QR codes on the panel and not streamed; the printer camera is the
+#  one on USB (mp-hmi-camera).
 # X-Env-Var-camera-Required: n
 # X-Env-Var-camera-Valid: string-or-empty
 # X-Env-Var-camera-Set: y

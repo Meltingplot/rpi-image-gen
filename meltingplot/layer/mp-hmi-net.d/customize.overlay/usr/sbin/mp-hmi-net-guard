@@ -1,0 +1,35 @@
+#!/bin/sh
+# Drop what the device made of the networks the image ships.
+#
+# NetworkManager never writes to the read-only profiles the image ships under
+# /usr/lib, the printer network and the camera network. Changing one of them
+# writes a profile with the same uuid under /etc, deleting it writes
+# <uuid>.nmmeta there; either would outlive updates, since
+# /etc/NetworkManager/system-connections is shared across slots. Both go
+# before NetworkManager starts, so the image's profiles apply again.
+
+set -eu
+
+MP_TAG=mp-hmi-net-guard
+. /usr/lib/meltingplot/mp-common.sh
+
+lib=${MP_NM_LIB:-/usr/lib/NetworkManager/system-connections}
+etc=${MP_NM_ETC:-/etc/NetworkManager/system-connections}
+
+for shipped in "$lib"/mp-*.nmconnection; do
+   [ -e "$shipped" ] || continue
+   uuid=$(mp_conf_get "$shipped" uuid)
+   [ -n "$uuid" ] || mp_die "no uuid in $shipped"
+   name=$(mp_conf_get "$shipped" id)
+   for f in "$etc"/*; do
+      [ -e "$f" ] || [ -L "$f" ] || continue
+      case $f in
+         "$etc/$uuid.nmmeta") ;;
+         *.nmconnection) [ "$(mp_conf_get "$f" uuid)" = "$uuid" ] || continue ;;
+         *) continue ;;
+      esac
+      rm -f "$f"
+      mp_log "removed $f, $name is the image's again"
+   done
+done
+exit 0

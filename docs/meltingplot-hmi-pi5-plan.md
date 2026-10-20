@@ -14,7 +14,7 @@ Das Labor-HMI (CHX350-002) wurde von Hand eingerichtet (bookworm, haproxy, motio
 |---|---|
 | Bildschirm | Chromium unter Wayland zeigt DWC über `http://10.42.0.1` (haproxy) in voller Bildschirmgröße. Die Bildschirmtastatur muss im Kiosk erscheinen. |
 | Display | Waveshare 10,1″ DSI: `dtoverlay=vc4-kms-dsi-waveshare-panel,10_1_inch,dsi0` |
-| Kamera | OV5647: `dtoverlay=ov5647`, ausgelesen und verteilt per motion |
+| Kamera | Druckerkamera ist eine Meltingplot rpi-camera an USB, verteilt per motion (Tim, 2026-10-20). Die OV5647 im Display (`dtoverlay=ov5647`) wird nicht nach außen gegeben, sie ist für das spätere Scannen von QR-Codes am Gerät reserviert. |
 | Netz | Ein Port. eth0 untagged = Kundennetz (Standard DHCP). VLAN 20 auf eth0 = Druckernetz 10.42.0.1/24 mit NAT, DHCP und DNS. Kunden-WLAN am Touchscreen wählbar. |
 | Netz-Einstellungen | Schmale Pi-OS-Leiste mit Netzwerk, Tastatur und Uhr. Normalerweise ausgeblendet, eingeblendet per Wischgeste vom oberen Displayrand. Statische IP und WLAN werden dort eingestellt. |
 | Connect | volles `rpi-connect` mit Bildschirmfreigabe |
@@ -38,10 +38,10 @@ config/
   hmi-pi5.yaml                 ● Ziel, include mp-base.yaml, überschreibt layer.suite/connect/net/hw/app
 layer/
   mp-suite-trixie-hmi.yaml     ● Suite ohne systemd-networkd und timesyncd, mit WLAN-Regulatory
-  mp-hmi-net.yaml (+ .d/)      ● NetworkManager, VLAN-20-Profil, chrony als NTP-Server, Polkit/netdev
+  mp-hmi-net.yaml (+ .d/)      ● NetworkManager, VLAN-20-Profil, Kameranetz an USB, chrony als NTP-Server, Polkit/netdev
   mp-hmi-hw.yaml               ● config.txt: DSI-Panel, OV5647, usb_max_current_enable
   mp-hmi-proxy.yaml (+ .d/)    ● haproxy mit Backends und CORS-Liste
-  mp-hmi-camera.yaml (+ .d/)   ● motion über v4l2-compat
+  mp-hmi-camera.yaml (+ .d/)   ● motion als Verteiler der USB-Kamera
   mp-hmi-kiosk.yaml (+ .d/)    ● labwc-Autologin, Chromium, squeekboard, wf-panel-pi, Geste, Splash
   mp-hmi-hostname (in .d/)     ● Kundenname vom Duet-Pi holen
   mp-connect.yaml              ○ RequiresProvider rpi-connect-client statt fest rpi-connect-lite
@@ -60,6 +60,11 @@ Warum eine eigene Suite: `systemd-net-min` und `network-manager` liefern beide `
 - **Druckernetz:** Das Profil `vlan20` (eth0.20, `ipv4.method shared`, 10.42.0.1/24, `never-default`, IPv6 ignore) kommt aus dem Image. NM `shared` übernimmt DHCP und DNS (dnsmasq-base) sowie NAT.
   - Vorschlag: Das Profil liegt nach `/usr/lib/NetworkManager/system-connections` (read-only). Bei jedem Boot wird eine Kopie in `/etc` mit derselben UUID gelöscht, damit niemand das Druckernetz am Touchscreen verstellt.
   - Zu prüfen am Bench: ob NM 1.52 diesen Pfad liest, und welches Firewall-Backend `shared` nutzt (nftables).
+- **Kameranetz (Tim, 2026-10-20):** Die rpi-camera meldet sich per USB als Netzwerkadapter (CDC-NCM, bleibt so wegen der geringeren Latenz gegenüber UVC). Eine udev-Regel erkennt sie an Hersteller `meltingplot` und Produkt `Pi Cam` und nennt das Interface `mpcam0`. Ein USB-Tethering-Handy, das ebenfalls als `usb0` käme, bekommt das Profil deshalb nicht. Das Profil „Camera network“ liegt wie das Druckernetz unter `/usr/lib` (`shared`, 10.55.0.2/24, Pool .100 bis .200, IPv6 ignore).
+  - Die Kamera bleibt auf ihrem USB-Interface 10.55.0.1 und ist dort selbst DHCP-Server mit Captive Portal für Laptops, und zwar immer, auch wenn sie selbst eine Adresse bekommt. Daneben läuft auf ihr ein DHCP-Client auf einem macvlan-Child (`usb0u`, pi-cam-gen `usb0-uplink`, ab v0.0.20). Ihn bedient das HMI: Adresse, DNS und NAT, also Internet für die Updates der Kamera.
+  - Das HMI erreicht die Kamera an ihrer festen 10.55.0.1. Die Adresse des Childs wechselt, weil es bei jedem Aufbau eine neue Zufalls-MAC bekommt. Deshalb taugt auch ein Pool mit nur einer Adresse nicht als feste Adresse: Der alte Lease hielte sie bis zum Ablauf fest.
+  - Nicht 192.168.137.0/24: Das ist das Netz der Windows-Internetfreigabe und kollidiert, wenn ein Laptop dem HMI per ICS Internet gibt.
+  - Am Labor-HMI am 2026-10-20 von Hand geprüft: Lease vom HMI, kein Self-Lease durch den dnsmasq der Kamera, Internet der Kamera über das HMI, Stream von 10.55.0.1 und vom Child, ARP sauber.
 - **NTP:** chrony mit `allow 10.42.0.0/24`. Quellen wie am Duet-Pi `ptbtime1-3.ptb.de`.
 - **WLAN:** `wireless-regulatory` und wpasupplicant. Das Land muss voreingestellt sein, sonst ersetzt wfplug-netman auf 5-GHz-Hardware die WLAN-Liste durch „Click here to set Wi-Fi country“ (`raspi-config nonint get_wifi_country`). Standard ist DE, `identity.conf` kann es mit `wifi_country=` ändern. Zu klären: Wo raspi-config das Land auf einem read-only Root liest und setzt (cfg80211-Parameter in der cmdline oder `iw reg set` beim Boot).
 - **Rechte:** Die Build-Prüfung von `mp-admin` verbietet dem Connect-Konto jede Gruppe außer `adm`, `sudo`, `users` und seiner eigenen, also auch `netdev`. Eine eigene Polkit-Regel (`50-mp-hmi-net.rules`) erlaubt diesem Konto deshalb NetworkManager-Aktionen nur aus einer lokalen, aktiven Sitzung, also der am Display. Aus der Connect-Shell und über SSH bleibt es verboten. Das ist am Bench zu prüfen.
@@ -69,7 +74,7 @@ Warum eine eigene Suite: `systemd-net-min` und `network-manager` liefern beide `
 
 config.txt-Zeilen per Layer, wie `mp-duet-hw`:
 - `dtoverlay=vc4-kms-dsi-waveshare-panel,10_1_inch,dsi0`
-- `dtoverlay=ov5647` mit `camera_auto_detect=0`
+- `dtoverlay=ov5647` mit `camera_auto_detect=0`, für das spätere Scannen von QR-Codes; gestreamt wird sie nicht
 - `usb_max_current_enable=1`
 
 **Display kopfüber (Tim, 2026-10-09):** Im CHX350 sitzt das Display um 180° gedreht. Das Image dreht alles mit: Bildschirm, Touch, Konsole und Splash. Die Splash-Vorlage im Repo bleibt aufrecht, die Drehung macht der Build. Am Bench ist zu prüfen, welche Stellen sich darum kümmern:
@@ -107,13 +112,13 @@ Die Recherche vom 2026-10-09 stammt aus Quellen und Paketen, nichts davon ist au
 
 ## Kamera (`mp-hmi-camera`)
 
-- **Version:** motion 4.7.0 (trixie) liest libcamera nicht direkt. Erst motion 5 und MotionPlus können `libcam_device`, beide gibt es für trixie nicht als Paket.
-- **Weg:** motion liest V4L2 über das v4l2-compat von libcamera. Paket `libcamera-v4l2`, im Unit `LD_PRELOAD=/usr/libexec/aarch64-linux-gnu/libcamera/v4l2-compat.so`, ohne libcamerify und damit ohne Qt aus libcamera-tools. JPEG wird nur kodiert, solange jemand den Stream oder `/current` abruft.
-  - Rückfallweg ist ein picamera2-MJPEG-Server als netcam, so wie das Labor-Gadget es macht (`capture_rate` dann über der Quell-fps).
-- **motion.conf (Entwurf):** `video_device /dev/video0`, 1280x960 bei 15 fps. Das ist volles Bildfeld (2x2-Binning), 1296x972 ist nicht durch 8 teilbar. Dazu `pause on` (keine Bewegungserkennung), `picture_output off`, `movie_output off`, `stream_port 8081`, `stream_localhost on`, `stream_quality 75`, `stream_maxrate 15`, `webcontrol_port 0`, `log_file syslog`, `target_dir /run/motion`.
+- **Quelle (Tim, 2026-10-20):** die rpi-camera an USB (Pi Zero 2 W mit eigenem MJPEG-Server, Image aus pi-cam-gen). motion holt sie per `netcam_url http://10.55.0.1:8081/` und ist ihr einziger Client. Alle Zuschauer (DWC, Kiosk, QA-Plugin, Fernzugriff) hängen an motion, der Pi Zero 2 W liefert also nur einen Stream. Ohne motion lässt ihr Server höchstens 8 Streams auf Port 80 und 16 insgesamt zu.
+- **motion.conf:** `netcam_params capture_rate=30`, weil motion sonst langsamer liest, als die Kamera sendet, und sich Bilder in der Verbindung stauen (30 fps ist das Maximum der Kamera auf dem Zero 2 W). `width 1920`, `height 1080` wie die Kamera, sonst skaliert motion auf seinen Standard 640x480. `framerate 15`, `stream_maxrate 15`, `stream_quality 75`, `pause on`, keine Ausgaben, `stream_port 8081` nur auf Loopback, `webcontrol_port 0`.
+- **Gemessen am Labor-HMI (2026-10-20, Testinstanz neben dem laufenden motion):** erstes Bild nach rund 20 s (ffmpeg erkennt den Stream), danach 13 bis 14 fps je Client bei drei Clients gleichzeitig, rund 30 % eines Kerns, `/0/current` in 0,5 s mit 1920x1080. Ohne Warnung im Log. Die zusätzliche Latenz durch Dekodieren und Neukodieren ist nicht gemessen.
 - **Unit:** Drop-in für Debians `motion.service` mit `Restart=always`, `RuntimeDirectory=motion` und Härtung.
-  - Falle: Kann motion die Logdatei nicht öffnen, beendet es sich mit Exit 0 und startet nicht neu. Deshalb `log_file syslog`.
-- **Zu prüfen am Bench:** ob `/dev/video0` die Kamera ist, und motion 4.7.0 mit v4l2-compat 0.7.2 auf dem Pi 5. Bestätigt ist bisher nur eine OV5647 an einem Pi 4.
+  - Falle: Kann motion die Logdatei nicht öffnen, beendet es sich mit Exit 0 und startet nicht neu. Deshalb kein `log_file`.
+- **Die OV5647 im Display:** nicht mehr in motion und nicht nach außen. Damit fallen `libcamera-v4l2` und das `LD_PRELOAD` von v4l2-compat weg. libcamera erlaubt nur einen Nutzer der Kamera, ein späterer QR-Scanner braucht sie also frei.
+- **Vorher (2026-10-09):** motion 4.7.0 las die OV5647 über das v4l2-compat von libcamera (1280x960 bei 15 fps). Das lief am Bench, `/snapshot` in 0,5 s.
 
 ## Proxy (`mp-hmi-proxy`)
 
