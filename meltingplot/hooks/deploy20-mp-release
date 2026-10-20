@@ -61,6 +61,29 @@ def plugins(path):
                       "sha256": algo_hex.split(":", 1)[1].lower(), "url": url})
     return found
 
+def installer(root):
+    # What an installer card writes to the drive and to the bootloader, as
+    # layer mp-installer recorded it in the card's root filesystem. None for
+    # an A/B image.
+    path = pathlib.Path(root or "/nonexistent") / "etc/meltingplot/installer.conf"
+    if not path.is_file():
+        return None
+    conf = {}
+    for line in path.read_text().splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            key, value = line.split("=", 1)
+            conf[key.strip()] = value.strip()
+    return {
+        "image": conf.get("MPI_IMAGE", ""),
+        "image_sha256": conf.get("MPI_SHA256", ""),
+        "raw_size": int(conf.get("MPI_RAW_SIZE", "0") or 0),
+        "raw_sha256": conf.get("MPI_RAW_SHA256", ""),
+        "bootloader": conf.get("MPI_BOOTLOADER", ""),
+        "boot_order": conf.get("MPI_BOOT_ORDER", ""),
+        "psu_max_current": conf.get("MPI_PSU_MAX_CURRENT", ""),
+        "pcie_probe": conf.get("MPI_PCIE_PROBE", "n") == "y",
+    }
+
 release = {
     "version": env("IGconf_artefact_version", ""),
     "image": env("IGconf_image_name", ""),
@@ -93,6 +116,9 @@ release = {
         if f.is_file() and f.name not in ("release.json", "SHA256SUMS")
     ],
 }
+card = installer(env("IGconf_target_path", ""))
+if card:
+    release["installer"] = card
 
 (deploy / "release.json").write_text(json.dumps(release, indent=2) + "\n")
 PY

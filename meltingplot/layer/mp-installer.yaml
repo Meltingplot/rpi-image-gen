@@ -1,0 +1,116 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-installer
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: Installer card for a Raspberry Pi 5 with an empty NVMe
+#  drive. The card boots from SD and, with nobody at the machine, writes the
+#  A/B image it carries to the drive, reads it back, hands the
+#  meltingplot/identity.conf filled in on the card to the drive's BOOTCONFIG
+#  partition, updates the bootloader to the version this card was built with
+#  and sets it to start from NVMe first, then restarts into the drive. A drive
+#  that is not empty is left alone unless meltingplot/installer.conf on the
+#  card releases it. The green LED tells the outcome, meltingplot/installer.log
+#  on the card the details. The image comes from a build of the A/B image and
+#  is checked against the SHA256SUMS that build wrote beside it.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: rpi-boot-firmware,rpi-device-secpolicy
+# X-Env-Layer-RequiresProvider: systemd
+#
+# X-Env-VarRequires: IGconf_artefact_version
+# X-Env-VarRequires-Valid: string
+#
+# X-Env-VarPrefix: mpinst
+#
+# X-Env-Var-image:
+# X-Env-Var-image-Desc: The .img.zst of the A/B image to install, as a build
+#  deployed it: SHA256SUMS and release.json have to sit beside it. Its version
+#  has to be the version of this installer.
+# X-Env-Var-image-Required: y
+# X-Env-Var-image-Valid: file-nzero
+# X-Env-Var-image-Set: y
+#
+# X-Env-Var-target:
+# X-Env-Var-target-Desc: Name of the A/B image without its version, such as
+#  mp-duet-pi5. The build refuses any other image, so an installer named for
+#  one computer of the printer cannot carry the other's.
+# X-Env-Var-target-Required: y
+# X-Env-Var-target-Valid: regex:^mp-[a-z0-9-]+$
+# X-Env-Var-target-Set: y
+#
+# X-Env-Var-boot_order: 0xf416
+# X-Env-Var-boot_order-Desc: BOOT_ORDER written to the bootloader
+#  configuration: NVMe, then SD, then USB, then start over. With the drive
+#  first, the card can stay in the slot; a drive that does not boot falls
+#  back to the card.
+# X-Env-Var-boot_order-Required: n
+# X-Env-Var-boot_order-Valid: regex:^0x[0-9a-f]{1,8}$
+# X-Env-Var-boot_order-Set: y
+#
+# X-Env-Var-psu_max_current:
+# X-Env-Var-psu_max_current-Desc: PSU_MAX_CURRENT written to the bootloader
+#  configuration, in mA, for a power supply that does not negotiate its
+#  rating over USB-PD. Empty leaves the setting as it is.
+# X-Env-Var-psu_max_current-Required: n
+# X-Env-Var-psu_max_current-Valid: regex:^([0-9]{4})?$
+# X-Env-Var-psu_max_current-Set: y
+#
+# X-Env-Var-pcie_probe: y
+# X-Env-Var-pcie_probe-Desc: Find the drive also on an M.2 adapter that is
+#  not HAT+: PCIE_PROBE=1 in the bootloader configuration, and dtparam=pciex1
+#  in this card's config.txt. A HAT+ adapter is found either way.
+# X-Env-Var-pcie_probe-Required: n
+# X-Env-Var-pcie_probe-Valid: bool
+# X-Env-Var-pcie_probe-Set: y
+#
+# X-Env-Var-bootloader_min: 2026-05-26
+# X-Env-Var-bootloader_min-Desc: Oldest bootloader this card may install. The
+#  build stops if the rpi-eeprom package it got carries an older one.
+#  Raspberry Pi Connect reads the device identity through a mailbox the
+#  bootloader only provides from 2026-05-26 on.
+# X-Env-Var-bootloader_min-Required: n
+# X-Env-Var-bootloader_min-Valid: regex:^[0-9]{4}-[0-9]{2}-[0-9]{2}$
+# X-Env-Var-bootloader_min-Set: y
+#
+# X-Env-Var-identity: ${DIRECTORY}/mp-identity.d/customize.overlay
+# X-Env-Var-identity-Desc: Overlay of mp-identity, for the commissioning file
+#  the card hands on and the helpers that check it the way the first boot
+#  reads it.
+# X-Env-Var-identity-Required: n
+# X-Env-Var-identity-Valid: dir
+# X-Env-Var-identity-Set: y
+# METAEND
+---
+mmdebstrap:
+  packages:
+    - zstd
+    - util-linux
+    - diffutils
+    - udev
+    # rpi-eeprom-update writes the Pi 5 bootloader directly through flashrom,
+    # and reads the image's version with strings
+    - flashrom
+    - binutils
+  customize-hooks:
+    - install -D -m 0644 "$IGconf_mpinst_identity/usr/lib/meltingplot/mp-common.sh" "$1/usr/lib/meltingplot/mp-common.sh"
+    # The commissioning file of the A/B image, with a note on what the card
+    # does with it. The copy under /usr/share is what the card gets back once
+    # a drive has its filled-in copy.
+    - |-
+      set -eu
+      t="$1/usr/share/meltingplot/installer/identity.conf"
+      install -d "$(dirname "$t")" "$1/boot/firmware/meltingplot"
+      {
+        printf '%s\n' \
+          "# On the installer card: fill this in for the printer the card goes into." \
+          "# The installer copies it to the NVMe drive, where the first boot reads it," \
+          "# and then puts this blank file back. See installer.conf next to it." \
+          "#"
+        cat "$IGconf_mpinst_identity/bootfs/meltingplot/identity.conf"
+      } > "$t"
+      install -m 0644 "$t" "$1/boot/firmware/meltingplot/identity.conf"
+    - |-
+      set -eu
+      if [ "$IGconf_mpinst_pcie_probe" = y ]; then
+        printf '\n# Meltingplot installer: the NVMe drive, also on an adapter that is not HAT+\n[all]\ndtparam=pciex1\n' \
+          >> "$1/boot/firmware/config.txt"
+      fi
+    - $BDEBSTRAP_HOOKS/enable-units "$1" mp-installer

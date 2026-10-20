@@ -120,6 +120,21 @@ jobs:
                IGconf_mpid_release="$release_url" \
                IGconf_sys_apt_cachedir="$PWD/meltingplot/.cache/apt"
 
+      # The installer card: the image just built, on an SD card that writes
+      # it to the NVMe drive of a new machine. A build of its own, in the same
+      # work directory but beside the image's (meltingplot/config/mp-installer.yaml),
+      # from the image's deploy directory and at the image's version.
+      - name: Build installer
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
+          ./rpi-image-gen build -S ./meltingplot -c hmi-pi5-installer.yaml \
+            -B "$RUNNER_TEMP/work" \
+            -- IGconf_artefact_version="$VERSION" \
+               IGconf_mpinst_image="$RUNNER_TEMP/work/deploy-$VERSION/mp-hmi-pi5-$VERSION.img.zst" \
+               IGconf_sys_apt_cachedir="$PWD/meltingplot/.cache/apt"
+
       # apt downloads as _apt inside the build's user namespace and leaves a
       # partial/ directory only _apt may enter. The cache is saved as the
       # runner user and would fail on it; apt recreates it on the next build.
@@ -141,8 +156,21 @@ jobs:
           # inventory; it is written after our hook and so is not in SHA256SUMS.
           cp "$deploy"/* "$out"/
           rm -f "$out/deployed.json"
+          # The installer card's image and SBOM join them, with the checksums
+          # its own build wrote, so one SHA256SUMS covers the release. Its
+          # release.json describes the card and goes into the release notes.
+          card="$RUNNER_TEMP/work/deploy-mp-hmi-pi5-installer-$version"
+          for f in "mp-hmi-pi5-installer-$version.img.zst" "mp-hmi-pi5-installer-$version.sbom.zst"; do
+            cp "$card/$f" "$out/"
+            sum=$(awk -v f="$f" '$2 == f' "$card/SHA256SUMS")
+            [ -n "$sum" ] || { echo "::error::$f is not in $card/SHA256SUMS"; exit 1; }
+            echo "$sum" >> "$out/SHA256SUMS"
+          done
+          cp "$card/release.json" "$RUNNER_TEMP/installer.json"
           echo "dir=$out" >> "$GITHUB_OUTPUT"
+          echo "installer=$RUNNER_TEMP/installer.json" >> "$GITHUB_OUTPUT"
           cat "$out/release.json"
+          cat "$RUNNER_TEMP/installer.json"
           cat "$out/SHA256SUMS"
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
@@ -166,6 +194,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
           RELEASE_DIR: ${{ steps.collect.outputs.dir }}
+          INSTALLER_JSON: ${{ steps.collect.outputs.installer }}
           TAG: ${{ github.ref_name }}
         run: |
           # The panel shows this page as the changelog after an update, so
@@ -193,6 +222,18 @@ jobs:
             echo
             echo '```'
             cat "$RELEASE_DIR/release.json"
+            echo '```'
+            echo
+            echo "## Installer card"
+            echo
+            echo "For a machine whose NVMe drive is still empty: write"
+            echo "\`mp-hmi-pi5-installer-$VERSION.img.zst\` to an SD card, fill in"
+            echo "\`meltingplot/identity.conf\` on it, and start the Pi from it. The card"
+            echo "installs \`mp-hmi-pi5-$VERSION\` on the drive, sets up the bootloader and"
+            echo "restarts into the drive. See meltingplot/README.md."
+            echo
+            echo '```'
+            cat "$INSTALLER_JSON"
             echo '```'
           } > "$notes"
           args=(--verify-tag --title "hmi-pi5 $VERSION" --notes-file "$notes")

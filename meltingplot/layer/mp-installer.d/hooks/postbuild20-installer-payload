@@ -1,0 +1,101 @@
+#!/bin/bash
+# Put the A/B image this card installs into its root filesystem, and describe
+# it for mp-installer.
+#
+# The image is a deployed build: the build's SHA256SUMS has to list it with
+# the checksum it has, and the build's release.json has to name it as the
+# image this installer is for, at the installer's own version. That keeps
+# mp-duet-pi5-installer-1.2.0 from carrying anything but mp-duet-pi5-1.2.0.
+# Runs after the root filesystem is complete and before the SBOM is taken.
+
+set -euo pipefail
+
+ROOT=${1:?root filesystem}
+img=${IGconf_mpinst_image:?}
+target=${IGconf_mpinst_target:?}
+version=${IGconf_artefact_version:?}
+
+die() { echo "mp-installer: $*" >&2; exit 1; }
+
+dir=$(dirname "$img")
+file=$(basename "$img")
+[[ $file == *.img.zst ]] || die "$img is not an .img.zst"
+
+# --- the image is what its build deployed ---------------------------------
+
+sums=$dir/SHA256SUMS
+[[ -f $sums ]] || die "no SHA256SUMS beside $img"
+want=$(awk -v f="$file" '$2 == f || $2 == "*" f { print $1 }' "$sums")
+[[ -n $want ]] || die "$sums does not list $file"
+have=$(sha256sum "$img" | cut -d' ' -f1)
+[[ $have == "$want" ]] || die "$file does not match its checksum in $sums"
+
+meta=$dir/release.json
+[[ -f $meta ]] || die "no release.json beside $img"
+read -r rel_image rel_version rel_role < <(python3 -c '
+import json, sys
+r = json.load(open(sys.argv[1]))
+print(r.get("image", ""), r.get("version", ""), r.get("device", {}).get("role", "") or "-")
+' "$meta")
+[[ $rel_image.img.zst == "$file" ]] || die "$meta describes $rel_image, not $file"
+[[ $rel_image == "$target-$rel_version" ]] ||
+   die "$file is not $target: this installer is for $target only"
+[[ $rel_version == "$version" ]] ||
+   die "$file is version $rel_version, this installer $version; build it with IGconf_artefact_version=$rel_version"
+
+# --- what mp-installer compares the drive with ----------------------------
+
+echo "mp-installer: measuring $file" >&2
+read -r raw_size raw_sha < <(zstd -dc --no-progress "$img" | python3 -c '
+import hashlib, sys
+h, n = hashlib.sha256(), 0
+for chunk in iter(lambda: sys.stdin.buffer.read(1 << 22), b""):
+    h.update(chunk)
+    n += len(chunk)
+print(n, h.hexdigest())
+')
+[[ ${raw_size:-0} =~ ^[0-9]+$ && $raw_size -gt 0 && ${raw_sha:-} =~ ^[0-9a-f]{64}$ ]] ||
+   die "cannot decompress $file"
+
+# --- the bootloader the card will install ----------------------------------
+# rpi-eeprom-update takes the newest image of its release channel, which
+# /etc/default/rpi-eeprom-update may name.
+
+channel=$(sed -n 's/^[[:space:]]*FIRMWARE_RELEASE_STATUS=["'\'']\{0,1\}\([A-Za-z0-9_-]*\).*/\1/p' \
+   "$ROOT/etc/default/rpi-eeprom-update" 2>/dev/null | tail -n1)
+channel=${channel:-default}
+fwdir=$ROOT/usr/lib/firmware/raspberrypi/bootloader-2712/$channel
+latest=$(find "$fwdir" -maxdepth 1 -name 'pieeprom-????-??-??.bin' -printf '%f\n' 2>/dev/null | sort | tail -n1)
+[[ -n $latest ]] || die "no Raspberry Pi 5 bootloader in $fwdir"
+bootloader=${latest#pieeprom-}
+bootloader=${bootloader%.bin}
+[[ ! $bootloader < ${IGconf_mpinst_bootloader_min:?} ]] ||
+   die "the bootloader in rpi-eeprom is from $bootloader, older than $IGconf_mpinst_bootloader_min"
+
+# --- into the image ----------------------------------------------------------
+
+for tool in wipefs blockdev lsblk findmnt blkid mountpoint zstd dd sha256sum head od cmp \
+            udevadm rpi-eeprom-update rpi-eeprom-config python3 flashrom strings; do
+   [[ -x $ROOT/usr/bin/$tool || -x $ROOT/usr/sbin/$tool ]] || die "$tool is missing from the image"
+done
+
+payload=/usr/share/meltingplot/installer/$file
+install -D -m 0644 "$img" "$ROOT$payload"
+
+install -d -m 0755 "$ROOT/etc/meltingplot"
+cat > "$ROOT/etc/meltingplot/installer.conf" <<EOF
+# Written by rpi-image-gen layer mp-installer: what this card installs.
+MPI_VERSION=$version
+MPI_IMAGE=$rel_image
+MPI_ROLE=$rel_role
+MPI_PAYLOAD=$payload
+MPI_SHA256=$have
+MPI_RAW_SIZE=$raw_size
+MPI_RAW_SHA256=$raw_sha
+MPI_BOOTLOADER=$bootloader
+MPI_BOOT_ORDER=${IGconf_mpinst_boot_order:?}
+MPI_PSU_MAX_CURRENT=${IGconf_mpinst_psu_max_current:-}
+MPI_PCIE_PROBE=${IGconf_mpinst_pcie_probe:-n}
+EOF
+
+echo "mp-installer: carries $rel_image ($raw_size bytes), bootloader $bootloader" >&2

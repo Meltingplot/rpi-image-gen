@@ -1,0 +1,11 @@
+# Installer card for the operator panel of a CHX350: writes mp-hmi-pi5 to its
+# NVMe drive. See mp-installer.yaml for the build.
+
+include:
+  file: mp-installer.yaml
+
+image:
+  name: mp-hmi-pi5-installer-${IGconf_image_version}
+
+mpinst:
+  target: mp-hmi-pi5

@@ -12,6 +12,11 @@ Two targets, both on `mp-base.yaml`:
 | `duet-pi5.yaml` | Raspberry Pi 5 on the Duet 3 mainboard of a CHX350 | DuetSoftwareFramework, Duet Web Control, the CHX350 printer configuration, the Vigil monitoring plugin, the backend of the CHX 350 operator interface, the QualityAssurance process data plugin |
 | `hmi-pi5.yaml` | Raspberry Pi 5 operator panel of a CHX350, with touch display and camera | Duet Web Control from the printer SBC in a kiosk browser, the camera stream, and the router, DNS and time server for the printer network |
 
+Each of them also has an installer card, `duet-pi5-installer.yaml` and
+`hmi-pi5-installer.yaml` on `mp-installer.yaml`: an SD card image that writes
+the A/B image to the empty NVMe drive of a new machine, with nobody at it (see
+[From the installer card](#from-the-installer-card)).
+
 The rest of this document describes the printer SBC. The operator panel is
 in development; its design and open points are in
 [docs/meltingplot-hmi-pi5-plan.md](../docs/meltingplot-hmi-pi5-plan.md). It
@@ -98,6 +103,36 @@ Artefacts land in `work/deploy-<version>/`:
 
 A build without a version is a development build. The release workflow passes
 the version from the git tag.
+
+### The installer card
+
+The installer card is built after the image, from the image's deploy
+directory and at the image's version:
+
+```bash
+make installer VERSION=<version>        # CONFIG=hmi-pi5.yaml for the panel
+# which runs
+./rpi-image-gen build -S ./meltingplot -c duet-pi5-installer.yaml \
+   -- IGconf_sys_apt_cachedir="$PWD/meltingplot/.cache/apt" \
+      IGconf_artefact_version=<version> \
+      IGconf_mpinst_image="$PWD/work/deploy-<version>/mp-duet-pi5-<version>.img.zst"
+```
+
+The build refuses an image that the `SHA256SUMS` beside it does not list with
+the checksum it has, an image that the `release.json` beside it names as
+another image or version, and an `rpi-eeprom` package whose Raspberry Pi 5
+bootloader is older than `mpinst.bootloader_min` (2026-05-26, the first that
+gives Raspberry Pi Connect the device identity). It builds in a chroot and a
+deploy directory of its own, `work/deploy-mp-duet-pi5-installer-<version>/`,
+so it replaces nothing of the image's build. That directory holds
+`mp-duet-pi5-installer-<version>.img.zst`, its SBOM
+`mp-duet-pi5-installer-<version>.sbom.zst`, and a `release.json` whose
+`installer` entry names the image the card writes, its checksums, and the
+bootloader version and settings the card installs.
+
+The release workflow builds the card in the same job, right after the image,
+and adds its image and SBOM to the release, with their lines in the one
+`SHA256SUMS`; the card's `release.json` goes into the release notes.
 
 ### What is checked after a build
 
@@ -353,6 +388,65 @@ Check afterwards: Duet Web Control answers on the printer address, `M115` and
 `M122` reply, the device is listed in Connect, the Vigil page shows counters,
 `/machine/CHX350/status` answers, and the Quality Assurance page shows the
 plugin as idle.
+
+### From the installer card
+
+A machine whose Raspberry Pi 5 has an empty NVMe drive is commissioned from an
+SD card, without a screen or keyboard and without taking the drive out:
+
+1. Take `mp-duet-pi5-installer-<version>.img.zst` (`mp-hmi-pi5-installer-…`
+   for the operator panel) from the release, check it against `SHA256SUMS` and
+   write it to an SD card of at least 4 GB, as in step 2 above.
+2. Edit `meltingplot/identity.conf` on the card's FAT partition (`bootfs`) as
+   in step 3 above. The card checks it before it writes anything, and stops if
+   the first boot would not accept a value.
+3. Put the card into the Pi and power it up. The green LED flickers while the
+   card works, a few minutes.
+
+The card then
+
+- writes the image to the drive, reads it back and compares it with the
+  checksum from the build;
+- copies `identity.conf` to the drive's `BOOTCONFIG` partition, with a record
+  of the installation in `meltingplot/installer.txt` next to it, and puts the
+  blank file back on the card;
+- updates the bootloader to the version the card was built with and sets
+  `BOOT_ORDER=0xf416` (NVMe, then SD, then USB), `PSU_MAX_CURRENT=5000`,
+  because both computers of a CHX350 hang on the printer's 5 V rail, which
+  does not negotiate over USB-PD, and `PCIE_PROBE=1`, so the drive is also
+  found on an M.2 adapter that is not HAT+. The rest of the bootloader
+  configuration is kept;
+- restarts. The Pi starts from the drive, and the first boot goes on as above.
+
+The card can stay in the slot: with the drive first, the Pi only starts from
+the card again if the drive does not boot. For the next machine, fill in
+`identity.conf` on the card again.
+
+A drive that already holds a partition table or a filesystem is left alone,
+so a card put into a printer in use cannot erase it. To install over such a
+drive anyway, set `overwrite_nvme=yes` in `meltingplot/installer.conf` on the
+card. Everything on the drive is lost; the line is spent with that one
+installation.
+
+If the card stops, the green LED blinks a number of times, pauses and
+repeats, until power is removed. `meltingplot/installer.log` on the card says
+why:
+
+| Blinks | Meaning |
+|---|---|
+| 2 | no NVMe drive, or more than one |
+| 3 | the drive is not empty, and `installer.conf` does not release it |
+| 4 | `identity.conf` on the card is not usable |
+| 5 | the card installed this drive already, yet the Pi started from the card again: the bootloader does not start the drive |
+| 6 | anything else: a damaged card, a drive that does not read back what was written, a failed bootloader update |
+
+A card started again after it wrote the drive but before the bootloader was
+updated finishes the bootloader step. On a Pi 5 the bootloader is written at
+once through flashrom where the kernel offers the EEPROM's SPI device, and
+otherwise staged on the card and written on the next start from it; either way
+the Pi ends up on the drive. The card installs its bootloader also over a newer
+one, so every machine it commissions runs a known version; rpi-eeprom-update
+still refuses a version too old for the board revision.
 
 ### The printer name
 

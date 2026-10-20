@@ -1,0 +1,59 @@
+# Settings every Meltingplot installer card shares.
+#
+# An installer card boots a Raspberry Pi 5 from SD and writes one A/B image,
+# from a build of duet-pi5.yaml or hmi-pi5.yaml, to the NVMe drive (layer
+# mp-installer). It is built after that image, from the image's deploy
+# directory and at the image's version:
+#
+#   ./rpi-image-gen build -S ./meltingplot -c duet-pi5-installer.yaml -- \
+#      IGconf_mpinst_image=work/deploy-<version>/mp-duet-pi5-<version>.img.zst \
+#      IGconf_artefact_version=<version>
+#
+# The card has its own root filesystem, a plain Raspberry Pi OS style layout
+# that is written while it runs; nothing of mp-base.yaml applies to it.
+
+device:
+  layer: rpi5
+  user1: meltingplot
+  user1uid: 1000
+  user1gid: 1000
+  # No password and no key: nobody logs in to the card.
+  user1sudo: none
+
+image:
+  layer: image-rpios
+  # rpi-eeprom-update puts the new bootloader (2 MiB) and its signature on
+  # the boot partition before it writes it, and the card keeps its log
+  # there. Twice the firmware, as trixie-minbase has it, leaves room for both.
+  boot_part_size: 200%
+  # The root holds the A/B image, over a gigabyte compressed, and little
+  # else; a quarter on top leaves room for the journal.
+  root_part_size: 125%
+  # The card is written with Raspberry Pi Imager or dd, never provisioned
+  # with rpi-sb-provisioner, so no provisioning archive.
+  idp_enable: n
+
+rpisec:
+  # mp-installer updates the bootloader itself, once the drive is written,
+  # together with the configuration that makes it start from the drive.
+  eepromupd: n
+
+mpinst:
+  # Both computers of a CHX350 hang on the printer's 5 V rail, which has no
+  # USB-PD to tell the Pi what it can deliver. The rating belongs into the
+  # bootloader configuration, which no A/B image can write.
+  psu_max_current: 5000
+
+# Next to the A/B image's build in the same work directory, not over it: the
+# same version would otherwise share its chroot and deploy directory, and
+# this build would replace the image's SBOM, manifest and release.json.
+artefact:
+  context: chroot-${IGconf_image_name}
+deploy:
+  dir: ${IGconf_sys_workroot}/deploy-${IGconf_image_name}
+sbom:
+  name: ${IGconf_image_name}
+
+layer:
+  suite: mp-suite-trixie-installer
+  app: mp-installer
