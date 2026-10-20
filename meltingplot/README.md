@@ -424,6 +424,15 @@ The card then
   configuration is kept;
 - restarts. The Pi starts from the drive, and the first boot goes on as above.
 
+The operator panel's card also uses the panel's display (layer
+`mp-installer-screen` with the panel's hardware layer `mp-hmi-hw`). While the
+card works, the screen shows full white, red, green and blue in turn, three
+seconds each, so the panel can be checked for dead pixels and colour faults
+during the installation, and for five seconds between those rounds the
+installer's progress in a large console font. From the bootloader write on,
+and when the card stops, the progress stays on the screen. The console is
+turned with the panel (`mpscreen.rotation`, 180 in the CHX350).
+
 The card can stay in the slot: with the drive first, the Pi only starts from
 the card again if the drive does not boot. For the next machine, fill in
 `identity.conf` on the card again.

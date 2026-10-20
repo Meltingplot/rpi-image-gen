@@ -17,6 +17,9 @@ MPI_SYS_BLOCK=${MPI_SYS_BLOCK:-/sys/block}
 # The green LED shows the card at work, the red one that it stopped.
 MPI_LED=${MPI_LED:-/sys/class/leds/ACT}
 MPI_LED_STOP=${MPI_LED_STOP:-/sys/class/leds/PWR}
+# The same, for a display that shows the card at work (mp-installer-screen):
+# busy, steady or stopped.
+MPI_PHASE=${MPI_PHASE:-/run/mp-installer/phase}
 MPI_BOOTLOADER_TS=${MPI_BOOTLOADER_TS:-/proc/device-tree/chosen/bootloader/build-timestamp}
 
 # Why the installer stopped. The red LED is on, the green one blinks this many
@@ -256,7 +259,14 @@ mpi_led_set() {
    esac
 }
 
+mpi_phase() {
+   mkdir -p "$(dirname "$MPI_PHASE")" 2>/dev/null &&
+      echo "$1" > "$MPI_PHASE.tmp" 2>/dev/null &&
+      mv -f "$MPI_PHASE.tmp" "$MPI_PHASE" 2>/dev/null || true
+}
+
 mpi_led() {
+   mpi_phase "$1"
    case $1 in
       busy) mpi_led_set "$MPI_LED_STOP" off; mpi_led_set "$MPI_LED" flicker ;;
       steady) mpi_led_set "$MPI_LED_STOP" off; mpi_led_set "$MPI_LED" on ;;
@@ -265,6 +275,7 @@ mpi_led() {
 
 # Blink a reason code for good. The installer ends here when it fails.
 mpi_blink_forever() {
+   mpi_phase stopped
    mpi_led_set "$MPI_LED_STOP" on
    mpi_led_set "$MPI_LED" off
    [ -w "$MPI_LED/brightness" ] || exec sleep infinity

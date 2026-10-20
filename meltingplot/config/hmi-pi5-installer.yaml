@@ -1,5 +1,10 @@
 # Installer card for the operator panel of a CHX350: writes mp-hmi-pi5 to its
 # NVMe drive. See mp-installer.yaml for the build.
+#
+# The panel's display shows the card at work: test pictures in white, red,
+# green and blue to check the panel by, and the progress in between. On a
+# bench, with the display the right way up, build it with
+#   -- IGconf_mpscreen_rotation=0
 
 include:
   file: mp-installer.yaml
@@ -9,3 +14,11 @@ image:
 
 mpinst:
   target: mp-hmi-pi5
+
+mpscreen:
+  rotation: 180
+
+layer:
+  # the display and the rest of the panel's hardware, as the image has it
+  hw: mp-hmi-hw
+  screen: mp-installer-screen

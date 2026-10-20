@@ -1,0 +1,106 @@
+#!/usr/bin/python3 -I
+"""Show the installer card at work on the display of the machine.
+
+While mp-installer works, the screen shows full white, red, green and blue in
+turn, so the panel can be checked for dead pixels and colour faults while the
+drive is written, and between those rounds the console with the installer's
+progress. Once the card writes the bootloader, or stops, the console stays,
+with the last step or the reason on it.
+
+mp-installer tells the phase in /run/mp-installer/phase: busy while it works
+(or nothing yet), steady from the bootloader write until the restart, stopped
+when it gave up. The pictures go straight to the framebuffer; while they are
+up the console is in graphics mode, so the kernel does not draw over them, and
+switching back to text mode redraws everything the installer printed
+meanwhile.
+"""
+
+import fcntl
+import os
+import sys
+import time
+
+FB = "/dev/fb0"
+FB_SYS = "/sys/class/graphics/fb0"
+TTY = "/dev/tty1"
+PHASE = os.environ.get("MPI_PHASE", "/run/mp-installer/phase")
+
+KDSETMODE, KD_TEXT, KD_GRAPHICS = 0x4B3A, 0x00, 0x01
+
+PICTURES = [(255, 255, 255), (255, 0, 0), (0, 255, 0), (0, 0, 255)]
+PICTURE_SECONDS = 3
+CONSOLE_SECONDS = 5
+
+
+def read(path):
+    with open(path) as f:
+        return f.read().strip()
+
+
+def working():
+    try:
+        phase = read(PHASE)
+    except OSError:
+        phase = ""
+    return phase in ("", "busy")
+
+
+def picture(rgb, height, bpp, stride):
+    """One full frame of a single colour, as the framebuffer takes it."""
+    r, g, b = rgb
+    if bpp == 16:
+        pixel = ((r >> 3) << 11 | (g >> 2) << 5 | b >> 3).to_bytes(2, "little")
+    elif bpp == 32:
+        pixel = bytes((b, g, r, 0))
+    else:
+        raise ValueError(f"{bpp} bits per pixel")
+    row = (pixel * (stride // len(pixel) + 1))[:stride]
+    return row * height
+
+
+def wait(seconds):
+    """Sleep while the installer works; False as soon as it no longer does."""
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if not working():
+            return False
+        time.sleep(0.25)
+    return True
+
+
+def main():
+    for _ in range(60):
+        if os.path.exists(FB):
+            break
+        time.sleep(0.5)
+    else:
+        print("mp-installer-screen: no framebuffer, nothing to show", file=sys.stderr)
+        return 0
+
+    height = int(read(f"{FB_SYS}/virtual_size").split(",")[1])
+    bpp = int(read(f"{FB_SYS}/bits_per_pixel"))
+    stride = int(read(f"{FB_SYS}/stride"))
+    try:
+        pictures = [picture(c, height, bpp, stride) for c in PICTURES]
+    except ValueError as e:
+        print(f"mp-installer-screen: framebuffer with {e}, no test pictures", file=sys.stderr)
+        return 0
+
+    tty = os.open(TTY, os.O_RDWR | os.O_NOCTTY)
+    fb = os.open(FB, os.O_WRONLY)
+    try:
+        while working():
+            fcntl.ioctl(tty, KDSETMODE, KD_GRAPHICS)
+            for data in pictures:
+                os.pwrite(fb, data, 0)
+                if not wait(PICTURE_SECONDS):
+                    break
+            fcntl.ioctl(tty, KDSETMODE, KD_TEXT)
+            wait(CONSOLE_SECONDS)
+    finally:
+        fcntl.ioctl(tty, KDSETMODE, KD_TEXT)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
