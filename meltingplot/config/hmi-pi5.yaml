@@ -25,6 +25,12 @@ mpid:
 mpnet:
   address: 10.42.0.1/24
 
+# ... except on a prerelease, which also lets the administrator in from the
+# customer network, so that a bench or the lab reaches the panel without the
+# VLAN. A final image ignores this.
+mpadmin:
+  prerelease_lan: y
+
 locale:
   timezone: Europe/Berlin
   keyboard_keymap: de
