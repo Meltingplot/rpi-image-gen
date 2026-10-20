@@ -481,7 +481,7 @@ Two accounts log in, and only one of them can become root:
 | Account | Logs in | May |
 |---|---|---|
 | `meltingplot` | through the Raspberry Pi Connect remote shell, and over SSH with a key from `keys/authorized_keys` | read the journal, and the firmware services Raspberry Pi OS opens to `video` |
-| `mpadmin` | over SSH with a key from `keys/mpadmin.keys`, from the printer network only | `sudo` without a password |
+| `mpadmin` | over SSH with a key from `keys/mpadmin.keys`, from the printer network only (on a prerelease of the HMI also from the customer network) | `sudo` without a password |
 
 Raspberry Pi Connect runs as `meltingplot`, so its remote shell is that
 account, reachable from wherever Connect is. That is why it holds no
@@ -503,13 +503,29 @@ ssh -J meltingplot@<HMI address> mpadmin@10.42.0.2
 
 sshd lets `mpadmin` in from the network of `mpnet.address` only, and refuses
 it from the machine's own address and the loopback, so a shell on the device,
-a Connect remote shell included, cannot hop to it. The keys that work are the
-ones in `keys/mpadmin.keys`, installed on the read-only root: a key in the
-home directory or added on the device is not accepted, and a key removed from
-the file stops working with the update that carries the change. Only keys
-held on a hardware token (Nitrokey) go into that file. The keys of
-`meltingplot`, by contrast, are in its home directory, which lives on the
-persistent partition and which no update touches; a change to
+a Connect remote shell included, cannot hop to it.
+
+A prerelease of the HMI, a version with a suffix such as `0.1.0-rc.1` or a
+development build, lets the administrator in from the customer network too,
+so that a bench or the lab reaches the panel without the VLAN:
+
+```bash
+ssh mpadmin@<HMI address>
+```
+
+That is `mpadmin.prerelease_lan: y` in `config/hmi-pi5.yaml`. sshd still
+refuses it over the loopback and from the panel's address in the printer
+network; its address in the customer network is not known when the image is
+built, and from there it is the hardware token holding the key that keeps a
+shell on the panel out. A final image (`0.1.0`) ignores the setting and takes
+the printer network only, which the post-build assert checks.
+
+The keys that work are the ones in `keys/mpadmin.keys`, installed on the
+read-only root: a key in the home directory or added on the device is not
+accepted, and a key removed from the file stops working with the update that
+carries the change. Only keys held on a hardware token (Nitrokey) go into that
+file. The keys of `meltingplot`, by contrast, are in its home directory, which
+lives on the persistent partition and which no update touches; a change to
 `keys/authorized_keys` reaches a printer only when its medium is flashed.
 
 What support used to do as root over the Connect shell goes like this now:
@@ -522,7 +538,8 @@ What support used to do as root over the Connect shell goes like this now:
 
 The post-build assert of `mp-admin` refuses an image in which `meltingplot`
 could become root or belongs to a group that grants anything, or in which sshd
-would let the administrator in from anywhere else.
+would let the administrator in from the machine itself, or, on a final image,
+from outside the printer network.
 
 ## Updating a fleet
 

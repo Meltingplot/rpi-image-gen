@@ -78,10 +78,21 @@ grep -qx 'PermitRootLogin no' "$ROOT/etc/ssh/sshd_config.d/01pubkey-only.conf" 2
    bad "sshd does not refuse root (ssh.pubkey_only)"
 [[ ! -s $ROOT/root/.ssh/authorized_keys ]] || bad "root has authorized_keys"
 
+# A prerelease with mpadmin.prerelease_lan lets the administrator in from any
+# network but the machine itself; a final image only from the printer network.
 conf="$ROOT/etc/ssh/sshd_config.d/10-mp-admin.conf"
 if [[ -f $conf ]]; then
-   grep -qE "^AllowUsers $USER1 $ADMIN@[0-9./]+$" "$conf" ||
-      bad "sshd lets $ADMIN log in from anywhere, or lets in others than $USER1 and $ADMIN"
+   if grep -qE "^AllowUsers $USER1 $ADMIN@[0-9./]+$" "$conf"; then
+      :
+   elif [[ ${IGconf_artefact_version:?} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      bad "$IGconf_artefact_version is final, but sshd lets $ADMIN log in from outside the printer network, or lets in others than $USER1 and $ADMIN"
+   elif grep -qx "AllowUsers $USER1 $ADMIN" "$conf"; then
+      grep -qE "^Match User $ADMIN Address 127\.0\.0\.0/8,::1," "$conf" ||
+         bad "sshd lets $ADMIN log in from any network, the loopback included"
+      echo "mp-admin assert: $IGconf_artefact_version is a prerelease, $ADMIN logs in from any network" >&2
+   else
+      bad "sshd lets in others than $USER1 and $ADMIN"
+   fi
    grep -qE "^Match User $ADMIN Address " "$conf" ||
       bad "sshd does not refuse $ADMIN from the machine itself"
 else
