@@ -10,8 +10,11 @@
 #   6. restart, into the drive
 #
 # Nothing is written before every check of steps 1 and 2 has passed. Each
-# step is logged to meltingplot/installer.log on the card. A failure leaves
-# the green LED blinking a code (see mp-installer.sh) until power is removed.
+# step is logged to meltingplot/installer.log on the card. While the card
+# works the green LED flickers; a failure turns the red LED on and leaves the
+# green one blinking a code (see mp-installer.sh) until power is removed. A
+# start after an interruption, such as power taken away, picks the card's own
+# work on that drive up again.
 
 set -eu
 
@@ -64,31 +67,29 @@ mpi_log "drive $dev: $(mpi_drive_model "$dev"), serial ${serial:-unknown}, $size
 [ "$size" -ge "$MPI_RAW_SIZE" ] ||
    fail "$MPI_E_FAILED" "$dev holds $size bytes, the image needs $MPI_RAW_SIZE"
 
+blank=n
+mpi_drive_blank "$dev" && blank=y
 overwrite=n
 mpi_card_flag "$MPI_CARD/installer.conf" overwrite_nvme && overwrite=y
 
-if ! mpi_drive_blank "$dev"; then
-   if [ "$overwrite" = y ]; then
-      mpi_log "$dev is not empty; installer.conf releases it, it will be overwritten"
-   elif [ -n "$serial" ] && [ "$(mpi_state_get serial)" = "$serial" ] &&
-        [ "$(mpi_state_get image)" = "$MPI_IMAGE" ]; then
-      # This card installed this drive. Either the bootloader step did not
-      # finish, then finish it, or the Pi did not start from the drive.
-      if [ "$(mpi_state_get bootloader)" = pending ]; then
-         mpi_log "$dev already holds $MPI_IMAGE from this card; completing the bootloader step"
-         resume=y
-      else
-         fail "$MPI_E_NOBOOT" "$dev already holds $MPI_IMAGE from this card, but the Pi started from the SD card again; the bootloader does not start this drive"
-      fi
-   else
-      fail "$MPI_E_NOTEMPTY" "$dev is not empty ($(wipefs --no-act --noheadings --output TYPE "$dev" 2>/dev/null | tr '\n' ' ')); set overwrite_nvme=yes in meltingplot/installer.conf to overwrite it"
-   fi
-fi
-resume=${resume:-n}
+action=$(mpi_decide "$blank" "$overwrite" "$serial" "$MPI_IMAGE")
+case $action in
+   write) ;;
+   overwrite)
+      mpi_log "$dev is not empty; installer.conf releases it, it will be overwritten" ;;
+   rewrite)
+      mpi_log "an earlier start of this card did not finish writing $dev; writing it again" ;;
+   bootloader)
+      mpi_log "$dev already holds $MPI_IMAGE from this card; completing the bootloader step" ;;
+   noboot)
+      fail "$MPI_E_NOBOOT" "$dev already holds $MPI_IMAGE from this card, but the Pi started from the SD card again; the bootloader does not start this drive" ;;
+   *)
+      fail "$MPI_E_NOTEMPTY" "$dev is not empty ($(wipefs --no-act --noheadings --output TYPE "$dev" 2>/dev/null | tr '\n' ' ')); set overwrite_nvme=yes in meltingplot/installer.conf to overwrite it" ;;
+esac
 
 # --- 2. the card --------------------------------------------------------------
 
-if [ "$resume" = n ]; then
+if [ "$action" != bootloader ]; then
    problem=$(mpi_identity_problem "$MPI_CARD/identity.conf")
    [ -z "$problem" ] || fail "$MPI_E_CONFIG" "meltingplot/identity.conf: $problem"
    if mpi_identity_set "$MPI_CARD/identity.conf"; then
@@ -103,13 +104,14 @@ if [ "$resume" = n ]; then
 
 # --- 3. write and compare -----------------------------------------------------
 
-   if [ "$overwrite" = y ]; then
+   if [ "$action" != write ]; then
       # Takes the old partition table and its backup at the end of the drive
       # with it, so nothing of the previous installation is read as current.
       wipefs --all --force "$dev" >/dev/null
    fi
-   # The previous run on this card may have left a state for this drive.
-   rm -f "$MPI_CARD/installer.state"
+   # From here on the drive is no longer empty. Should the card be stopped
+   # before it is done, the next start knows the drive as its own work.
+   mpi_state_write "$MPI_IMAGE" "$serial" writing
 
    mpi_log "writing $MPI_IMAGE to $dev"
    rm -f "$WORK/pipe.err"
@@ -160,8 +162,8 @@ if [ "$resume" = n ]; then
       cp "$MPI_IDENTITY_TEMPLATE" "$MPI_CARD/identity.conf"
       mpi_log "identity.conf on the card reset"
    fi
-   [ "$overwrite" = n ] || mpi_card_spend "$MPI_CARD/installer.conf" overwrite_nvme "used $(date -u +%Y-%m-%d)"
-   mpi_state_write "$MPI_IMAGE" "$serial" pending
+   [ "$action" != overwrite ] || mpi_card_spend "$MPI_CARD/installer.conf" overwrite_nvme "used $(date -u +%Y-%m-%d)"
+   mpi_state_write "$MPI_IMAGE" "$serial" bootloader
 fi
 
 # --- 5. bootloader --------------------------------------------------------------
@@ -177,18 +179,21 @@ if [ "$have" = "$want" ] && cmp -s "$WORK/current.conf" "$WORK/boot.conf"; then
    mpi_log "bootloader $have already configured"
 else
    mpi_log "bootloader ${have:-unknown} -> $want, configuration: $(grep -v '^\[' "$WORK/boot.conf" | tr '\n' ' ')"
+   # A power cut while the EEPROM is written can leave a Pi that no longer
+   # starts at all; the steady LED says to keep the power on.
+   mpi_led steady
    # The card installs the bootloader it was built with, also over a newer
    # one, so every device it commissions runs a known version. A board that
    # needs a newer one than that is still refused by rpi-eeprom-update.
    RPI_EEPROM_ALLOW_DOWNGRADE=1 rpi-eeprom-config --apply "$WORK/boot.conf" "$image" >> "$MPI_CARD/installer.log" 2>&1 ||
       fail "$MPI_E_FAILED" "updating the bootloader failed"
 fi
-mpi_state_write "$MPI_IMAGE" "$serial" "$want"
+mpi_state_write "$MPI_IMAGE" "$serial" done "$want"
 
 # --- 6. restart -----------------------------------------------------------------
 
 mpi_log "done; restarting into $dev"
 trap - EXIT
-mpi_led on
+mpi_led steady
 sync
 systemctl reboot

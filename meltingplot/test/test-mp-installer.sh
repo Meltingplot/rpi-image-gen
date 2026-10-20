@@ -18,7 +18,8 @@ MP_DEVICE_CONF=/nonexistent
 
 MPI_CARD="$tmp/card"
 MPI_SYS_BLOCK="$tmp/sys/block"
-MPI_LED="$tmp/led"
+MPI_LED="$tmp/led/ACT"
+MPI_LED_STOP="$tmp/led/PWR"
 MPI_BOOTLOADER_TS="$tmp/build-timestamp"
 . "$here/../layer/mp-installer.d/customize.overlay/usr/lib/meltingplot/mp-installer.sh"
 mkdir -p "$MPI_CARD" "$MPI_SYS_BLOCK"
@@ -117,10 +118,45 @@ check "indented comment is blank"     no  "$(yesno mpi_identity_set "$id")"
 # --- state of the card ----------------------------------------------------------
 
 check "no state"                      ""  "$(mpi_state_get serial)"
-mpi_state_write mp-duet-pi5-1.0.0 S6EUNX0T123456 pending
+mpi_state_write mp-duet-pi5-1.0.0 S6EUNX0T123456 done 2026-09-25
 check "state image"                   mp-duet-pi5-1.0.0 "$(mpi_state_get image)"
 check "state serial"                  S6EUNX0T123456    "$(mpi_state_get serial)"
-check "state bootloader"              pending           "$(mpi_state_get bootloader)"
+check "state step"                    done              "$(mpi_state_get step)"
+check "state bootloader"              2026-09-25        "$(mpi_state_get bootloader)"
+mpi_state_write mp-duet-pi5-1.0.0 S6EUNX0T123456 writing
+check "no bootloader before done"     ""                "$(mpi_state_get bootloader)"
+
+# --- what to do with the drive ----------------------------------------------------
+# An interrupted card must pick its own drive up again without the release
+# switch, and must never take a drive it does not know for its own.
+
+img=mp-duet-pi5-1.0.0 sn=S6EUNX0T123456
+rm -f "$MPI_CARD/installer.state"
+check "empty drive"                   write      "$(mpi_decide y n "$sn" $img)"
+check "empty drive, released anyway"  write      "$(mpi_decide y y "$sn" $img)"
+check "foreign drive"                 notempty   "$(mpi_decide n n "$sn" $img)"
+check "foreign drive, released"       overwrite  "$(mpi_decide n y "$sn" $img)"
+mpi_state_write $img "$sn" writing
+check "own drive, write interrupted"  rewrite    "$(mpi_decide n n "$sn" $img)"
+check "released beats own state"      overwrite  "$(mpi_decide n y "$sn" $img)"
+check "other drive, same card"        notempty   "$(mpi_decide n n OTHER123 $img)"
+check "unknown serial never own"      notempty   "$(mpi_decide n n "" $img)"
+check "other image on the card"       notempty   "$(mpi_decide n n "$sn" mp-duet-pi5-1.0.1)"
+mpi_state_write $img "$sn" bootloader
+check "own drive, bootloader pending" bootloader "$(mpi_decide n n "$sn" $img)"
+mpi_state_write $img "$sn" done 2026-09-25
+check "own drive, installed"          noboot     "$(mpi_decide n n "$sn" $img)"
+
+# --- LEDs -------------------------------------------------------------------------
+# Fake sysfs: the trigger and brightness files of both LEDs.
+
+mkdir -p "$MPI_LED" "$MPI_LED_STOP"
+for f in trigger brightness delay_on delay_off; do : > "$MPI_LED/$f"; : > "$MPI_LED_STOP/$f"; done
+mpi_led busy
+check "busy: green flickers evenly"   "timer 100 100" "$(cat "$MPI_LED/trigger" "$MPI_LED/delay_on" "$MPI_LED/delay_off" | tr '\n' ' ' | sed 's/ $//')"
+check "busy: red off"                 "none 0"        "$(cat "$MPI_LED_STOP/trigger" "$MPI_LED_STOP/brightness" | tr '\n' ' ' | sed 's/ $//')"
+mpi_led steady
+check "steady: green on"                "none 1"        "$(cat "$MPI_LED/trigger" "$MPI_LED/brightness" | tr '\n' ' ' | sed 's/ $//')"
 
 # --- bootloader configuration -----------------------------------------------------
 
