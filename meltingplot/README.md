@@ -400,8 +400,14 @@ SD card, without a screen or keyboard and without taking the drive out:
 2. Edit `meltingplot/identity.conf` on the card's FAT partition (`bootfs`) as
    in step 3 above. The card checks it before it writes anything, and stops if
    the first boot would not accept a value.
-3. Put the card into the Pi and power it up. The green LED flickers while the
-   card works, a few minutes.
+3. Put the card into the Pi and power it up. The green LED flickers fast and
+   evenly while the card works, about two minutes from power-up; taking the
+   power away then does no harm, the next start from the card writes the
+   drive again. At the end the LED stays on for some seconds while the
+   bootloader is written, until the Pi restarts. Keep the power on then: a
+   cut while the bootloader is written can leave a Pi that does not start at
+   all, and only a bootloader recovery card from Raspberry Pi Imager brings
+   it back.
 
 The card then
 
@@ -428,9 +434,9 @@ drive anyway, set `overwrite_nvme=yes` in `meltingplot/installer.conf` on the
 card. Everything on the drive is lost; the line is spent with that one
 installation.
 
-If the card stops, the green LED blinks a number of times, pauses and
-repeats, until power is removed. `meltingplot/installer.log` on the card says
-why:
+If the card stops, the red LED comes on and the green one blinks a number of
+times, pauses and repeats, until power is removed. `meltingplot/installer.log`
+on the card says why:
 
 | Blinks | Meaning |
 |---|---|
@@ -440,8 +446,11 @@ why:
 | 5 | the card installed this drive already, yet the Pi started from the card again: the bootloader does not start the drive |
 | 6 | anything else: a damaged card, a drive that does not read back what was written, a failed bootloader update |
 
-A card started again after it wrote the drive but before the bootloader was
-updated finishes the bootloader step. On a Pi 5 the bootloader is written at
+The card keeps track of how far it got with a drive in
+`meltingplot/installer.state`. Started again on a drive it began to write, it
+writes it again without asking for `overwrite_nvme`; started again after it
+wrote the drive but before the bootloader was updated, it finishes the
+bootloader step. On a Pi 5 the bootloader is written at
 once through flashrom where the kernel offers the EEPROM's SPI device, and
 otherwise staged on the card and written on the next start from it; either way
 the Pi ends up on the drive. The card installs its bootloader also over a newer

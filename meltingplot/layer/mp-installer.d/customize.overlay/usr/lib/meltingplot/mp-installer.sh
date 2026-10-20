@@ -1,8 +1,8 @@
 # Helpers of the installer card. POSIX sh, sourced after mp-common.sh.
 #
 # The card boots a Raspberry Pi 5 from SD and writes the A/B image it carries
-# to the NVMe drive. Nobody is at the machine: what the card did is told by the
-# green LED and by meltingplot/installer.log on its FAT partition, which any
+# to the NVMe drive. Nobody is at the machine: what the card does is told by
+# the LEDs and by meltingplot/installer.log on its FAT partition, which any
 # PC can read. Everything that decides something lives here, so the tests can
 # run it on the build host with stubs.
 
@@ -14,11 +14,13 @@ MPI_CARD=${MPI_CARD:-/boot/firmware/meltingplot}
 # The pristine identity.conf, put back on the card once a device has its copy.
 MPI_IDENTITY_TEMPLATE=${MPI_IDENTITY_TEMPLATE:-/usr/share/meltingplot/installer/identity.conf}
 MPI_SYS_BLOCK=${MPI_SYS_BLOCK:-/sys/block}
+# The green LED shows the card at work, the red one that it stopped.
 MPI_LED=${MPI_LED:-/sys/class/leds/ACT}
+MPI_LED_STOP=${MPI_LED_STOP:-/sys/class/leds/PWR}
 MPI_BOOTLOADER_TS=${MPI_BOOTLOADER_TS:-/proc/device-tree/chosen/bootloader/build-timestamp}
 
-# Why the installer stopped. The green LED blinks this many times, pauses,
-# and repeats, so the reason can be told without a screen.
+# Why the installer stopped. The red LED is on, the green one blinks this many
+# times, pauses and repeats, so the reason can be told without a screen.
 MPI_E_NODRIVE=2    # no NVMe drive, or more than one
 MPI_E_NOTEMPTY=3   # the drive holds data and installer.conf does not release it
 MPI_E_CONFIG=4     # identity.conf on the card is not usable
@@ -145,22 +147,51 @@ mpi_card_spend() {
       mv -f "$_f.tmp" "$_f"
 }
 
-# The card remembers the last drive it installed, so a Pi that starts from SD
-# again after an installation can say why instead of refusing a full drive.
-#   image=<image name>  serial=<drive serial>  bootloader=pending|<date>
+# The card remembers the last drive it worked on and how far it got, so a
+# start after an interruption picks its own work up instead of refusing a
+# drive that is no longer empty, and a Pi that starts from SD again after an
+# installation can say why.
+#   image=<image name>  serial=<drive serial>
+#   step=writing|bootloader|done  bootloader=<date, once done>
 mpi_state_get() {
    mp_conf_get "$MPI_CARD/installer.state" "$1"
 }
 
 mpi_state_write() {
    {
-      echo "# Written by mp-installer: the last drive this card installed."
+      echo "# Written by mp-installer: the last drive this card worked on."
       echo "image=$1"
       echo "serial=$2"
-      echo "bootloader=$3"
+      echo "step=$3"
+      [ -z "${4:-}" ] || echo "bootloader=$4"
    } > "$MPI_CARD/installer.state.tmp" &&
       mv -f "$MPI_CARD/installer.state.tmp" "$MPI_CARD/installer.state"
    sync "$MPI_CARD/installer.state" 2>/dev/null || true
+}
+
+# What to do with the drive, from what the card finds.
+#   $1 drive empty y|n  $2 installer.conf releases it y|n
+#   $3 drive serial     $4 the image this card installs
+# Prints one of:
+#   write       an empty drive
+#   overwrite   a drive with data, released by installer.conf
+#   rewrite     this card began writing this drive and was interrupted
+#   bootloader  this card wrote this drive, the bootloader step did not finish
+#   noboot      this card installed this drive, yet the Pi started from SD again
+#   notempty    a drive with data the card knows nothing about
+mpi_decide() {
+   if [ "$1" = y ]; then echo write; return 0; fi
+   if [ "$2" = y ]; then echo overwrite; return 0; fi
+   if [ -n "$3" ] && [ "$(mpi_state_get serial)" = "$3" ] &&
+      [ "$(mpi_state_get image)" = "$4" ]; then
+      case $(mpi_state_get step) in
+         writing) echo rewrite ;;
+         bootloader) echo bootloader ;;
+         *) echo noboot ;;
+      esac
+      return 0
+   fi
+   echo notempty
 }
 
 # --- bootloader -----------------------------------------------------------
@@ -202,20 +233,40 @@ mpi_bootloader_date() {
    date -u -d "@$_ts" +%Y-%m-%d
 }
 
-# --- the LED --------------------------------------------------------------
+# --- the LEDs -------------------------------------------------------------
+# At work the green LED flickers fast and evenly, with no pause in it, so it
+# cannot be counted and taken for a reason code (the heartbeat pattern, two
+# beats and a pause, looks exactly like code 2); power may be taken away then,
+# the next start picks the work up. While the bootloader is written and until
+# the restart it stays on: power must stay on now. Stopped, the red LED comes
+# on and the green one counts the code.
+
+mpi_led_set() {
+   [ -w "$1/trigger" ] || return 0
+   case $2 in
+      flicker)
+         if echo timer > "$1/trigger" 2>/dev/null; then
+            echo 100 > "$1/delay_on" 2>/dev/null || true
+            echo 100 > "$1/delay_off" 2>/dev/null || true
+         else
+            echo none > "$1/trigger"; echo 1 > "$1/brightness"
+         fi ;;
+      on)  echo none > "$1/trigger"; echo 1 > "$1/brightness" ;;
+      off) echo none > "$1/trigger"; echo 0 > "$1/brightness" ;;
+   esac
+}
 
 mpi_led() {
-   [ -w "$MPI_LED/trigger" ] || return 0
    case $1 in
-      busy) echo heartbeat > "$MPI_LED/trigger" 2>/dev/null || echo timer > "$MPI_LED/trigger" 2>/dev/null || true ;;
-      on)   echo none > "$MPI_LED/trigger"; echo 1 > "$MPI_LED/brightness" ;;
-      off)  echo none > "$MPI_LED/trigger"; echo 0 > "$MPI_LED/brightness" ;;
+      busy) mpi_led_set "$MPI_LED_STOP" off; mpi_led_set "$MPI_LED" flicker ;;
+      steady) mpi_led_set "$MPI_LED_STOP" off; mpi_led_set "$MPI_LED" on ;;
    esac
 }
 
 # Blink a reason code for good. The installer ends here when it fails.
 mpi_blink_forever() {
-   mpi_led off
+   mpi_led_set "$MPI_LED_STOP" on
+   mpi_led_set "$MPI_LED" off
    [ -w "$MPI_LED/brightness" ] || exec sleep infinity
    while :; do
       _i=0
