@@ -288,8 +288,8 @@ builds from the modified source, what Duet3D would have put in its archive:
 
 ```bash
 # in the fork, on the branch of the pinned generation (v3.7-dev for 3.7.0)
-# Directory.Build.props: <Version>3.7.0+mp.4</Version>
-# pkg/dwc-version:       v3.7.0+mp.3
+# Directory.Build.props: <Version>3.7.0+mp.5</Version>
+# pkg/dwc-version:       v3.7.0+mp.4
 pkg/build.sh --target-arch=aarch64 --packages=progs,dwc,meta deb
 ```
 
