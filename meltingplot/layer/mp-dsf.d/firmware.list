@@ -17,18 +17,24 @@
 Duet3Firmware_TOOL1LC.bin sha256:50240777d0e9fa9d974799a2d78c1eebb3c118914c4d17fc03d96f3aceaa80a9 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.1/Duet3Firmware_TOOL1LC.bin
 Duet3Firmware_EXP1HCL.bin sha256:15032407132d0584b31c5bb5946020ef8768ece0c064a27d1e017ba0df61c559 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.1/Duet3Firmware_EXP1HCL.bin
 Duet3Firmware_SZP.bin sha256:a44be54fabd04cf757665200043121e2fb4f125cef4dd966bdd471176f39c822 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.1/Duet3Firmware_SZP.bin
-# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0 (c83e79926), built by us
-# against the Meltingplot library forks with a version string of its own, so
-# DuetControlServer flashes it on an image update. The firmware reports its
+# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0+1 (ea93885ac), built by
+# us against the Meltingplot library forks with a version string of its own,
+# so DuetControlServer flashes it on an image update. The firmware reports its
 # accelerometers under sensors.accelerometers, where DuetSoftwareFramework
-# 3.7.0-rc.2 and later look for them; 3.7.0-rc.1 does not. Upstream 3.7.0
+# 3.7.0-rc.2 and later look for them; 3.7.0-rc.1 does not. Since 3.7.0 it
 # loads the MB6HC's IAP image at 0x20458000 again, where the packaged
 # Duet3_SBCiap32_MB6HC.bin is linked, and carries our fixes for macro and file
 # requests over the SBC. Our CoreN2G discards the instructions the SAME70
 # fetches from flash while reading the user signature, which made an MB6HC on
-# 3.7.0-rc.2+1-mp.3 hard-fault in M122. On top of upstream, mp.2 lets the main
-# task carry out G-code requests from other tasks, and does an emergency stop
-# when an established SBC connection is lost, so the mainboard resets
-# whenever DuetControlServer restarts or the Pi reboots and runs config.g
-# again once it reconnects.
-Duet3Firmware_MB6HC.bin sha256:fade0fb32603cdd083dd716afbc55c87506b8eaa71042e3c0b0850e32b0b6f6f https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0-mp.2/Duet3Firmware_MB6HC.bin
+# 3.7.0-rc.2+1-mp.3 hard-fault in M122. On top of upstream, the main task
+# carries out G-code requests from other tasks, and losing an established SBC
+# connection is an emergency stop, so the mainboard resets whenever
+# DuetControlServer restarts or the Pi reboots and runs config.g again once
+# it reconnects. Since 3.7.0+1.mp.1 every emergency stop also turns ATX power
+# off, which on the CHX 350 switches the 24 V and 48 V supply (out0 in
+# e-stop.g of the printer configuration). Trigger 0 fires when its
+# expression cannot be evaluated, M581.1 takes an action (U) that RRF runs
+# without the SBC and a confirmation time (D), and L1 locks a trigger until
+# the next restart, as trigger 0 and every trigger with an action are anyway.
+# The printer configuration uses none of these trigger features yet.
+Duet3Firmware_MB6HC.bin sha256:57b5e83476aa17b089ee2ede84b7293a7ba5b2cfed3c8d8471731d92403687ab https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.1/Duet3Firmware_MB6HC.bin
