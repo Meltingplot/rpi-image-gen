@@ -24,9 +24,10 @@
 # A mainboard found halted on the way to idle is reset once. Our
 # RepRapFirmware (since 3.7.0-mp.2) does an emergency stop when it loses an
 # established connection to the control server, and every restart of the Pi
-# is such a loss. It then turns off heaters and motors, takes the expansion
-# boards off the CAN bus and refuses every code but status requests, M112 and
-# M999 until it is reset, and DuetControlServer connects to it as it is.
+# is such a loss. It then turns off heaters, motors and, since 3.7.0+1.mp.1,
+# ATX power, takes the expansion boards off the CAN bus and refuses every code
+# but status requests, M112 and M999 until it is reset, and DuetControlServer
+# connects to it as it is.
 # Nothing that ran before the restart can be carried on, so this resets it
 # with M999, as Duet Web Control's reset button does, and the mainboard starts
 # again with config.g. One that halts again stays halted, for someone to look
