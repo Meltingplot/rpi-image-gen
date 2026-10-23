@@ -17,7 +17,7 @@
 Duet3Firmware_TOOL1LC.bin sha256:da453b2a75571c7b23e77f2377f5ba7acdcfb8ed04e5a50814ac48f2b3e40965 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.2/Duet3Firmware_TOOL1LC.bin
 Duet3Firmware_EXP1HCL.bin sha256:6b1ddd9e6dc284a037fb9cbe3ed5a185002a5ce9402e602b037643e89bfea25e https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.2/Duet3Firmware_EXP1HCL.bin
 Duet3Firmware_SZP.bin sha256:0e06b656eb94948486f1dfdf472ed3074e9178fbae9083890749ffa6767f6393 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.2/Duet3Firmware_SZP.bin
-# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0+1 (ea93885ac), built by
+# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0+1 (3079393dc), built by
 # us against the Meltingplot library forks with a version string of its own,
 # so DuetControlServer flashes it on an image update. The firmware reports its
 # accelerometers under sensors.accelerometers, where DuetSoftwareFramework
@@ -36,5 +36,12 @@ Duet3Firmware_SZP.bin sha256:0e06b656eb94948486f1dfdf472ed3074e9178fbae908389074
 # expression cannot be evaluated, M581.1 takes an action (U) that RRF runs
 # without the SBC and a confirmation time (D), and L1 locks a trigger until
 # the next restart, as trigger 0 and every trigger with an action are anyway.
-# The printer configuration uses none of these trigger features yet.
-Duet3Firmware_MB6HC.bin sha256:57b5e83476aa17b089ee2ede84b7293a7ba5b2cfed3c8d8471731d92403687ab https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.1/Duet3Firmware_MB6HC.bin
+# The printer configuration uses none of these trigger features yet. Since
+# 3.7.0+1.mp.2 the firmware writes the code replies it has queued before any
+# request that DuetControlServer matches against the order of its codes, such
+# as a file abort, a macro request or a message box, so none of them overtakes
+# the reply of the code before it. It no longer replies to an M99 that ends a
+# macro file; DuetSoftwareFramework completes that M99 itself since
+# 3.7.0+mp.6 and reports it as cancelled before. The # operator on an object
+# model value that is null is an error now, where it used to return null.
+Duet3Firmware_MB6HC.bin sha256:0ebda1872039f5856a889e6c6dd9dedbf6acb5b5a6036e0ad01be5978f76edfc https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.2/Duet3Firmware_MB6HC.bin
