@@ -37,11 +37,12 @@ Duet3Firmware_SZP.bin sha256:0e06b656eb94948486f1dfdf472ed3074e9178fbae908389074
 # without the SBC and a confirmation time (D), and L1 locks a trigger until
 # the next restart, as trigger 0 and every trigger with an action are anyway.
 # The printer configuration uses none of these trigger features yet. Since
-# 3.7.0+1.mp.2 the firmware writes the code replies it has queued before any
-# request that DuetControlServer matches against the order of its codes, such
-# as a file abort, a macro request or a message box, so none of them overtakes
-# the reply of the code before it. It no longer replies to an M99 that ends a
-# macro file; DuetSoftwareFramework completes that M99 itself since
-# 3.7.0+mp.6 and reports it as cancelled before. The # operator on an object
-# model value that is null is an error now, where it used to return null.
-Duet3Firmware_MB6HC.bin sha256:0ebda1872039f5856a889e6c6dd9dedbf6acb5b5a6036e0ad01be5978f76edfc https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.2/Duet3Firmware_MB6HC.bin
+# 3.7.0+1.mp.2 the firmware writes the code replies it has queued before a
+# file abort and before a message box, the two requests that can follow a
+# batch of file codes, so neither overtakes the reply of a code in that batch;
+# since 3.7.0+1.mp.3 it writes all other requests as upstream does again. It
+# no longer replies to an M99 that ends a macro file; DuetSoftwareFramework
+# completes that M99 itself since 3.7.0+mp.6 and reports it as cancelled
+# before. The # operator on an object model value that is null is an error
+# now, where it used to return null.
+Duet3Firmware_MB6HC.bin sha256:442a8fbfb09a996b600d74ee2cfa14d9fd15bb891e89d76bb4fd08cbf47d68c3 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.3/Duet3Firmware_MB6HC.bin
