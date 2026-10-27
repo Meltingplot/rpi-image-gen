@@ -17,7 +17,7 @@
 Duet3Firmware_TOOL1LC.bin sha256:e12f6eb556477e8f8be23d0d7505d5665ac4daae11930e09322c4862c2751bc3 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.3/Duet3Firmware_TOOL1LC.bin
 Duet3Firmware_EXP1HCL.bin sha256:823f59e5a8a1cc521ee9088e7bcf7d1ec82cdac27080fff8f7286d842d864bbe https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.3/Duet3Firmware_EXP1HCL.bin
 Duet3Firmware_SZP.bin sha256:86f3fcc75bff8ff1f8ad50bf296d4b952df8303fa76d43b6087bee17fee2cf44 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.3/Duet3Firmware_SZP.bin
-# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0+1 (3079393dc), built by
+# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0+1 (f2e44bcc9), built by
 # us against the Meltingplot library forks with a version string of its own,
 # so DuetControlServer flashes it on an image update. The firmware reports its
 # accelerometers under sensors.accelerometers, where DuetSoftwareFramework
@@ -36,17 +36,18 @@ Duet3Firmware_SZP.bin sha256:86f3fcc75bff8ff1f8ad50bf296d4b952df8303fa76d43b6087
 # expression cannot be evaluated, M581.1 takes an action (U) that RRF runs
 # without the SBC and a confirmation time (D), and L1 locks a trigger until
 # the next restart, as trigger 0 and every trigger with an action are anyway.
-# The printer configuration uses none of these trigger features yet. Since
-# 3.7.0+1.mp.2 the firmware writes the code replies it has queued before a
-# file abort and before a message box, the two requests that can follow a
-# batch of file codes, so neither overtakes the reply of a code in that batch;
-# since 3.7.0+1.mp.3 it writes all other requests as upstream does again. It
-# no longer replies to an M99 that ends a macro file; DuetSoftwareFramework
-# completes that M99 itself since 3.7.0+mp.6 and reports it as cancelled
-# before. The # operator on an object model value that is null is an error
-# now, where it used to return null. Since 3.7.0+1.mp.4 a running trigger
-# macro no longer makes state.status busy by itself, as the daemon never did;
-# its moves, a blocking message box it opens and heater tuning still do. The
-# daemon.g of the printer configuration counts busy as activity and resets
-# its heater idle timer on it.
-Duet3Firmware_MB6HC.bin sha256:f9d3335786532515c3bc6b67233c6f218236a99522a22cb7ff946f5a9d82c23e https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.4/Duet3Firmware_MB6HC.bin
+# The printer configuration uses none of these trigger features yet. Before
+# a single file abort and before a message box, the two requests that can
+# follow a batch of file codes, the firmware writes the code replies it has
+# queued, so neither overtakes the reply of a code in that batch. Since
+# 3.7.0+1.mp.5 that is Duet3D's fix (f2e44bcc9) in place of ours from
+# 3.7.0+1.mp.2; aborting all files, an error path, does not wait for the
+# replies. The firmware no longer replies to an M99 that ends a macro file;
+# DuetSoftwareFramework completes that M99 itself since 3.7.0+mp.6 and
+# reports it as cancelled before. The # operator on an object model value
+# that is null is an error now, where it used to return null. Since
+# 3.7.0+1.mp.4 a running trigger macro no longer makes state.status busy by
+# itself, as the daemon never did; its moves, a blocking message box it opens
+# and heater tuning still do. The daemon.g of the printer configuration counts
+# busy as activity and resets its heater idle timer on it.
+Duet3Firmware_MB6HC.bin sha256:3468cf910926e96b95fc1ae63958f08dd8e9ac336ce3d3257d880850b10192b0 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.5/Duet3Firmware_MB6HC.bin
