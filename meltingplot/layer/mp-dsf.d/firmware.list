@@ -44,5 +44,9 @@ Duet3Firmware_SZP.bin sha256:0e06b656eb94948486f1dfdf472ed3074e9178fbae908389074
 # no longer replies to an M99 that ends a macro file; DuetSoftwareFramework
 # completes that M99 itself since 3.7.0+mp.6 and reports it as cancelled
 # before. The # operator on an object model value that is null is an error
-# now, where it used to return null.
-Duet3Firmware_MB6HC.bin sha256:442a8fbfb09a996b600d74ee2cfa14d9fd15bb891e89d76bb4fd08cbf47d68c3 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.3/Duet3Firmware_MB6HC.bin
+# now, where it used to return null. Since 3.7.0+1.mp.4 a running trigger
+# macro no longer makes state.status busy by itself, as the daemon never did;
+# its moves, a blocking message box it opens and heater tuning still do. The
+# daemon.g of the printer configuration counts busy as activity and resets
+# its heater idle timer on it.
+Duet3Firmware_MB6HC.bin sha256:f9d3335786532515c3bc6b67233c6f218236a99522a22cb7ff946f5a9d82c23e https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.4/Duet3Firmware_MB6HC.bin
