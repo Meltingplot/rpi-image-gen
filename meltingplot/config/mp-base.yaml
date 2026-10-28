@@ -31,10 +31,19 @@ device:
 image:
   layer: image-rota
   rootfs_type: erofs
+  # An update brings the boot filesystem at exactly this size, so it stays as
+  # long as devices written with it are in the field: a larger one would not
+  # fit their boot slots. The boot ramdisk takes about 50 MB of it.
   boot_part_size: 128M
-  # Base system about 400 MB, DSF with its .NET runtime and Duet Web Control
-  # about 200 MB, the rest is headroom for a release to grow into.
-  system_part_size: 1G
+  # A device keeps the slots it was first written with: an update replaces the
+  # system in a slot, never the partition table, so the slot has to hold every
+  # release the device will get. The update brings the system at its own size,
+  # not the slot's, and fits any slot it is not larger than. Today the system
+  # takes about 0.45 GB on the printer SBC and 0.7 GB on the operator panel.
+  # Devices written before had 1G (printer SBC) and 2G (operator panel) slots
+  # and keep them until they are written anew. The same on both computers; the
+  # whole image, about 12.3 GiB, still fits a 16 GB card.
+  system_part_size: 4G
   # Starting size only. mp-growfs expands it to the medium on first boot, and
   # rpi-sb-provisioner does the same while provisioning.
   data_part_size: 4G
