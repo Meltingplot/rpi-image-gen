@@ -365,8 +365,8 @@ to the boot partition when the medium is flashed.
 
 1. Take `mp-duet-pi5-<version>.img.zst` from the release and check it against
    `SHA256SUMS`.
-2. Write it to the SD card or NVMe drive, with Raspberry Pi Imager (*Use
-   custom*) or:
+2. Write it to an SD card of at least 16 GB or to the NVMe drive, with
+   Raspberry Pi Imager (*Use custom*) or:
    ```bash
    zstdcat mp-duet-pi5-<version>.img.zst | sudo dd of=/dev/sdX bs=4M conv=fsync
    ```

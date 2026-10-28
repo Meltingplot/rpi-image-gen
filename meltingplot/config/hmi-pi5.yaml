@@ -12,10 +12,6 @@ include:
 
 image:
   name: mp-hmi-pi5-${IGconf_image_version}
-  # Base system about 400 MB, labwc, Chromium and the GTK panel about 600 MB,
-  # the camera stack and NetworkManager about 100 MB, the rest is headroom for
-  # a release to grow into.
-  system_part_size: 2G
 
 mpid:
   role: hmi
