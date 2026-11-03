@@ -10,8 +10,9 @@
 #  panel's own origins, so a page from the internet opened on the panel cannot
 #  drive the printer. While the SBC does not answer, the panel shows a waiting
 #  page that reloads itself; while the panel installs an update, an update
-#  page instead of the printer, on its screen and in every browser.
-# X-Env-Layer-Version: 1.1.0
+#  page instead of the printer, on its screen and in every browser. The USB
+#  sticks at the panel (mp-hmi-usb) only to the panel's own browser.
+# X-Env-Layer-Version: 1.2.0
 # X-Env-Layer-Requires: mp-identity,mp-hmi-net
 #
 # X-Env-VarRequires: IGconf_mpnet_address
@@ -47,6 +48,7 @@ mmdebstrap:
       set -eu
       sbc=$IGconf_hmiproxy_sbc:80
       cam=$IGconf_hmiproxy_camera
+      panel=${IGconf_mpnet_address%/*}
       cat > "$1/etc/haproxy/haproxy.cfg" <<-EOF
       # Written by rpi-image-gen layer mp-hmi-proxy.
       global
@@ -93,6 +95,16 @@ mmdebstrap:
           acl is_webcam   path -i /webcam
           acl is_snapshot path -i /snapshot
           acl is_licenses path_beg /licenses/
+          acl is_usb      path_beg /hmi/usb/
+          # Whoever put a stick into the panel stands at the machine: its
+          # files are for the panel's own browser, which comes from the
+          # loopback or the panel's address in the printer network. A browser
+          # in the customer network does not even learn that a stick is in.
+          acl from_panel  src 127.0.0.0/8 ::1 $panel
+          # The job list asks every few seconds whether a stick is in; a copy
+          # (/hmi/usb/file) is still logged.
+          http-request set-log-level silent if { path /hmi/usb/list }
+          http-request deny deny_status 404 if is_usb !from_panel
           # While an update installs, mp-hmi-ota-state puts "/" in this list,
           # which every path begins with. The camera stays, so the printer's
           # time-lapse goes on until the panel restarts.
@@ -105,6 +117,7 @@ mmdebstrap:
           use_backend webcam_backend        if is_webcam
           use_backend snapshot_backend      if is_snapshot
           use_backend licenses_backend      if is_licenses
+          use_backend usb_backend           if is_usb
           use_backend backend_servers_short if sbc_busy
           default_backend backend_servers
 
@@ -139,6 +152,11 @@ mmdebstrap:
       backend licenses_backend
           http-request set-path %[path,regsub(^/licenses/,/)]
           server licenses 127.0.0.1:8082
+
+      # The USB sticks at the panel (mp-hmi-usb), when the image has them.
+      backend usb_backend
+          http-request set-path %[path,regsub(^/hmi/usb/,/)]
+          server usb 127.0.0.1:8083
       EOF
       # The origin list only exists at runtime; a stand-in lets haproxy check
       # the rest.

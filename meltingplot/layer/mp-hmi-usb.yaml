@@ -1,0 +1,22 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-hmi-usb
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: USB sticks at the operator panel, for the job list of the
+#  printer's interface. A stick is mounted read-only the moment it is put in
+#  and taken away when it is pulled. A small server on the loopback lists its
+#  folders and G-code files and hands such a file out; mp-hmi-proxy passes it
+#  on as /hmi/usb/ to the panel's own browser only, since whoever put the
+#  stick in stands at the machine. The interface shows the stick as a folder
+#  and copies a job from it to the printer SBC. FAT, exFAT and NTFS; nothing
+#  on a stick is written or run.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: mp-hmi-proxy
+# X-Env-Layer-RequiresProvider: systemd
+# METAEND
+---
+mmdebstrap:
+  packages:
+    # the server
+    - python3
+  customize-hooks:
+    - $BDEBSTRAP_HOOKS/enable-units "$1" mp-hmi-usb

@@ -1,0 +1,89 @@
+#!/bin/sh
+# Mount a USB stick at the panel read-only for mp-hmi-usb-serve, and take it
+# away again:
+#
+#   mp-hmi-usb-mount start|stop <kernel name>
+#
+# run by mp-hmi-usb-mount@<kernel name>.service, which udev starts when the
+# stick comes and its removal stops.
+#
+#   /run/mp-hmi-usb/<name>/fs      the filesystem
+#   /run/mp-hmi-usb/<name>/label   its label, empty if it has none; there
+#                                  while the filesystem is mounted, and only
+#                                  then does the server list the stick
+#
+# Read-only, without devices, set-id or executables, every file readable to
+# the server whatever the stick says. Names in UTF-8: the panel's kernel reads
+# FAT names as ASCII otherwise and turns every umlaut into a question mark.
+# FAT keeps the local time of the computer that wrote the file, without a
+# zone, and the kernel takes it for UTC; the offset of the panel's zone at
+# mounting puts it right (exFAT and NTFS keep UTC).
+
+set -eu
+
+MP_USB_DIR=${MP_USB_DIR:-/run/mp-hmi-usb}
+
+action=${1:?start or stop}
+name=${2-}
+case $name in
+   [a-z]*) ;;
+   *) echo "mp-hmi-usb-mount: no device name: $name" >&2; exit 2 ;;
+esac
+case $name in
+   *[!a-z0-9]*) echo "mp-hmi-usb-mount: no device name: $name" >&2; exit 2 ;;
+esac
+dir=$MP_USB_DIR/$name
+
+# The panel's offset from UTC in minutes, +0100 -> 60
+utc_offset() {
+   z=$(date +%z)
+   hh=${z#?}
+   hh=${hh%??}
+   mm=${z#???}
+   min=$(( ${hh#0} * 60 + ${mm#0} ))
+   case $z in -*) min=$(( -min )) ;; esac
+   echo "$min"
+}
+
+# A property udev found on the device. Not through --export and eval: the
+# label is the stick's and goes in unquoted.
+prop() {
+   udevadm info --query=property --name="/dev/$name" | sed -n "s/^$1=//p"
+}
+
+case $action in
+start)
+   type=$(prop ID_FS_TYPE)
+   case $type in
+      vfat)  opts=utf8,time_offset=$(utc_offset) ;;
+      exfat) opts=iocharset=utf8 ;;
+      ntfs)  type=ntfs3 opts=iocharset=utf8 ;;
+      *)
+         echo "mp-hmi-usb-mount: $name holds '$type', which the panel does not read" >&2
+         exit 0 ;;
+   esac
+   install -d -m 0755 "$MP_USB_DIR" "$dir" "$dir/fs"
+   if ! mount -t "$type" -o "ro,nosuid,nodev,noexec,noatime,fmask=0133,dmask=0022,$opts" \
+         "/dev/$name" "$dir/fs"; then
+      rmdir "$dir/fs" "$dir"
+      exit 1
+   fi
+   prop ID_FS_LABEL > "$dir/label.tmp"
+   chmod 0644 "$dir/label.tmp"
+   mv -f "$dir/label.tmp" "$dir/label"
+   echo "mp-hmi-usb-mount: $name ($type, '$(cat "$dir/label")') mounted"
+   ;;
+stop)
+   rm -f "$dir/label" "$dir/label.tmp"
+   # systemd may have taken the filesystem away already, with the device
+   if mountpoint -q "$dir/fs"; then
+      umount -l "$dir/fs"
+   fi
+   [ ! -d "$dir/fs" ] || rmdir "$dir/fs"
+   [ ! -d "$dir" ] || rmdir "$dir"
+   echo "mp-hmi-usb-mount: $name unmounted"
+   ;;
+*)
+   echo "mp-hmi-usb-mount: start or stop, not $action" >&2
+   exit 2 ;;
+esac
