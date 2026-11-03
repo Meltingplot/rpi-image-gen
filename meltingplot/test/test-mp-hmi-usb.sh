@@ -56,7 +56,7 @@ usb=$tmp/usb
 run_mount() {
    : > "$tmp/calls"
    rc=0
-   PATH="$tmp/bin:$PATH" MP_USB_DIR=$usb sh "$d/mp-hmi-usb-mount" "$@" \
+   PATH="$tmp/bin:$PATH" MP_USB_DIR=$usb TZ=${tz:-CET-1} sh "$d/mp-hmi-usb-mount" "$@" \
       > "$tmp/out" 2>&1 || rc=$?
 }
 props() {
@@ -67,9 +67,17 @@ opts=ro,nosuid,nodev,noexec,noatime,fmask=0133,dmask=0022
 props sda1 vfat INTENSO
 run_mount start sda1
 check "FAT: exit" 0 "$rc"
-check "FAT: read-only, names in UTF-8" "mount -t vfat -o $opts,utf8 /dev/sda1 $usb/sda1/fs" \
+check "FAT: read-only, UTF-8, the panel's time" "mount -t vfat -o $opts,utf8,time_offset=60 /dev/sda1 $usb/sda1/fs" \
    "$(grep '^mount' "$tmp/calls")"
 check "FAT: label published" INTENSO "$(cat "$usb/sda1/label")"
+for tz in UTC0:0 CEST-2 IST-5:30 NST3:30 HST10; do
+   rm -rf "$usb/sda1"
+   run_mount start sda1
+   check "FAT: time offset in $tz" "$(TZ=$tz date +%z)" \
+      "$(grep -o 'time_offset=[-0-9]*' "$tmp/calls" | sed 's/time_offset=//' |
+         awk '{ m = $1 < 0 ? -$1 : $1; printf "%s%02d%02d", ($1 < 0 ? "-" : "+"), m / 60, m % 60 }')"
+done
+tz=
 
 # a label is the stick's own: never evaluated
 props sdb1 exfat "it's \$(touch $tmp/pwned)"

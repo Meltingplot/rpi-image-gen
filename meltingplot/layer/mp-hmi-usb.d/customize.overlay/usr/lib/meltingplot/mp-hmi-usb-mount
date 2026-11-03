@@ -15,6 +15,9 @@
 # Read-only, without devices, set-id or executables, every file readable to
 # the server whatever the stick says. Names in UTF-8: the panel's kernel reads
 # FAT names as ASCII otherwise and turns every umlaut into a question mark.
+# FAT keeps the local time of the computer that wrote the file, without a
+# zone, and the kernel takes it for UTC; the offset of the panel's zone at
+# mounting puts it right (exFAT and NTFS keep UTC).
 
 set -eu
 
@@ -31,6 +34,17 @@ case $name in
 esac
 dir=$MP_USB_DIR/$name
 
+# The panel's offset from UTC in minutes, +0100 -> 60
+utc_offset() {
+   z=$(date +%z)
+   hh=${z#?}
+   hh=${hh%??}
+   mm=${z#???}
+   min=$(( ${hh#0} * 60 + ${mm#0} ))
+   case $z in -*) min=$(( -min )) ;; esac
+   echo "$min"
+}
+
 # A property udev found on the device. Not through --export and eval: the
 # label is the stick's and goes in unquoted.
 prop() {
@@ -41,7 +55,7 @@ case $action in
 start)
    type=$(prop ID_FS_TYPE)
    case $type in
-      vfat)  opts=utf8 ;;
+      vfat)  opts=utf8,time_offset=$(utc_offset) ;;
       exfat) opts=iocharset=utf8 ;;
       ntfs)  type=ntfs3 opts=iocharset=utf8 ;;
       *)
