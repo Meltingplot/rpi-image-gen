@@ -49,5 +49,12 @@ Duet3Firmware_SZP.bin sha256:86f3fcc75bff8ff1f8ad50bf296d4b952df8303fa76d43b6087
 # 3.7.0+1.mp.4 a running trigger macro no longer makes state.status busy by
 # itself, as the daemon never did; its moves, a blocking message box it opens
 # and heater tuning still do. The daemon.g of the printer configuration counts
-# busy as activity and resets its heater idle timer on it.
-Duet3Firmware_MB6HC.bin sha256:3468cf910926e96b95fc1ae63958f08dd8e9ac336ce3d3257d880850b10192b0 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.5/Duet3Firmware_MB6HC.bin
+# busy as activity and resets its heater idle timer on it. Since 3.7.0+1.mp.6
+# the MB6HC offers capabilities of the SPI link in limits.sbcLinkCapabilities
+# (phase guard, sequence guard, extended link with response codes that
+# tolerate bit errors), which DuetSoftwareFramework 3.7.0+mp.9 and later
+# activate per connection; without that activation, as with an older DSF, the
+# link runs as before, and a connection reset ends it. After a restart it
+# arms the first transfer 10 ms later, so that an exchange DuetControlServer
+# started on the falling TfrRdy edge of the restart cannot stall the link.
+Duet3Firmware_MB6HC.bin sha256:f924a02c3bd1224e8ccaf66aefe6e1b3ac49b44e5df080d6ab6b29d197b9df2a https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.6/Duet3Firmware_MB6HC.bin
