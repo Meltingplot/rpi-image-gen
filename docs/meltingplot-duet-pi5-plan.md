@@ -40,6 +40,7 @@ meltingplot/
     mp-connect.yaml                  rpi-connect-lite + rpi-connect-ota
     mp-identity.yaml                 First-Boot: Identity-Datei von /bootfs übernehmen, Hostname, /persistent vergrößern
     mp-identity.d/customize.overlay/ mp-identity.service, mp-hostname.service, mp-growfs.service + Skripte unter /usr/sbin/ (inkl. mp-set-printer-name)
+    mp-watchdog.yaml (+ .d/)         Hardware-Watchdog per systemd mit 15 s, für Duet-Pi und HMI über mp-base.yaml (2026-11-03)
     mp-duet-hw.yaml                  Pi-seitige SPI-Anbindung (config.txt, spidev, sysctl)
     mp-duet-hw.d/customize.overlay/  etc/modprobe.d/spidev.conf, etc/sysctl.d/10-panic.conf
     mp-dsf.yaml                      Duet3D-Repo, DSF-Pakete (gepinnt), Persistenz, Seeding

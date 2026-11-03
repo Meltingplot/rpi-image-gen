@@ -1,0 +1,14 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-watchdog
+# X-Env-Layer-Category: device
+# X-Env-Layer-Desc: The hardware watchdog, driven by systemd at the longest
+#  interval the Pi's watchdog counts, 15 seconds. A computer whose kernel or
+#  service manager stops answering restarts by itself instead of staying
+#  dead until someone cuts the power, as the operator panel did after
+#  electrostatic discharges on its USB socket (lab, 2026-11-03). On the
+#  printer SBC the mainboard stops the machine when the link goes away, so
+#  the restart only brings the computer back sooner.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-RequiresProvider: systemd
+# METAEND
+---
