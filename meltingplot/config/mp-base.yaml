@@ -81,3 +81,4 @@ layer:
   connect: mp-connect
   identity: mp-identity
   admin: mp-admin
+  watchdog: mp-watchdog
