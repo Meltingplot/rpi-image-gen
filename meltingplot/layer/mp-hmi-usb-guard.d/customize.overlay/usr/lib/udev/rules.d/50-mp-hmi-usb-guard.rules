@@ -1,0 +1,17 @@
+# Written for rpi-image-gen layer mp-hmi-usb-guard.
+#
+# The kernel leaves every new device unconfigured (usbcore.authorized_default
+# =0). A root hub first makes the interfaces of new devices start without a
+# driver; then a device is configured, so its interfaces show up, still
+# without one; mp-hmi-usb-guard authorizes those of an allowed device. udev
+# handles a parent's event before its children's, at boot as on hotplug.
+ACTION!="add", GOTO="mp_hmi_usb_guard_end"
+SUBSYSTEM!="usb", GOTO="mp_hmi_usb_guard_end"
+
+ENV{DEVTYPE}=="usb_device", ATTR{interface_authorized_default}=="?*", ATTR{interface_authorized_default}="0"
+# Only under a root hub that holds new interfaces back, or the drivers would
+# bind the moment the device is configured
+ENV{DEVTYPE}=="usb_device", ATTR{authorized}=="0", ATTRS{interface_authorized_default}=="0", ATTR{authorized}="1"
+ENV{DEVTYPE}=="usb_interface", RUN+="/usr/lib/meltingplot/mp-hmi-usb-guard %k"
+
+LABEL="mp_hmi_usb_guard_end"

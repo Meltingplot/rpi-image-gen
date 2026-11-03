@@ -52,4 +52,5 @@ layer:
   app: mp-hmi-kiosk
   licences: mp-hmi-licences
   usb: mp-hmi-usb
+  usbguard: mp-hmi-usb-guard
   splash: rpi-splash-screen
