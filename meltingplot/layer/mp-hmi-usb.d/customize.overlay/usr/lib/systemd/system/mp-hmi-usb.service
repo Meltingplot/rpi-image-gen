@@ -1,0 +1,23 @@
+[Unit]
+Description=USB sticks at the operator panel, read-only, behind mp-hmi-proxy
+
+[Service]
+ExecStart=/usr/lib/meltingplot/mp-hmi-usb-serve
+DynamicUser=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET
+SystemCallArchitectures=native
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

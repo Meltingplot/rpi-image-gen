@@ -51,4 +51,5 @@ layer:
   camera: mp-hmi-camera
   app: mp-hmi-kiosk
   licences: mp-hmi-licences
+  usb: mp-hmi-usb
   splash: rpi-splash-screen

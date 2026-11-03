@@ -1,0 +1,12 @@
+[Unit]
+Description=USB stick %I at the operator panel, read-only for the job list
+# udev starts this when the stick comes (72-mp-hmi-usb.rules); pulling it
+# stops it
+BindsTo=dev-%i.device
+After=dev-%i.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/meltingplot/mp-hmi-usb-mount start %i
+ExecStop=/usr/lib/meltingplot/mp-hmi-usb-mount stop %i

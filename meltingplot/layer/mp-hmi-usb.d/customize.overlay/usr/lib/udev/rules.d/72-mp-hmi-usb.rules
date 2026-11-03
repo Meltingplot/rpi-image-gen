@@ -1,0 +1,8 @@
+# Written for rpi-image-gen layer mp-hmi-usb.
+#
+# A USB stick at the panel, for the job list of the printer's interface: a
+# filesystem on a USB disk is mounted read-only by mp-hmi-usb-mount@<name>,
+# which the removal of the device stops. Only the formats a stick comes in;
+# the panel's own drive is NVMe and never matches. After
+# 60-persistent-storage.rules, which reads the filesystem type.
+ACTION!="remove", SUBSYSTEM=="block", SUBSYSTEMS=="usb", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}=="vfat|exfat|ntfs", ENV{SYSTEMD_WANTS}+="mp-hmi-usb-mount@%k.service"

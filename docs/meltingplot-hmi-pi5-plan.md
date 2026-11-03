@@ -43,6 +43,7 @@ layer/
   mp-hmi-proxy.yaml (+ .d/)    ● haproxy mit Backends und CORS-Liste
   mp-hmi-camera.yaml (+ .d/)   ● motion als Verteiler der USB-Kamera
   mp-hmi-kiosk.yaml (+ .d/)    ● labwc-Autologin, Chromium, squeekboard, wf-panel-pi, Geste, Splash
+  mp-hmi-usb.yaml (+ .d/)      ● USB-Stick read-only einhängen, Druckjobs für die Druckjob-Liste
   mp-hmi-hostname (in .d/)     ● Kundenname vom Duet-Pi holen
   mp-connect.yaml              ○ RequiresProvider rpi-connect-client statt fest rpi-connect-lite
   mp-admin.yaml                ○ Prüfadresse aus dem Netz statt mpnet.gateway
@@ -132,6 +133,7 @@ haproxy auf :80, alle Adressen. Grundlage ist der optimierte Laborstand vom 2026
 | übrige, ab 4 offen | Duet-Pi | `maxconn 10`, `timeout server 10s` |
 | `/webcam` | motion 127.0.0.1:8081 | – |
 | `/snapshot` | motion, Pfad → `/0/current` | – |
+| `/hmi/usb/` | mp-hmi-usb 127.0.0.1:8083, Präfix weg | nur vom Panel selbst, sonst 404 |
 
 - **Nicht überliefert:** die genaue Bedingung fürs Ausweichen (Vorschlag `be_conn(backend_servers) ge 4`) und die `defaults`-Timeouts. Beides wird mit dem Labor-HMI abgeglichen.
 - **CORS:** Für erlaubte Origins beantwortet haproxy die Preflights selbst (204) und setzt `Access-Control-Allow-Origin` in den Antworten. Alle anderen Origins bekommen keinen Header. Erlaubt sind:
@@ -147,6 +149,15 @@ haproxy auf :80, alle Adressen. Grundlage ist der optimierte Laborstand vom 2026
   - Anfragen ohne `Origin` (Navigation, GET, Werkzeuge wie der QA-Abruf von `/snapshot`) laufen weiter, solange der Host passt.
   - Folge: Ein eigener DNS-Name des Kunden für das HMI (z. B. `drucker1.firma.lan`) wird abgewiesen, bis er auf der Liste steht. Offen ist, ob es dafür einen Schlüssel in `identity.conf` gibt.
 - **Warteseite:** Ohne Duet-Pi (Boot, Bench, Defekt) liefert haproxy statt 503 eine eigene kleine Seite (`errorfile 503`) im Meltingplot-Look: „Drucker startet …“. Sie lädt sich alle paar Sekunden neu, bis DWC antwortet.
+
+## USB-Stick (`mp-hmi-usb`)
+
+Steckt ein USB-Stick am Panel, zeigt die Druckjob-Liste der CHX-Oberfläche ihn als Ordner. Von dort wird ein Druckjob auf den Duet-Pi kopiert und gestartet (Tim, 2026-11-03).
+
+- **Einhängen:** `72-mp-hmi-usb.rules` startet für jedes Dateisystem auf einer USB-Platte (FAT, exFAT, NTFS über `ntfs3`) `mp-hmi-usb-mount@<kernelname>`. Das Skript hängt es nach `/run/mp-hmi-usb/<name>/fs` ein, mit `ro,nosuid,nodev,noexec`, alle Dateien lesbar und die Namen in UTF-8. Ohne `utf8` liest der Panel-Kernel FAT-Namen als ASCII (`CONFIG_FAT_DEFAULT_IOCHARSET="ascii"`, Labor-HMI 2026-11-03), und aus jedem Umlaut wird ein Fragezeichen. Danach schreibt es `label`. Solange diese Datei existiert, gilt der Stick als da. Beim Abziehen stoppt `BindsTo=dev-%i.device` die Unit, das Skript nimmt `label` weg und hängt aus.
+- **Lesen:** `mp-hmi-usb-serve` (Python, `DynamicUser`, nur Loopback :8083). `GET /list` liefert die Sticks, `GET /list?path=<name>/<ordner>` Ordner und G-Code-Dateien, `GET /file?path=…` eine G-Code-Datei. Endungen wie DWCs `Path.isGCodePath`. Kein `.`/`..`, keine versteckten Namen (macOS legt `._`-Dateien neben jeden Job), keine symbolischen Links. Es wird nichts geschrieben.
+- **Nur das Panel (Tim, 2026-11-03):** haproxy reicht `/hmi/usb/` nur an Verbindungen von `127.0.0.0/8`, `::1` und der Panel-Adresse im Druckernetz weiter. Ein Browser im Kundennetz bekommt 404 und sieht den Ordner nicht.
+- **Kopieren:** macht der Browser. Er holt die Datei vom Panel und lädt sie mit DWCs normalem Upload nach `0:/gcodes`. DSF schreibt erst `.part` und benennt dann um (`MachineEndpoints.cs`), ein laufender Druck behält also seine Datei. Gleicher Name: die Oberfläche fragt vor dem Ersetzen.
 
 ## Hostname (`mp-hmi-hostname`)
 
