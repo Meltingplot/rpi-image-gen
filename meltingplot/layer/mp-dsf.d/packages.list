@@ -21,7 +21,7 @@
 # A board firmware file is not a package of the build; it goes through
 # firmware.list.
 
-# 3.7.0+mp.9: upstream v3.7-dev at 3.7.0, which no longer rejects the skip
+# 3.7.0+mp.10: upstream v3.7-dev at 3.7.0, which no longer rejects the skip
 # keyword outside G-code files and reads the layer count, the filament used,
 # the generator and the print time from the headers of more slicers (the
 # filters are in config.json, which the image puts over the printer's copy on
@@ -49,11 +49,14 @@
 # limits.sbcLinkCapabilities, as the mainboard build in firmware.list does
 # since 3.7.0+1.mp.6 (phase guard, sequence guard, extended link with response
 # codes that tolerate bit errors), and counts its link recoveries in M122.
+# When only DCS got bad data from the firmware, it exchanges the data again,
+# as the firmware does, instead of restarting the full transfer; in the ESD
+# test of 2026-11-03 four of five link events were such a bit error.
 # M112 completes only once the emergency stop has reached the firmware, and
 # our fixes for M20, M30, M36, M39, M111, M260/M261 with V, M472, M505,
 # M581.1, M606 and M929 are in. The packages are built with root as owner of
 # every file.
-# Duet Web Control comes from our fork, 3.7.0+mp.5, the tag pkg/dwc-version
+# Duet Web Control comes from our fork, 3.7.0+mp.6, the tag pkg/dwc-version
 # in the fork pins: upstream 3.7.0 with the CHX 350 operator interface, which
 # leaves machine actions such as preheating, homing and filament change to the
 # flow macros of the printer configuration, reports a flow as completed only
@@ -62,7 +65,8 @@
 # interface while the machine is starting, moves the axes while a job is
 # paused, sets the bed, chamber and nozzle temperatures from their readings in
 # the header, shows and sets the fans, warns of a stalled fan on every page and
-# starts no job while one stands, shows the licence notices of both computers
+# starts no job while one stands, lists the jobs on a USB stick at the panel
+# and copies or starts them, shows the licence notices of both computers
 # and history and analysis from the QualityAssurance plugin. The release of
 # that Duet Web Control also carries the interface's SBC backend, which
 # plugins.list pins at the same version.
@@ -71,7 +75,9 @@
 # fork), which dsf.rrf_version installs. The boards of the CHX 350 run the
 # builds in firmware.list either way; from the package the image only uses the
 # IAP binary of the mainboard update, which is the same in 3.7.0-rc.1 and
-# 3.7.0-rc.2. Earlier builds: mp.8 of 3.7.0 carried our own fix of that
+# 3.7.0-rc.2. Earlier builds: mp.9 of 3.7.0 restarted the full transfer when only
+# DCS got bad data and carried Duet Web Control 3.7.0+mp.5, mp.8 of 3.7.0
+# carried our own fix of that
 # deadlock, which also held a code back behind unbuffered codes on deeper
 # stack levels, and gave up a transfer after 3 retries, mp.7 held the codes of
 # a running macro back behind such an M409, which waits for that macro, mp.6
@@ -88,10 +94,10 @@
 # boards, mp.8 checked N line numbers in job and macro files, mp.7 RRF-style
 # checksums on numbered lines, mp.6 kept the object model in step after an SPI
 # transfer timeout.
-duetsoftwareframework sha256:2df616371a29ea8a3d23db3f7948ea3e624f14658c4daf3095a7a2969d827fe7 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.9/duetsoftwareframework_3.7.0%2Bmp.9_arm64.deb
-duetcontrolserver sha256:994f827a58ea8920b6d94f00ef4d406e3494848eab4733975d6a9918bd9a3d4a https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.9/duetcontrolserver_3.7.0%2Bmp.9_arm64.deb
-duetwebserver sha256:6e473a59c4b79318eb080aa8b178b405c281a91072db091bc8c696753566a5a6 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.9/duetwebserver_3.7.0%2Bmp.9_arm64.deb
-duetpluginservice sha256:f9ab6617155ba1c1fbd1f4abdc9f2c7cbae9b53d8638b380af81f41ef4ff07d7 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.9/duetpluginservice_3.7.0%2Bmp.9_arm64.deb
-duettools sha256:1785f2e1e094434f4018aea1e7242e15cf520d6450a5ca722f4e3ef620958954 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.9/duettools_3.7.0%2Bmp.9_arm64.deb
-duetruntime sha256:02afb79adbd9ef294d7bebcfbbdc17b9612f11a143df1377139be24c7b8cf716 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.9/duetruntime_3.7.0%2Bmp.9_arm64.deb
-duetwebcontrol sha256:75bb6977165927aeaa21254c57031799954329fb1d42b7222d39d3a8d1da7127 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.9/duetwebcontrol_3.7.0%2Bmp.5_all.deb
+duetsoftwareframework sha256:835ed92c929c4b2a91f92ddebd373f5da09cd49530ee50523db1d95031d468b6 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duetsoftwareframework_3.7.0%2Bmp.10_arm64.deb
+duetcontrolserver sha256:e0df149087747a9b88bbab4f0e024222ac7674168f73048a09f7cd6099fd91e6 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duetcontrolserver_3.7.0%2Bmp.10_arm64.deb
+duetwebserver sha256:9a00d8128478c420f1160a1d4ca8c57a98fa7fb354218b0d24110edf2f98f673 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duetwebserver_3.7.0%2Bmp.10_arm64.deb
+duetpluginservice sha256:b83b304b953bd8b8c435fcc9e7ff9481185b80686811562ddf2dcf35e5519465 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duetpluginservice_3.7.0%2Bmp.10_arm64.deb
+duettools sha256:80ee610f13151e64e9a7589f04db12d16b101adf414757931412905bd18192db https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duettools_3.7.0%2Bmp.10_arm64.deb
+duetruntime sha256:093ef4eab6f8fafe4ea32439c86ac1e1c28510d2ba6d7948d85023a83c5a7359 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duetruntime_3.7.0%2Bmp.10_arm64.deb
+duetwebcontrol sha256:729b5e6a4e355552023657db6dd8f5889f86f11f79cccabc9c4674ce05892a9e https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duetwebcontrol_3.7.0%2Bmp.6_all.deb
