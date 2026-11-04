@@ -15,6 +15,7 @@ Am 2026-11-04 hat am Labor-HMI die USB-Freigaberegel (`mp-hmi-usb-guard`, noch S
 5. Statt WORM, das die Hardware nicht hergibt, wird vorwärtssicher signiert, in Schichten nach Betriebszeit. Jede Schicht hat ihr eigenes Schlüsselpaar, der private Schlüssel wird nach Gebrauch vernichtet. Prüfbar ist das ohne Geheimnis, nur mit dem öffentlichen, außerhalb verankerten Starthash (AL-55 bis AL-61).
 6. journald mit Forward-Secure Sealing ist nicht das Audit-Log, weil seine Siegel an der Systemuhr hängen und es alte Einträge verdrängt. journald liefert die Filter für fremde Ereignisse und versiegelt zusätzlich das normale Journal (AL-62, AL-63).
 7. Bestandsgeräte werden mit der Installerkarte auf das neue Layout überführt, so wie beim Wechsel auf die 4G-Slots (offene Frage 10). Sie können noch das Layout gen1 oder gen2 haben (AL-33). Ein Audit-Log haben sie noch nicht, zu übernehmen ist also nichts. Die Karte muss nur das Layout überführen (AL-18, AL-36).
+8. Der Starthash jedes Systems entsteht bei der Inbetriebnahme auf dem Gerät und wird dort ausgelesen. Festgehalten wird er in der Betriebsanleitung, im ERP und auf dem Typenschild des Geräts (offene Frage 12, AL-58).
 
 ## Grundlagen
 
@@ -338,11 +339,30 @@ Prüfen lässt sie sich ohne jedes Geheimnis, nur mit dem öffentlichen Startwer
   - Sein Hash ist der Starthash.
   - Kein geheimer Schlüssel verlässt das Gerät, und nichts muss hinterlegt werden.
   - Die Verfahren richten sich nach BSI TR-02102-1 (T48), z. B. ECDSA auf P-256 oder brainpoolP256r1 mit SHA-256.
-- **AL-58** Der Starthash wird außerhalb verankert. Er muss echt sein, nicht geheim.
-  - Er geht ins Inbetriebnahmeprotokoll bei Meltingplot und zum Partner-System (AL-28).
-  - Er wird am Gerät angezeigt, damit ihn ein Prüfer abgleichen kann.
+- **AL-58** Der Starthash wird außerhalb verankert. Er muss echt sein, nicht geheim (Festlegung 8).
+  - Bei der Inbetriebnahme entsteht er auf dem Gerät und wird dort ausgelesen:
+    - Das Panel zeigt die Starthashes beider Systeme an, als Text und als QR-Code. Den des Duet-Pi kennt es über den Partner-Abgleich (AL-28).
+    - Auf beiden Systemen gibt ihn `mp-audit genesis` aus.
+  - Er wird an vier Stellen festgehalten:
+    - in der Betriebsanleitung der Maschine,
+    - im ERP von Meltingplot,
+    - auf dem Typenschild,
+    - beim Partner-System.
+  - Auf dem Typenschild stehen je System (HMI, Duet-Pi):
+    - der volle SHA-256 als QR-Code,
+    - ein Fingerabdruck aus den ersten 128 Bit als Text, 32 Hex-Zeichen in Vierergruppen.
+
+    128 Bit reichen für den Abgleich von Hand: Ein Log mit passendem Fingerabdruck zu erzeugen kostet etwa 2^128 Versuche.
   - Mit Gerätebindung (AL-60) ist er zusätzlich vom Gerät signiert.
-  - Ein komplett neu angelegtes Log hat einen anderen Starthash und fällt auf.
+  - Ein komplett neu angelegtes Log hat einen anderen Starthash und fällt beim Abgleich mit Typenschild, Betriebsanleitung oder ERP auf.
+  - Eine Neuinstallation, die das Log übernimmt (AL-18), behält den Starthash. Das Typenschild bleibt also gültig.
+  - Beginnt ein Log neu, geht der neue Starthash denselben Weg: ins ERP, als Nachtrag in die Betriebsanleitung und als zusätzliches Schild neben das Typenschild. Gründe für einen Neubeginn:
+    - Pi-Tausch (AL-19),
+    - ein altes Log, das nicht lesbar war (AL-18),
+    - eine Löschung nach AL-17,
+    - die Überführung eines Bestandsgeräts.
+
+    Der alte Starthash bleibt für das alte Log gültig.
 - **AL-59** Was daraus folgt:
   - Prüfen kann jeder, der den Starthash hat: Meltingplot, der Betreiber, eine Prüfstelle, auch das Gerät selbst. Es braucht dazu kein Geheimnis.
   - Wer zum Zeitpunkt T root wird, kann nichts unbemerkt ändern, was vor T signiert wurde, auch seine eigene Anmeldung nicht. Die privaten Schlüssel dafür gibt es nicht mehr.
@@ -409,7 +429,7 @@ Was journald gut kann und wir nutzen:
 9. **USB-Kamera:** Sie ist ein drittes Linux-System mit eigenen Updates und hängt am HMI. Ist ihre Software für die Sicherheit relevant? Wenn ja, braucht sie ein eigenes Log oder einen Eintrag im HMI-Log bei jedem Update.
 10. **Bestandsgeräte (AL-36):** Beantwortet (Tim, 2026-11-04). Ja, alle werden mit der Installerkarte überführt. Sie haben noch kein Log, die Karte muss nur das Layout gen1 oder gen2 überführen (Festlegung 7, AL-18).
 11. **Anmeldung bei vollem Log (AL-48):** Sollen SSH und Connect dann auch verweigert werden? Das wäre strenger, sperrt aber den Support aus, gerade wenn das Gerät gestört ist.
-12. **Verankerung des Starthashes (AL-58):** Ein Prüfschlüssel entfällt, weil die Kette mit öffentlichen Schlüsseln prüfbar ist (Tim, 2026-11-04). Offen ist nur, wie der Starthash bei der Inbetriebnahme sicher zu Meltingplot kommt: Inbetriebnahmeprotokoll, Connect, Foto vom Panel? Für das normale Journal (AL-63) bleibt der geheime Schlüssel von journald zu verwahren.
+12. **Verankerung des Starthashes (AL-58):** Beantwortet (Tim, 2026-11-04). Ein Prüfschlüssel entfällt, weil die Kette mit öffentlichen Schlüsseln prüfbar ist. Der Starthash entsteht bei der Inbetriebnahme auf dem Gerät, wird ausgelesen und in Betriebsanleitung, ERP und Typenschild festgehalten (Festlegung 8). Für das normale Journal (AL-63) bleibt der geheime Schlüssel von journald zu verwahren.
 13. **Gerätebindung (AL-60):** Ist der OTP-Schlüssel auf unseren Pis provisioniert und gesperrt, und darf das Log ihn neben Connect mitbenutzen?
 
 ## Umsetzungsvorschlag
@@ -450,6 +470,7 @@ Eine Skizze, nicht bindend:
 | Kriterium GS-IFA-M25 | Anforderung | Prüfung |
 |---|---|---|
 | T33 lesbar und zugänglich | AL-20, AL-21 | Log über Connect-Shell anzeigen |
+| T21, T22 Zugriff und Auswertung laut Betriebsanleitung | AL-23, AL-58, AL-61 | Nach der Betriebsanleitung: QR-Code vom Typenschild scannen, `mp-audit verify` mit diesem Starthash ausführen. Das Ergebnis meldet je System, ob die Kette lückenlos von genau diesem Anfang ausgeht. |
 | T35 automatisch | AL-09 | Tastatur anstecken, Eintrag E10 ohne weiteres Zutun |
 | T36 Schutz vor Deaktivierung | AL-09 bis AL-12 | Dienst als `meltingplot` stoppen: verweigert; als root stoppen: Lücke beim nächsten Boot als E17 |
 | T37 Speicherort dokumentiert | AL-04, AL-23 | Betriebsanleitung |
