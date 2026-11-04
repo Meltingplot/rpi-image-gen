@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""Measure the raw A/B image an installer card carries.
+
+   zstd -dc image.img.zst | mp-installer-measure [<keep partition>]
+
+Prints one line: the size of the raw image, its SHA-256, and, for the
+partition whose content the card keeps on a drive of the same layout
+(mpinst.keep_part, the audit log), its start and size in bytes and the
+SHA-256 of the image without that range. That is what the drive reads back
+when the card wrote around it. "-" for those three when the image has no
+such partition or none was named.
+
+The range is taken from the primary GPT at the start of the image. The card
+skips it with dd in blocks of 4 MiB, so it has to be aligned to that.
+"""
+
+import hashlib
+import struct
+import sys
+
+SECTOR = 512
+BLOCK = 4 << 20
+HEAD = 1 << 20
+
+
+def die(msg):
+    sys.exit(f"mp-installer-measure: {msg}")
+
+
+def gpt_range(head, name):
+    hdr = head[SECTOR:2 * SECTOR]
+    if hdr[:8] != b"EFI PART":
+        die("the image has no GPT")
+    entries_lba, count, size = struct.unpack_from("<QII", hdr, 72)
+    for i in range(count):
+        off = entries_lba * SECTOR + i * size
+        entry = head[off:off + size]
+        if len(entry) < 128:
+            die("the GPT entries reach beyond the first MiB")
+        first, last = struct.unpack_from("<QQ", entry, 32)
+        if not first:
+            continue
+        if entry[56:128].decode("utf-16-le").rstrip("\0") == name:
+            return first * SECTOR, (last + 1 - first) * SECTOR
+    return None
+
+
+def main():
+    name = sys.argv[1] if len(sys.argv) > 1 else ""
+    src = sys.stdin.buffer
+    h_all, h_keep, n = hashlib.sha256(), hashlib.sha256(), 0
+
+    head = src.read(HEAD)
+    if len(head) < HEAD:
+        die("the image is smaller than its partition table")
+    rng = gpt_range(head, name) if name else None
+    if rng and (rng[0] % BLOCK or rng[1] % BLOCK):
+        die(f"{name} is not aligned to {BLOCK} bytes")
+
+    chunk = head
+    while chunk:
+        h_all.update(chunk)
+        if rng:
+            lo, hi = rng[0], rng[0] + rng[1]
+            a, b = n, n + len(chunk)
+            if a < lo:
+                h_keep.update(chunk[:min(b, lo) - a])
+            if b > hi:
+                h_keep.update(chunk[max(0, hi - a):])
+        n += len(chunk)
+        chunk = src.read(BLOCK)
+
+    if rng and rng[0] + rng[1] > n:
+        die(f"{name} reaches beyond the end of the image")
+    if rng:
+        print(n, h_all.hexdigest(), rng[0], rng[1], h_keep.hexdigest())
+    else:
+        print(n, h_all.hexdigest(), "-", "-", "-")
+
+
+if __name__ == "__main__":
+    main()

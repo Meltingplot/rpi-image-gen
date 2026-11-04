@@ -3,7 +3,7 @@
 # X-Env-Layer-Category: image
 # X-Env-Layer-Desc: Immutable GPT A/B layout for rotational OTA updates,
 #  boot/system redundancy, and a shared persistent data partition.
-# X-Env-Layer-Version: 6.0.0
+# X-Env-Layer-Version: 6.1.0
 # X-Env-Layer-Requires: image-base,device-base,rpi-ab-slot-mapper,systemd-min
 # X-Env-Layer-Provides: image
 #
@@ -30,6 +30,25 @@
 # X-Env-Var-data_part_size-Required: n
 # X-Env-Var-data_part_size-Valid: size
 # X-Env-Var-data_part_size-Set: y
+#
+# X-Env-Var-private_part_name:
+# X-Env-Var-private_part_name-Desc: GPT name of an optional partition that
+#  the system does not mount: an empty ext4 filesystem, labelled with the
+#  name in capitals, between the system slots and the data partition. It is
+#  meant for one service that mounts it in its own mount namespace, such as
+#  an audit log, and is reachable as /dev/disk/by-slot/<name>. Like every
+#  partition it comes only with a new installation; an update keeps the
+#  partition table. Empty for none. Supported with pmap clear only.
+# X-Env-Var-private_part_name-Required: n
+# X-Env-Var-private_part_name-Valid: regex:^([a-z][a-z0-9_]{0,15})?$
+# X-Env-Var-private_part_name-Set: y
+#
+# X-Env-Var-private_part_size: 64M
+# X-Env-Var-private_part_size-Desc: Size of the private partition. Ignored
+#  without private_part_name.
+# X-Env-Var-private_part_size-Required: n
+# X-Env-Var-private_part_size-Valid: size
+# X-Env-Var-private_part_size-Set: y
 #
 # X-Env-Var-rootfs_type: erofs
 # X-Env-Var-rootfs_type-Desc: Root filesystem type for each system partition.
