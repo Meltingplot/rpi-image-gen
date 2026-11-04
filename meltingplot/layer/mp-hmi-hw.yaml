@@ -10,7 +10,7 @@
 #  belongs into the bootloader configuration (PSU_MAX_CURRENT=5000), which
 #  the installer card writes together with the bootloader update
 #  (mp-installer, hmi-pi5-installer.yaml); no A/B image can.
-# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Version: 1.1.0
 # X-Env-Layer-Requires: rpi-boot-firmware
 # X-Env-Layer-AfterProvider: device
 #
@@ -35,20 +35,20 @@
 ---
 mmdebstrap:
   customize-hooks:
-    - |-
-      set -eu
-      cfg="$1/boot/firmware/config.txt"
-      sed -i -e 's/^camera_auto_detect=1/camera_auto_detect=0/' \
-             -e 's/^display_auto_detect=1/display_auto_detect=0/' "$cfg"
-      {
-        printf '\n# Meltingplot: operator panel\n[all]\n'
-        [ -z "$IGconf_hmihw_display" ] || printf 'dtoverlay=%s\n' "$IGconf_hmihw_display"
-        [ -z "$IGconf_hmihw_camera" ] || printf 'dtoverlay=%s\n' "$IGconf_hmihw_camera"
-        printf 'usb_max_current_enable=1\n'
-        printf 'dtoverlay=disable-bt\n'
-      } >> "$cfg"
     # With Bluetooth off its firmware is dead weight under the Broadcom,
     # Cypress and Synaptics licence agreements; nothing depends on it. Taken
     # out as mp-net-static does on the printer SBC, so the SBOM does not list
     # what the panel can never use. The wifi firmware stays.
     - chroot "$1" dpkg --purge bluez-firmware
+# config.txt is assembled from the fragments of every layer since upstream
+# ff5fb45 (rpi-boot-firmware config.txt.d); anything written into the file
+# before that is lost. This layer's:
+#
+#   mp-hmi-hw.d/for/rpi-boot-firmware/config.txt.d/20-rpi-camera and
+#   30-rpi-display replace family-base's fragments of those names, the
+#   same but without automatic detection: the display and the camera are
+#   named, so a panel boots the same with or without them.
+#   hooks/customize10-configtxt writes the overlays from hmihw.display and
+#   hmihw.camera, the USB current and Bluetooth off.
+#   hooks/late/preimage90-boot-check makes sure they reached the config.txt
+#   the boot partition gets.

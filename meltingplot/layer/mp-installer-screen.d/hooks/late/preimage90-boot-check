@@ -1,0 +1,18 @@
+#!/bin/bash
+# The console settings (hooks/customize10-cmdline) have to be on the kernel
+# command line the card boots with. Late, so after linux-base assembled it.
+
+set -euo pipefail
+
+cmd=${1:?root filesystem}/boot/firmware/cmdline.txt
+want=(quiet consoleblank=0)
+case ${IGconf_mpscreen_rotation:?} in
+   90) want+=(fbcon=rotate:1) ;;
+   180) want+=(fbcon=rotate:2) ;;
+   270) want+=(fbcon=rotate:3) ;;
+esac
+bad=0
+for param in "${want[@]}"; do
+   grep -qw -- "$param" "$cmd" || { echo "mp-installer-screen: $param is missing from cmdline.txt" >&2; bad=1; }
+done
+exit $bad

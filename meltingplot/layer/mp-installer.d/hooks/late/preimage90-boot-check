@@ -1,0 +1,9 @@
+#!/bin/bash
+# dtparam=pciex1 (hooks/customize10-configtxt) has to be in the config.txt
+# the card boots with. Late, so after rpi-boot-firmware assembled it.
+
+set -euo pipefail
+
+[[ ${IGconf_mpinst_pcie_probe:-n} == y ]] || exit 0
+grep -qxF 'dtparam=pciex1' "${1:?root filesystem}/boot/firmware/config.txt" ||
+   { echo "mp-installer: config.txt lacks dtparam=pciex1" >&2; exit 1; }

@@ -1,0 +1,16 @@
+#!/bin/sh
+# The kernel console turns with the picture (hmikiosk.rotation), so boot
+# messages read the right way up: fbcon=rotate as a fragment of the kernel
+# command line for linux-base. Nothing for a panel that is not turned.
+
+set -eu
+
+case ${IGconf_hmikiosk_rotation:?} in
+   0) exit 0 ;;
+   90) r=1 ;;
+   180) r=2 ;;
+   270) r=3 ;;
+   *) echo "mp-hmi-kiosk: rotation $IGconf_hmikiosk_rotation" >&2; exit 1 ;;
+esac
+mkdir -p "$LAYER_WORKDIR/for/linux-base/cmdline.d"
+echo "-fbcon=rotate:* fbcon=rotate:$r" > "$LAYER_WORKDIR/for/linux-base/cmdline.d/80-mp-hmi-kiosk"

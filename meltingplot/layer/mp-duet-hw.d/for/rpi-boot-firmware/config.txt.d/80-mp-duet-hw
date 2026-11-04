@@ -1,0 +1,2 @@
+# Meltingplot printer SBC: the SPI link to the Duet mainboard
+dtparam=spi=on

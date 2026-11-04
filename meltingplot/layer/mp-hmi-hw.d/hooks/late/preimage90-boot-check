@@ -1,0 +1,21 @@
+#!/bin/bash
+# The panel's config.txt lines (mp-hmi-hw.d/for and hooks/customize10-configtxt)
+# have to be in the config.txt the boot partition gets. Late, so after
+# rpi-boot-firmware assembled it from every layer's fragments.
+
+set -euo pipefail
+
+cfg=${1:?root filesystem}/boot/firmware/config.txt
+bad=0
+fail() { echo "mp-hmi-hw: $*" >&2; bad=1; }
+
+want=(camera_auto_detect=0 display_auto_detect=0 usb_max_current_enable=1 dtoverlay=disable-bt)
+[[ -z ${IGconf_hmihw_display:-} ]] || want+=("dtoverlay=$IGconf_hmihw_display")
+[[ -z ${IGconf_hmihw_camera:-} ]] || want+=("dtoverlay=$IGconf_hmihw_camera")
+for line in "${want[@]}"; do
+   grep -qxF -- "$line" "$cfg" || fail "config.txt lacks $line"
+done
+for line in camera_auto_detect=1 display_auto_detect=1; do
+   ! grep -qxF -- "$line" "$cfg" || fail "config.txt still has $line"
+done
+exit $bad

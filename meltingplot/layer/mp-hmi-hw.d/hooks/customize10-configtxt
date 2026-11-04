@@ -1,0 +1,16 @@
+#!/bin/sh
+# The panel's config.txt lines, as a fragment for rpi-boot-firmware: the
+# display and camera overlays named by hmihw.display and hmihw.camera, the
+# full USB current for the peripherals, and Bluetooth off.
+
+set -eu
+
+dir=$LAYER_WORKDIR/for/rpi-boot-firmware/config.txt.d
+mkdir -p "$dir"
+{
+   echo "# Meltingplot: operator panel"
+   [ -z "${IGconf_hmihw_display:-}" ] || printf 'dtoverlay=%s\n' "$IGconf_hmihw_display"
+   [ -z "${IGconf_hmihw_camera:-}" ] || printf 'dtoverlay=%s\n' "$IGconf_hmihw_camera"
+   echo "usb_max_current_enable=1"
+   echo "dtoverlay=disable-bt"
+} > "$dir/80-mp-hmi-hw"

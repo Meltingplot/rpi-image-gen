@@ -9,7 +9,7 @@
 #  with network, keyboard and clock that stays hidden at the top edge until a
 #  swipe down from that edge brings it out. Not the Raspberry Pi desktop: no
 #  file manager, terminal or menu.
-# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Version: 1.1.0
 # X-Env-Layer-Requires: device-user-admin,mp-hmi-proxy
 # X-Env-Layer-RequiresProvider: systemd
 #
@@ -169,16 +169,6 @@ mmdebstrap:
       printf '# Written by rpi-image-gen layer mp-hmi-kiosk.\nXKB_DEFAULT_LAYOUT=%s\n' \
         "${IGconf_locale_keyboard_keymap:-de}" > "$dir/environment"
     # The kernel console turns with the picture, so boot messages read the
-    # right way up.
-    - |-
-      set -eu
-      case $IGconf_hmikiosk_rotation in
-        0) exit 0 ;;
-        90) r=1 ;;
-        180) r=2 ;;
-        270) r=3 ;;
-      esac
-      cmdline="$1/boot/firmware/cmdline.txt"
-      grep -q 'fbcon=rotate:' "$cmdline" || sed -i "s/\brootwait\b/fbcon=rotate:$r rootwait/" "$cmdline"
-      grep -q "fbcon=rotate:$r" "$cmdline" ||
-        { echo "mp-hmi-kiosk: could not add fbcon=rotate:$r to cmdline.txt" >&2; exit 1; }
+    # right way up: fbcon=rotate on the kernel command line, which is
+    # assembled from every layer's fragments since upstream ff5fb45. Written
+    # by hooks/customize10-cmdline, checked by hooks/late/preimage90-boot-check.
