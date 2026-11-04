@@ -12,8 +12,9 @@ Am 2026-11-04 hat am Labor-HMI die USB-Freigaberegel (`mp-hmi-usb-guard`, noch S
 2. Das Log liegt auf einer eigenen Partition im neuen Layout. Sie ist nur im Namespace des Log-Dienstes eingehängt; eine Datei auf der Persistenzpartition ist ausgeschlossen (AL-04, AL-33 bis AL-38).
 3. Der Schutz gegen Fluten und gestellte Uhren muss durch die Konstruktion gelten, nicht durch Mustererkennung. Sonst lohnt der Aufwand nicht (AL-39 bis AL-49).
 4. Verschleiß des Datenträgers wird über eine begrenzte Schreiblast berücksichtigt, nicht über eine größere Partition (AL-50 bis AL-54).
-5. Statt WORM, das die Hardware nicht hergibt, wird vorwärtssicher versiegelt, in Schichten nach Betriebszeit (AL-55 bis AL-61).
+5. Statt WORM, das die Hardware nicht hergibt, wird vorwärtssicher signiert, in Schichten nach Betriebszeit. Jede Schicht hat ihr eigenes Schlüsselpaar, der private Schlüssel wird nach Gebrauch vernichtet. Prüfbar ist das ohne Geheimnis, nur mit dem öffentlichen, außerhalb verankerten Starthash (AL-55 bis AL-61).
 6. journald mit Forward-Secure Sealing ist nicht das Audit-Log, weil seine Siegel an der Systemuhr hängen und es alte Einträge verdrängt. journald liefert die Filter für fremde Ereignisse und versiegelt zusätzlich das normale Journal (AL-62, AL-63).
+7. Bestandsgeräte werden mit der Installerkarte auf das neue Layout überführt, so wie beim Wechsel auf die 4G-Slots (offene Frage 10). Sie können noch das Layout gen1 oder gen2 haben (AL-33). Ein Audit-Log haben sie noch nicht, zu übernehmen ist also nichts. Die Karte muss nur das Layout überführen (AL-18, AL-36).
 
 ## Grundlagen
 
@@ -137,12 +138,15 @@ Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal übe
 - **AL-13** Jeder Eintrag enthält den SHA-256 seines Vorgängers (Prüfkette). Eine geänderte, gelöschte oder eingeschobene Zeile fällt bei der Prüfung auf (`verify`). SHA-256 entspricht BSI TR-02102-1 (T48).
 - **AL-14** Die Logdatei ist im Dateisystem nur anhängbar (`chattr +a`). Das schützt gegen versehentliches Ändern.
 - **AL-15** Der letzte Hash der Prüfkette jedes Systems wird regelmäßig beim anderen System hinterlegt (AL-28) und in jeden Export geschrieben. Dann fällt auch auf, wenn root auf einem System das ganze Log neu schreibt oder kürzt.
-- **AL-16** Restrisiko: root kann das Log zerstören und von dem Zeitpunkt an fälschen, zu dem er root geworden ist. Was davor versiegelt wurde, kann er nicht unbemerkt ändern (AL-55 bis AL-59). Das Restrisiko ist zu dokumentieren (T27 bis T30). Gemildert wird es durch die Zugangshärtung: `mpadmin` nur aus dem Druckernetz mit Nitrokey. Außerdem erfassen E12 und E13 jede Anmeldung und jedes sudo.
+- **AL-16** Restrisiko: root kann das Log zerstören und von dem Zeitpunkt an fälschen, zu dem er root geworden ist. Was davor signiert wurde, kann er nicht unbemerkt ändern (AL-55 bis AL-59). Das Restrisiko ist zu dokumentieren (T27 bis T30). Gemildert wird es durch die Zugangshärtung: `mpadmin` nur aus dem Druckernetz mit Nitrokey. Außerdem erfassen E12 und E13 jede Anmeldung und jedes sudo.
 
 ### Löschen (T43, T44)
 
 - **AL-17** Gelöscht wird nur über ein Verfahren, das in der Betriebsanleitung beschrieben ist. Vorschlag: ein Befehl, nur als root, mit Pflichtangabe eines Grundes. Er archiviert das alte Log und beginnt das neue mit einem E18-Eintrag. Dieser enthält Grund, Konto, letzte laufende Nummer und letzten Hash des alten Logs (T44).
-- **AL-18** Überschreibt die Installerkarte (`mp-installer`) eine NVMe, die schon eine Audit-Partition hat, sichert sie deren Inhalt vorher und schreibt ihn danach zurück. Der nächste Start schreibt E18 „Neuinstallation“. Ist das alte Log nicht lesbar, beginnt das neue mit E18 „nicht übernommen“. Eine Neuinstallation ist sonst eine Löschung ohne Nachweis.
+- **AL-18** Die Installerkarte (`mp-installer`) erkennt, welche Generation des Layouts sie auf einer belegten NVMe vorfindet (AL-33), und handelt danach:
+  - **gen1 und gen2:** Sie überschreibt die NVMe wie bisher mit `overwrite_nvme=yes` und `identity.conf` von der Karte. Diese Geräte haben kein Audit-Log, zu übernehmen ist nichts.
+  - **gen3:** Sie sichert vorher den Inhalt der Audit-Partition und schreibt ihn danach zurück. Ist das alte Log nicht lesbar, sagt sie das. Eine Neuinstallation ist sonst eine Löschung ohne Nachweis.
+  - **In jedem Fall** gibt sie dem ersten Start über die BOOTCONFIG-Partition mit, was sie vorgefunden hat: Generation, Datum, Image der Karte, übernommen oder nicht. Der erste Start schreibt das als E18 ins Log: „Neuinstallation, Log übernommen“, „Neuinstallation, altes Log nicht lesbar“ oder „Überführung von gen1/gen2, kein früheres Log“. So steht am Anfang jedes Logs, warum es dort beginnt.
 - **AL-19** Pi-Tausch: Das neue Gerät beginnt mit E01. Das alte Log bleibt auf dem alten Datenträger, eine Kopie beim anderen System (AL-29, AL-32). Das Verfahren steht in der Betriebsanleitung.
 
 ### Lesen und Auswerten (T21, T22, T33, T46, T47)
@@ -178,13 +182,19 @@ Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal übe
   - Die Boot-Partitionen behalten die Nummern 2 und 3, die Tryboot braucht.
   - Alles findet die Partitionen über ihren GPT-Namen, die neue über `/dev/disk/by-slot/audit`.
   - SD und NVMe bekommen dasselbe Layout.
+  - Generationen des Layouts:
+    - **gen1:** Systemslots 1G (Duet-Pi) bzw. 2G (HMI), ohne Audit-Partition.
+    - **gen2:** Systemslots 4G (PR #111, seit Duet rc.69 und HMI rc.8), ohne Audit-Partition.
+    - **gen3:** gen2 mit der Partition `audit`.
+
+    Die Installerkarte erkennt die Generation an den GPT-Namen und den Slotgrößen (AL-18).
 - **AL-34** Zugriff nur über den Log-Dienst:
   - Der Dienst hängt die Partition in seinem eigenen Mount-Namespace ein (`PrivateMounts=`) und ist ihr einziger Schreiber.
   - Einträge nimmt er über einen Socket nur von root an, Lesen erlaubt er der Gruppe `adm`.
   - Das Blockgerät bleibt root vorbehalten.
   - Für root ist die Partition sichtbar (`lsblk`) und einhängbar; dagegen schützen AL-13 bis AL-16 und AL-28.
 - **AL-35** Was vor dem Start des Dienstes oder während eines Ausfalls geschieht, geben die Wächter mit einer Kennung ins Journal. Der Dienst übernimmt es beim Start in der richtigen Reihenfolge. So sind auch Wächter erfasst, die früh im Boot laufen, etwa `mp-role-guard`.
-- **AL-36** Geräte, die vor dem neuen Layout installiert wurden, haben keine Audit-Partition, und ein OTA kann sie nicht anlegen. Auf ihnen schreibt der Dienst nur ins Journal und meldet bei jedem Boot E17 „keine Audit-Partition, Neuinstallation nötig“, bis das Gerät mit der Installerkarte neu aufgesetzt ist (offene Frage 10).
+- **AL-36** Geräte mit gen1 oder gen2 haben keine Audit-Partition, und ein OTA kann sie nicht anlegen. Sie werden mit der Installerkarte überführt (Festlegung 7, AL-18). Bis dahin schreibt der Dienst auf ihnen nur ins Journal und meldet bei jedem Boot E17 „keine Audit-Partition, Überführung mit der Installerkarte nötig“.
 - **AL-37** Der Dienst formatiert die Partition nur, wenn sie keinerlei Dateisystem-Signatur trägt (erster Start nach Installation). Ein beschädigtes Dateisystem wird nie neu formatiert, sondern als E17 gemeldet: Es kann der Nachweis sein.
 - **AL-38** Die Änderung an `image-rota` wird allgemein gebaut: eine optionale, nicht eingehängte Partition, deren Name und Größe Variablen sind und die standardmäßig fehlt. So lässt sie sich Upstream (raspberrypi/rpi-image-gen) vorschlagen, statt dauerhaft als eigene Abweichung mitgeführt zu werden.
 
@@ -306,30 +316,47 @@ Die Gefahr ist die Flut: Schriebe jedes Ereignis einzeln mit `fsync`, kostet das
 
 Echtes WORM, also ein Speicher, den man physisch nicht mehr überschreiben kann, gibt die verbaute NVMe nicht her. Nötig wäre ein Schreibschutz in der Hardware, etwa der permanente Schreibschutz von eMMC; NVMe-Namespace-Schreibschutz beherrscht die verbaute Samsung PM991a nach meinem Wissen nicht (am Datenblatt zu prüfen). Ein Schutz im Dateisystem (`chattr +a`) und eine reine Hash-Kette (AL-13) halten root nicht auf: Er ändert einen Eintrag und rechnet die Kette in Sekunden neu.
 
-Das Neurechnen absichtlich teuer zu machen, etwa mit langsamen Hashes, hilft nicht. Der Angreifer rechnet auf einem PC und hat Zeit, das Gerät hat beides nicht. Wirksam ist eine Versiegelung, deren Schlüssel nach Gebrauch vernichtet werden (Forward-Secure Sealing nach Schneier und Kelsey, wie `journalctl --setup-keys` bei journald).
+Das Neurechnen absichtlich teuer zu machen, etwa mit langsamen Hashes, hilft nicht. Der Angreifer rechnet auf einem PC und hat Zeit, das Gerät hat beides nicht. Wirksam ist eine Kette von Signaturen, deren private Schlüssel nach Gebrauch vernichtet werden.
 
-- **AL-55** Das Log wird schichtweise versiegelt, in Epochen, die an der Betriebszeit hängen (AL-49). Vorschlag: 15 Minuten Betriebszeit je Epoche.
-  - Das Siegel einer Epoche ist ein HMAC-SHA-256 über ihre Einträge, das Siegel der vorigen Epoche, die Epochennummer, die Betriebszeit und den Boot-Zähler.
-  - Jede Schicht bestätigt also die vorige.
-- **AL-56** Jede Epoche hat ihren eigenen Schlüssel.
-  - Am Ende einer Epoche wird der nächste Schlüssel über eine Einwegfunktion aus dem aktuellen abgeleitet. Der aktuelle wird überschrieben, im Speicher wie auf der Partition. Aus einem späteren Schlüssel lässt sich kein früherer zurückrechnen.
+Prüfen lässt sie sich ohne jedes Geheimnis, nur mit dem öffentlichen Startwert. Der muss echt sein, nicht geheim (Tim, 2026-11-04). Anders als bei einer Versiegelung mit HMAC, wie journald sie macht, braucht der Prüfer keinen Schlüssel, mit dem er selbst Siegel erzeugen könnte.
+
+- **AL-55** Das Log wird schichtweise signiert, in Epochen, die an der Betriebszeit hängen (AL-49). Vorschlag: 15 Minuten Betriebszeit je Epoche.
+  - Am Ende einer Epoche signiert das System:
+    - den Hash ihrer Einträge,
+    - den Hash der vorigen Epoche,
+    - die Epochennummer, die Betriebszeit und den Boot-Zähler,
+    - den öffentlichen Schlüssel der nächsten Epoche.
+  - Jede Schicht bestätigt also die vorige und kündigt den Schlüssel der nächsten an.
+- **AL-56** Jede Epoche hat ihr eigenes Schlüsselpaar.
+  - Vor dem Abschluss einer Epoche erzeugt das System das Paar der nächsten.
+  - Mit dem privaten Schlüssel der laufenden Epoche signiert es den Abschluss und überschreibt diesen Schlüssel dann, im Speicher wie auf der Partition. Eine signierte Epoche lässt sich danach von niemandem mehr neu signieren, auch nicht vom Gerät selbst.
   - Einträge der Klasse Stand schließen ihre Epoche sofort ab.
-  - Anmeldungen werden beim Aufbau der Sitzung über PAM synchron erfasst und versiegelt, bevor die Shell startet. Wer sich root verschafft, findet seine Anmeldung schon versiegelt vor.
-- **AL-57** Den Startschlüssel erzeugt das Gerät bei der Inbetriebnahme.
-  - Er wird sofort mit einem öffentlichen Schlüssel von Meltingplot verschlüsselt, der im Image liegt. Die Klartext-Kopie wird vernichtet.
-  - Verschlüsselter Startschlüssel und Hash stehen im ersten Eintrag des Logs (Genesis).
-  - Die Siegel prüfen kann nur, wer den zugehörigen privaten Schlüssel hat: Meltingplot, offline auf einem Hardware-Token, auf Wunsch zusätzlich eine Prüfstelle.
-  - Die Verfahren richten sich nach BSI TR-02102-1 (T48), z. B. ECIES auf P-256 oder RSA-OAEP mit 3072 Bit für den Startschlüssel.
-- **AL-58** Der Anfang wird außerhalb verankert. Der Hash des Genesis-Eintrags verlässt die Maschine bei der Inbetriebnahme: ins Inbetriebnahmeprotokoll bei Meltingplot und zum Partner-System (AL-28). Ein komplett neu angelegtes Log hätte einen anderen Anfang. Das gilt auch, wenn es mit einem neuen, korrekt verschlüsselten Startschlüssel angelegt wurde.
-- **AL-59** Was daraus folgt: Wer zum Zeitpunkt T root wird, kann nichts unbemerkt ändern, was vor T versiegelt wurde, auch seine eigene Anmeldung nicht. Das ist nicht nur aufwendig, sondern ohne den Startschlüssel unmöglich.
+  - Anmeldungen werden beim Aufbau der Sitzung über PAM synchron erfasst und signiert, bevor die Shell startet. Wer sich root verschafft, findet seine eigene Anmeldung schon unveränderlich vor.
+- **AL-57** Der Anfang (Genesis) entsteht bei der Inbetriebnahme.
+  - Das System erzeugt das erste Schlüsselpaar.
+  - Der erste Eintrag enthält dessen öffentlichen Schlüssel, die Identität des Geräts (Rolle, Druckername, Seriennummer), die Angaben der Installerkarte (AL-18) und die Betriebszeit.
+  - Sein Hash ist der Starthash.
+  - Kein geheimer Schlüssel verlässt das Gerät, und nichts muss hinterlegt werden.
+  - Die Verfahren richten sich nach BSI TR-02102-1 (T48), z. B. ECDSA auf P-256 oder brainpoolP256r1 mit SHA-256.
+- **AL-58** Der Starthash wird außerhalb verankert. Er muss echt sein, nicht geheim.
+  - Er geht ins Inbetriebnahmeprotokoll bei Meltingplot und zum Partner-System (AL-28).
+  - Er wird am Gerät angezeigt, damit ihn ein Prüfer abgleichen kann.
+  - Mit Gerätebindung (AL-60) ist er zusätzlich vom Gerät signiert.
+  - Ein komplett neu angelegtes Log hat einen anderen Starthash und fällt auf.
+- **AL-59** Was daraus folgt:
+  - Prüfen kann jeder, der den Starthash hat: Meltingplot, der Betreiber, eine Prüfstelle, auch das Gerät selbst. Es braucht dazu kein Geheimnis.
+  - Wer zum Zeitpunkt T root wird, kann nichts unbemerkt ändern, was vor T signiert wurde, auch seine eigene Anmeldung nicht. Die privaten Schlüssel dafür gibt es nicht mehr.
   - Er kann ab T fälschen.
-  - Er kann das Log löschen oder neu anlegen. Beides fällt über AL-58 auf.
-  - Die Prüfkette (AL-13) bleibt daneben bestehen: Mit ihr lässt sich am Gerät ohne Schlüssel prüfen, ob Einträge fehlen oder umgestellt sind.
+  - Er kann das Log löschen oder ein neues anlegen. Beides fällt über den verankerten Starthash auf (AL-58).
 - **AL-60** SOLL: Bindung an das Gerät.
-  - Zusätzlich signiert der Pi 5 jedes Epochensiegel mit seinem gerätegebundenen Schlüssel im OTP, über die Firmware (`rpi-fw-crypto`, dieselbe Geräteidentität, mit der sich Connect anmeldet). Linux kann damit signieren lassen, den Schlüssel aber nicht lesen.
-  - Ein gefälschtes Log ließe sich dann nur auf diesem Gerät erzeugen, nicht auf einem PC.
+  - Der Pi 5 signiert den Starthash zusätzlich mit seinem gerätegebundenen Schlüssel im OTP, über die Firmware (`rpi-fw-crypto`, dieselbe Geräteidentität, mit der sich Connect anmeldet). Linux kann damit signieren lassen, den Schlüssel aber nicht lesen.
+  - Ein Prüfer prüft diese Signatur mit dem öffentlichen Schlüssel des Geräts.
+  - Ein neu angelegtes Log müsste dann auf genau diesem Gerät entstehen.
   - Voraussetzung: Der Schlüssel ist provisioniert und gegen Auslesen gesperrt. Zu prüfen.
-- **AL-61** Ein Prüfwerkzeug für Meltingplot und Prüfstellen entschlüsselt den Startschlüssel, rechnet die Schlüsselfolge nach und meldet je Epoche gültig, verändert oder fehlend. Es läuft außerhalb der Maschine.
+- **AL-61** Das Prüfwerkzeug ist öffentlich und braucht nur Log und Starthash.
+  - Es rechnet die Kette der Schlüssel und Signaturen nach und meldet je Epoche: gültig, verändert oder fehlend.
+  - Es läuft auf dem Gerät (`mp-audit verify`) wie außerhalb.
+  - Platz: etwa 150 Byte je Epoche für Signatur und nächsten öffentlichen Schlüssel. Bei einer Epoche je 15 Minuten Betriebszeit sind das rund 5 MB im Jahr, 25 MB in fünf Jahren. Das liegt im Anteil Reserve (AL-40). Epochen, die eine Änderung sofort abschließt, zählen zum Budget ihrer Klasse.
 
 ### Warum nicht journald mit Forward-Secure Sealing allein
 
@@ -353,14 +380,14 @@ Was journald gut kann und wir nutzen:
   Was er übernimmt, geht durch Budget und Klassen (AL-39 bis AL-48).
 - **AL-63** SOLL: Zusätzlich wird das normale Journal versiegelt, als zweite, unabhängige Schicht über alles, auch über die Quellen des Collectors. Das kostet wenig:
   - `Seal=yes` ist Standard; es fehlt nur `journalctl --setup-keys` bei der Inbetriebnahme.
-  - Der Prüfschlüssel wird wie der Startschlüssel des Audit-Logs verschlüsselt an Meltingplot übergeben (AL-57).
+  - Anders als beim Audit-Log ist der „verification key“ von journald ein Geheimnis: Er ist der Seed, aus dem sich alle Siegel erzeugen lassen (`--setup-keys`, `format_key(seed, …)`). Er darf das Gerät nur verschlüsselt an Meltingplot verlassen und muss dort geheim bleiben.
   - Die Abhängigkeit von der Uhr bleibt bei dieser Schicht bestehen. Ein Sprung steht als E16 im Audit-Log.
 - Das Audit-Log selbst bleibt eigen, aber klein:
   - der Dienst mit Budgets, Zusammenfassung und Stand,
   - die Ablage auf der privaten Partition,
-  - die Versiegelung nach Betriebszeit (AL-55 bis AL-61) und das Prüfwerkzeug.
+  - die Signaturkette nach Betriebszeit (AL-55 bis AL-61) und das Prüfwerkzeug.
 
-  Das Prinzip ist dasselbe wie bei journald: vorwärtssicherer Schlüssel, Prüfschlüssel außerhalb der Maschine. Der Unterschied ist die Uhr.
+  Gemeinsam mit journald ist der vorwärtssichere Schlüssel. Anders sind zwei Dinge: Das Audit-Log hängt an der Betriebszeit statt an der Uhr, und es ist mit einem öffentlichen Startwert prüfbar statt mit einem geheimen Schlüssel.
 
 ## Nicht-Ziele
 
@@ -380,12 +407,9 @@ Was journald gut kann und wir nutzen:
 7. **Zwei Systeme:** Die gegenseitige Verankerung (AL-28) ist als MUSS vorgeschlagen, die vollständige Kopie des anderen Logs (AL-29) als SOLL. Einverstanden?
 8. **USB-Wächter auch auf dem Duet-Pi?** Seine Buchsen sind nur im Schaltschrank zugänglich.
 9. **USB-Kamera:** Sie ist ein drittes Linux-System mit eigenen Updates und hängt am HMI. Ist ihre Software für die Sicherheit relevant? Wenn ja, braucht sie ein eigenes Log oder einen Eintrag im HMI-Log bei jedem Update.
-10. **Bestandsgeräte (AL-36):** Werden alle bisher installierten Geräte mit der Installerkarte neu aufgesetzt, sobald das neue Layout da ist? Bis dahin führen sie kein Audit-Log, nur das Journal.
+10. **Bestandsgeräte (AL-36):** Beantwortet (Tim, 2026-11-04). Ja, alle werden mit der Installerkarte überführt. Sie haben noch kein Log, die Karte muss nur das Layout gen1 oder gen2 überführen (Festlegung 7, AL-18).
 11. **Anmeldung bei vollem Log (AL-48):** Sollen SSH und Connect dann auch verweigert werden? Das wäre strenger, sperrt aber den Support aus, gerade wenn das Gerät gestört ist.
-12. **Schlüssel für die Versiegelung (AL-57, AL-58):**
-    - Wer hält den privaten Schlüssel zum Prüfen: nur Meltingplot, auch der Kunde, eine Prüfstelle?
-    - Wie wird er verwahrt (Nitrokey, Zweitkopie) und gewechselt?
-    - Wie kommt der Genesis-Hash bei der Inbetriebnahme sicher zu Meltingplot: Inbetriebnahmeprotokoll, Connect, Foto vom Panel?
+12. **Verankerung des Starthashes (AL-58):** Ein Prüfschlüssel entfällt, weil die Kette mit öffentlichen Schlüsseln prüfbar ist (Tim, 2026-11-04). Offen ist nur, wie der Starthash bei der Inbetriebnahme sicher zu Meltingplot kommt: Inbetriebnahmeprotokoll, Connect, Foto vom Panel? Für das normale Journal (AL-63) bleibt der geheime Schlüssel von journald zu verwahren.
 13. **Gerätebindung (AL-60):** Ist der OTP-Schlüssel auf unseren Pis provisioniert und gesperrt, und darf das Log ihn neben Connect mitbenutzen?
 
 ## Umsetzungsvorschlag
@@ -439,6 +463,6 @@ Eine Skizze, nicht bindend:
 | T36, T37 eigene Partition | AL-04, AL-33 bis AL-37 | `findmnt` in einer Shell zeigt keinen Einhängepunkt, `lsblk` die Partition. Persistenzpartition vollschreiben oder neu formatieren: Das Log schreibt weiter bzw. bleibt erhalten. Neuinstallation über eine belegte NVMe: Das alte Log ist danach da, mit E18. |
 | T36, T42 gegen Fluten | AL-39 bis AL-48 | Test mit simulierter Betriebszeit: fünf Jahre Dauerflut über alle Klassen, in die man schreiben kann, mit rollierend wechselnden Quellen, Objekten und Texten (USB-Kennungen, auch ein zugelassener Stick, SSH-Konten und Adressen, Dateinamen unter `0:/sys`). Vorher, mittendrin und am Ende je eine Anmeldung als `mpadmin` und eine Änderung an `config.g`. Danach: kein Anteil über seiner Grenze; alle Einträge von vor der Flut unverändert (Prüfkette); in der Klasse Stand jede der Änderungen und Anmeldungen mindestens auf den Tag genau; die Flut als E19 mit Sammeleinträgen. Zusätzlich jedes Objekt der festen Menge täglich geändert: Die Klasse Stand bleibt unter ihrem Anteil. Partition nicht schreibbar simuliert: Update und Firmware-Flash werden verweigert. |
 | Verschleiß (kein eigenes Kriterium, Voraussetzung für T39) | AL-50 bis AL-54 | Eine Stunde lang 1000 Ereignisse pro Sekunde: Die Schreibmenge auf den Datenträger laut `/sys/block/*/stat` bleibt unter 5 MB für diese Stunde. Rechnung AL-52 gegen die TBW aus dem Datenblatt der verbauten SSD. |
-| T42, T48 Versiegelung | AL-55 bis AL-61 | Auf einem Testgerät als root einen Eintrag einer früheren Epoche ändern und Kette sowie Siegel mit allem neu rechnen, was auf dem Gerät liegt: Das Prüfwerkzeug meldet die Epoche als verändert. Log löschen und neu anlegen: Der Genesis-Hash passt nicht zum Inbetriebnahmeprotokoll. Nach einem Login als `mpadmin`: Die Anmeldung ist versiegelt, bevor die Shell kommt. |
+| T42, T48 Signaturkette | AL-55 bis AL-61 | Auf einem Testgerät als root einen Eintrag einer früheren Epoche ändern und Kette sowie Signaturen mit allem neu rechnen, was auf dem Gerät liegt: Das Prüfwerkzeug meldet die Epoche als verändert, geprüft nur mit dem Starthash. Log löschen und neu anlegen: Der Starthash passt nicht zum Inbetriebnahmeprotokoll. Nach einem Login als `mpadmin`: Die Anmeldung ist signiert, bevor die Shell kommt. |
 | T39, T42 gegen gestellte Uhr | AL-46, AL-49 | Uhr um sechs Jahre vordrehen, dann fluten: Nichts wird gelöscht, kein Budget füllt sich schneller auf, E16 steht im Log. Uhr zurückdrehen: Reihenfolge nach laufender Nummer bleibt richtig. |
 | T37, T42 über beide Systeme | AL-25 bis AL-32 | Log auf einem System kürzen: das andere meldet die Abweichung. Druckernetz eine Stunde trennen: beide loggen weiter, die Verankerung wird nachgeholt. Export am HMI enthält beide Logs. |
