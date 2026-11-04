@@ -97,6 +97,77 @@ mpi_drive_blank() {
    [ -z "$_sig" ]
 }
 
+# --- the layout on the drive ---------------------------------------------
+
+# The partitions the kernel sees on a drive, one per line: GPT name (or -),
+# start and size in bytes. sysfs counts in 512-byte units whatever the drive's
+# block size.
+mpi_partitions() {
+   _n=$(basename "$1")
+   for _p in "$MPI_SYS_BLOCK/$_n/$_n"p*; do
+      [ -r "$_p/start" ] && [ -r "$_p/size" ] || continue
+      _name=$(sed -n 's/^PARTNAME=//p' "$_p/uevent" 2>/dev/null)
+      echo "${_name:--} $(($(cat "$_p/start") * 512)) $(($(cat "$_p/size") * 512))"
+   done
+}
+
+# Which generation of the A/B layout the partitions on stdin (mpi_partitions)
+# make, given the name of the partition to keep ($1):
+#   gen3     the A/B layout with that partition (the audit log)
+#   gen2     the A/B layout with 4G system slots (since PR #111)
+#   gen1     the A/B layout with smaller system slots (1G printer SBC, 2G panel)
+#   blank    no partition at all
+#   foreign  anything else
+mpi_layout_generation() {
+   awk -v keep="${1:-}" '
+      NF == 0 { next }
+      { n++; size[$1] = $3 }
+      END {
+         if (!n) { print "blank"; exit }
+         split("bootconfig boot_a boot_b system_a system_b persistent", ab, " ")
+         for (i in ab) if (!(ab[i] in size)) { print "foreign"; exit }
+         if (keep != "" && (keep in size)) { print "gen3"; exit }
+         # 3 GiB lies between the 2G slots of gen1 and the 4G slots of gen2
+         if (size["system_a"] > 3221225472) print "gen2"; else print "gen1"
+      }'
+}
+
+# Whether the card can leave the partition to keep ($1) alone: on the drive
+# (partitions on stdin) it has to lie exactly where the image puts it, start
+# $2 and size $3 in bytes. Prints
+#   keep   it does; the card writes around it
+#   moved  the drive has it somewhere else or at another size
+#   none   the drive has no such partition, or there is nothing to keep
+mpi_keep_decision() {
+   awk -v k="${1:-}" -v s="${2:-}" -v z="${3:-}" '
+      NF == 0 { next }
+      $1 == k { found = 1; if ($2 == s && $3 == z) ok = 1 }
+      END {
+         if (k == "" || s == "" || z == "" || !found) print "none"
+         else if (ok) print "keep"
+         else print "moved"
+      }'
+}
+
+# Write the raw image on stdin to $1 but leave the range of $3 bytes from
+# byte $2 as the drive has it: the partition to keep. The image's own bytes
+# for that range are read and dropped. In blocks of 4 MiB, to which the build
+# checked the range is aligned (mp-installer-measure); notrunc so a file
+# stands in for the drive in the tests.
+mpi_write_around() {
+   dd of="$1" bs=4M iflag=fullblock count=$(($2 / 4194304)) conv=fsync,notrunc status=none &&
+      dd of=/dev/null bs=4M iflag=fullblock count=$(($3 / 4194304)) status=none &&
+      dd of="$1" bs=4M iflag=fullblock seek=$((($2 + $3) / 4194304)) conv=fsync,notrunc status=none
+}
+
+# SHA-256 of the first $2 bytes of $1 without the range of $4 bytes from
+# byte $3: what a drive written by mpi_write_around reads back.
+mpi_read_back_around() {
+   { head -c "$3" "$1"
+     dd if="$1" bs=4M skip=$((($3 + $4) / 4194304)) iflag=count_bytes \
+        count=$(($2 - $3 - $4)) status=none; } | sha256sum | cut -d' ' -f1
+}
+
 # --- the card -------------------------------------------------------------
 
 # A yes/no switch from a key=value file on the card. Only yes counts.
@@ -153,9 +224,11 @@ mpi_card_spend() {
 # The card remembers the last drive it worked on and how far it got, so a
 # start after an interruption picks its own work up instead of refusing a
 # drive that is no longer empty, and a Pi that starts from SD again after an
-# installation can say why.
+# installation can say why. What the drive held before is kept with it: once
+# writing began, the drive no longer shows it.
 #   image=<image name>  serial=<drive serial>
 #   step=writing|bootloader|done  bootloader=<date, once done>
+#   layout=<generation found, mpi_layout_generation>  keep=keep|none
 mpi_state_get() {
    mp_conf_get "$MPI_CARD/installer.state" "$1"
 }
@@ -167,6 +240,8 @@ mpi_state_write() {
       echo "serial=$2"
       echo "step=$3"
       [ -z "${4:-}" ] || echo "bootloader=$4"
+      [ -z "${5:-}" ] || echo "layout=$5"
+      [ -z "${6:-}" ] || echo "keep=$6"
    } > "$MPI_CARD/installer.state.tmp" &&
       mv -f "$MPI_CARD/installer.state.tmp" "$MPI_CARD/installer.state"
    sync "$MPI_CARD/installer.state" 2>/dev/null || true

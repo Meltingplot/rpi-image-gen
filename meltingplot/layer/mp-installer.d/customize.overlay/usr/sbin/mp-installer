@@ -2,9 +2,11 @@
 # Write the A/B image this card carries to the NVMe drive, with nobody at the
 # machine, and make the bootloader start from the drive.
 #
-#   1. find exactly one NVMe drive, empty unless installer.conf releases it
+#   1. find exactly one NVMe drive, empty unless installer.conf releases it,
+#      and tell which layout it holds (gen1, gen2, gen3)
 #   2. check identity.conf on the card and the image on the card
-#   3. write the image, read it back and compare
+#   3. write the image, read it back and compare; on a drive of the layout
+#      gen3 around its audit partition, which stays as it is
 #   4. hand identity.conf to the drive's BOOTCONFIG and reset the card's copy
 #   5. update the bootloader and set it to start from NVMe first
 #   6. restart, into the drive
@@ -87,6 +89,36 @@ case $action in
       fail "$MPI_E_NOTEMPTY" "$dev is not empty ($(wipefs --no-act --noheadings --output TYPE "$dev" 2>/dev/null | tr '\n' ' ')); set overwrite_nvme=yes in meltingplot/installer.conf to overwrite it" ;;
 esac
 
+# What the drive held, and whether its audit partition stays as it is
+# (docs/meltingplot-audit-log.md, AL-18). Devices of the layouts gen1 and
+# gen2 have no audit log and move to this layout as a whole. On gen3 the
+# card writes around the audit partition, which has to lie where this image
+# puts it. Once writing began the drive no longer shows what it held, so a
+# start after an interruption takes both from the card's state.
+layout=blank
+keep=none
+case $action in
+   overwrite)
+      parts=$(mpi_partitions "$dev")
+      layout=$(printf '%s\n' "$parts" | mpi_layout_generation "${MPI_KEEP_PART:-}")
+      if [ "$layout" = gen3 ]; then
+         keep=$(printf '%s\n' "$parts" |
+            mpi_keep_decision "$MPI_KEEP_PART" "${MPI_KEEP_START:-}" "${MPI_KEEP_SIZE:-}")
+         [ "$keep" != moved ] ||
+            fail "$MPI_E_FAILED" "$dev has its $MPI_KEEP_PART partition somewhere else than $MPI_IMAGE puts it; this card cannot keep that log and does not write"
+      fi
+      case $layout in
+         gen1|gen2) mpi_log "$dev holds the A/B layout $layout, without an audit log; it moves to the layout of $MPI_IMAGE" ;;
+         gen3) mpi_log "$dev holds the A/B layout gen3; its $MPI_KEEP_PART partition stays as it is" ;;
+         *) mpi_log "$dev holds no Meltingplot A/B layout ($layout)" ;;
+      esac ;;
+   rewrite|bootloader)
+      layout=$(mpi_state_get layout)
+      layout=${layout:-unknown}
+      keep=$(mpi_state_get keep)
+      keep=${keep:-none} ;;
+esac
+
 # --- 2. the card --------------------------------------------------------------
 
 if [ "$action" != bootloader ]; then
@@ -111,12 +143,21 @@ if [ "$action" != bootloader ]; then
    fi
    # From here on the drive is no longer empty. Should the card be stopped
    # before it is done, the next start knows the drive as its own work.
-   mpi_state_write "$MPI_IMAGE" "$serial" writing
+   mpi_state_write "$MPI_IMAGE" "$serial" writing "" "$layout" "$keep"
 
-   mpi_log "writing $MPI_IMAGE to $dev"
    rm -f "$WORK/pipe.err"
-   { zstd -dc --no-progress "$MPI_PAYLOAD" || echo zstd > "$WORK/pipe.err"; } |
-      { dd of="$dev" bs=4M iflag=fullblock conv=fsync status=none || echo dd >> "$WORK/pipe.err"; }
+   if [ "$keep" = keep ]; then
+      # In blocks of 4 MiB: the build checked that the partition is aligned
+      # to that (mp-installer-measure). The range in between is read from the
+      # image and dropped, so the drive keeps what it has there.
+      mpi_log "writing $MPI_IMAGE to $dev around $MPI_KEEP_PART ($MPI_KEEP_SIZE bytes from byte $MPI_KEEP_START), which stays as it is"
+      { zstd -dc --no-progress "$MPI_PAYLOAD" || echo zstd > "$WORK/pipe.err"; } |
+         { mpi_write_around "$dev" "$MPI_KEEP_START" "$MPI_KEEP_SIZE" || echo dd >> "$WORK/pipe.err"; }
+   else
+      mpi_log "writing $MPI_IMAGE to $dev"
+      { zstd -dc --no-progress "$MPI_PAYLOAD" || echo zstd > "$WORK/pipe.err"; } |
+         { dd of="$dev" bs=4M iflag=fullblock conv=fsync status=none || echo dd >> "$WORK/pipe.err"; }
+   fi
    [ ! -s "$WORK/pipe.err" ] ||
       fail "$MPI_E_FAILED" "writing $dev failed in $(tr '\n' ' ' < "$WORK/pipe.err")"
 
@@ -124,7 +165,14 @@ if [ "$action" != bootloader ]; then
    sync
    echo 3 > /proc/sys/vm/drop_caches
    blockdev --flushbufs "$dev"
-   [ "$(head -c "$MPI_RAW_SIZE" "$dev" | sha256sum | cut -d' ' -f1)" = "$MPI_RAW_SHA256" ] ||
+   if [ "$keep" = keep ]; then
+      read_back=$(mpi_read_back_around "$dev" "$MPI_RAW_SIZE" "$MPI_KEEP_START" "$MPI_KEEP_SIZE")
+      want_back=$MPI_RAW_SHA256_KEEP
+   else
+      read_back=$(head -c "$MPI_RAW_SIZE" "$dev" | sha256sum | cut -d' ' -f1)
+      want_back=$MPI_RAW_SHA256
+   fi
+   [ "$read_back" = "$want_back" ] ||
       fail "$MPI_E_FAILED" "$dev does not read back what was written; the drive may be faulty"
    mpi_log "$dev holds $MPI_IMAGE, verified"
 
@@ -152,6 +200,12 @@ if [ "$action" != bootloader ]; then
       echo "drive=$(mpi_drive_model "$dev") $serial"
       echo "bootloader_before=$(mpi_bootloader_date)"
       echo "installed=$(date -u +%Y-%m-%dT%H:%M:%SZ) (the Pi's clock, not synchronised)"
+      # For the audit log, which starts by saying why it starts here
+      # (docs/meltingplot-audit-log.md, AL-18): the layout the drive held and
+      # whether its audit partition was kept.
+      echo "layout_before=$layout"
+      echo "keep_part=${MPI_KEEP_PART:-}"
+      if [ "$keep" = keep ]; then echo "kept=yes"; else echo "kept=no"; fi
    } > "$MNT/meltingplot/installer.txt"
    sync
    umount "$MNT"
@@ -163,7 +217,7 @@ if [ "$action" != bootloader ]; then
       mpi_log "identity.conf on the card reset"
    fi
    [ "$action" != overwrite ] || mpi_card_spend "$MPI_CARD/installer.conf" overwrite_nvme "used $(date -u +%Y-%m-%d)"
-   mpi_state_write "$MPI_IMAGE" "$serial" bootloader
+   mpi_state_write "$MPI_IMAGE" "$serial" bootloader "" "$layout" "$keep"
 fi
 
 # --- 5. bootloader --------------------------------------------------------------
@@ -188,7 +242,7 @@ else
    RPI_EEPROM_ALLOW_DOWNGRADE=1 rpi-eeprom-config --apply "$WORK/boot.conf" "$image" >> "$MPI_CARD/installer.log" 2>&1 ||
       fail "$MPI_E_FAILED" "updating the bootloader failed"
 fi
-mpi_state_write "$MPI_IMAGE" "$serial" done "$want"
+mpi_state_write "$MPI_IMAGE" "$serial" done "$want" "$layout" "$keep"
 
 # --- 6. restart -----------------------------------------------------------------
 

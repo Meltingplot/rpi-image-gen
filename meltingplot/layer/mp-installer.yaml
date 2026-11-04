@@ -11,7 +11,7 @@
 #  card releases it. The green LED tells the outcome, meltingplot/installer.log
 #  on the card the details. The image comes from a build of the A/B image and
 #  is checked against the SHA256SUMS that build wrote beside it.
-# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Version: 1.1.0
 # X-Env-Layer-Requires: rpi-boot-firmware,rpi-device-secpolicy
 # X-Env-Layer-RequiresProvider: systemd
 #
@@ -70,6 +70,16 @@
 # X-Env-Var-bootloader_min-Valid: regex:^[0-9]{4}-[0-9]{2}-[0-9]{2}$
 # X-Env-Var-bootloader_min-Set: y
 #
+# X-Env-Var-keep_part: audit
+# X-Env-Var-keep_part-Desc: GPT name of the partition whose content the card
+#  keeps when it writes over a drive of the same layout: the audit log
+#  (docs/meltingplot-audit-log.md, AL-18). The card leaves that range of the
+#  drive untouched, provided the partition lies exactly where the image puts
+#  it, and stops if it lies anywhere else. Empty to write everything.
+# X-Env-Var-keep_part-Required: n
+# X-Env-Var-keep_part-Valid: regex:^([a-z][a-z0-9_]{0,15})?$
+# X-Env-Var-keep_part-Set: y
+#
 # X-Env-Var-identity: ${DIRECTORY}/mp-identity.d/customize.overlay
 # X-Env-Var-identity-Desc: Overlay of mp-identity, for the commissioning file
 #  the card hands on and the helpers that check it the way the first boot
@@ -77,6 +87,13 @@
 # X-Env-Var-identity-Required: n
 # X-Env-Var-identity-Valid: dir
 # X-Env-Var-identity-Set: y
+#
+# X-Env-Var-assetdir: ${DIRECTORY}/${STEM}.d
+# X-Env-Var-assetdir-Desc: Directory holding this layer's build helpers, such
+#  as the measuring of the image the card carries.
+# X-Env-Var-assetdir-Required: n
+# X-Env-Var-assetdir-Valid: dir
+# X-Env-Var-assetdir-Set: y
 # METAEND
 ---
 mmdebstrap:

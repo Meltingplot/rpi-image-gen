@@ -75,6 +75,103 @@ mkdir "$MPI_SYS_BLOCK/nvme0n1/nvme0n1p1"
 check "a partition is not empty"      no  "$(yesno mpi_drive_blank /dev/nvme0n1)"
 rmdir "$MPI_SYS_BLOCK/nvme0n1/nvme0n1p1"
 
+# --- the layout on the drive ------------------------------------------------------
+# The A/B layout as the kernel shows it in sysfs: name in uevent, start and
+# size in 512-byte units, 8 MiB aligned as genimage lays it out. Which
+# generation the drive holds decides whether its audit partition stays.
+
+part() { # name number start size, in MiB
+   _d="$MPI_SYS_BLOCK/nvme0n1/nvme0n1p$2"
+   mkdir -p "$_d"
+   printf 'DEVTYPE=partition\nPARTN=%s\nPARTNAME=%s\n' "$2" "$1" > "$_d/uevent"
+   echo $(($3 * 2048)) > "$_d/start"
+   echo $(($4 * 2048)) > "$_d/size"
+}
+ab_layout() { # system slot size in MiB, "audit" for gen3
+   rm -rf "$MPI_SYS_BLOCK"/nvme0n1/nvme0n1p*
+   part bootconfig 1 8 32
+   part boot_a 2 40 128
+   part boot_b 3 168 128
+   part system_a 4 296 "$1"
+   part system_b 5 $((296 + $1)) "$1"
+   _s=$((296 + 2 * $1))
+   if [ "${2:-}" = audit ]; then
+      part audit 6 "$_s" 512
+      part persistent 7 $((_s + 512)) 4096
+   else
+      part persistent 6 "$_s" 4096
+   fi
+}
+gen() { mpi_partitions /dev/nvme0n1 | mpi_layout_generation audit; }
+mib=1048576
+audit_start=$(((296 + 2 * 4096) * mib))
+audit_size=$((512 * mib))
+
+check "blank drive"                   blank   "$(gen)"
+ab_layout 1024
+check "gen1, printer SBC (1G slots)"  gen1    "$(gen)"
+ab_layout 2048
+check "gen1, panel (2G slots)"        gen1    "$(gen)"
+ab_layout 4096
+check "gen2 (4G slots)"               gen2    "$(gen)"
+check "gen2 has nothing to keep"      none    "$(mpi_partitions /dev/nvme0n1 | mpi_keep_decision audit "$audit_start" "$audit_size")"
+ab_layout 4096 audit
+check "gen3 (audit partition)"        gen3    "$(gen)"
+check "audit partition as sysfs has it" "audit $audit_start $audit_size" \
+   "$(mpi_partitions /dev/nvme0n1 | grep '^audit ')"
+check "gen3 without a name to keep"   gen2    "$(mpi_partitions /dev/nvme0n1 | mpi_layout_generation '')"
+check "audit where the image has it"  keep    "$(mpi_partitions /dev/nvme0n1 | mpi_keep_decision audit "$audit_start" "$audit_size")"
+check "audit elsewhere"               moved   "$(mpi_partitions /dev/nvme0n1 | mpi_keep_decision audit $((audit_start + 8 * mib)) "$audit_size")"
+check "audit of another size"         moved   "$(mpi_partitions /dev/nvme0n1 | mpi_keep_decision audit "$audit_start" $((256 * mib)))"
+check "image without audit"           none    "$(mpi_partitions /dev/nvme0n1 | mpi_keep_decision audit '' '')"
+rm -rf "$MPI_SYS_BLOCK"/nvme0n1/nvme0n1p*
+part rootfs 1 4 1024
+check "someone else's layout"         foreign "$(gen)"
+part bootconfig 2 1028 32
+check "half an A/B layout"            foreign "$(gen)"
+rm -rf "$MPI_SYS_BLOCK"/nvme0n1/nvme0n1p*
+
+# --- writing around the audit partition --------------------------------------------
+# A small image with a GPT naming an audit partition at 64 MiB, measured the
+# way the build does, written over a "drive" (a file) that already holds
+# other data. The drive has to keep its own bytes in the audit range and read
+# back what the build measured for the rest.
+
+measure="$here/../layer/mp-installer.d/bin/mp-installer-measure"
+python3 - "$tmp/img" "$tmp/drive" <<'EOF'
+import os, struct, sys
+MiB = 1 << 20
+img = bytearray(os.urandom(96 * MiB))
+img[:MiB] = bytes(MiB)
+hdr = bytearray(92)
+hdr[:8] = b"EFI PART"
+struct.pack_into("<QII", hdr, 72, 2, 128, 128)
+img[512:512 + 92] = hdr
+def entry(i, name, first_mib, size_mib):
+    e = bytearray(128)
+    struct.pack_into("<QQ", e, 32, first_mib * 2048, (first_mib + size_mib) * 2048 - 1)
+    e[56:56 + 2 * len(name)] = name.encode("utf-16-le")
+    img[1024 + 128 * i:1024 + 128 * (i + 1)] = e
+entry(0, "system_a", 8, 32)
+entry(1, "audit", 64, 16)
+entry(2, "persistent", 80, 16)
+open(sys.argv[1], "wb").write(img)
+open(sys.argv[2], "wb").write(os.urandom(128 * MiB))
+EOF
+set -- $(python3 "$measure" audit < "$tmp/img")
+raw_size=$1 raw_sha=$2 k_start=$3 k_size=$4 k_sha=$5
+check "measured: image size"          $((96 * mib))   "$raw_size"
+check "measured: whole image"         "$(sha256sum < "$tmp/img" | cut -d' ' -f1)" "$raw_sha"
+check "measured: audit start"         $((64 * mib))   "$k_start"
+check "measured: audit size"          $((16 * mib))   "$k_size"
+check "measured: unnamed, nothing"    "- - -"         "$(python3 "$measure" < "$tmp/img" | cut -d' ' -f3-5)"
+old_audit=$(dd if="$tmp/drive" bs=4M skip=16 count=4 status=none | sha256sum | cut -d' ' -f1)
+mpi_write_around "$tmp/drive" "$k_start" "$k_size" < "$tmp/img"
+check "drive keeps its audit range"   "$old_audit"    "$(dd if="$tmp/drive" bs=4M skip=16 count=4 status=none | sha256sum | cut -d' ' -f1)"
+check "drive reads back the rest"     "$k_sha"        "$(mpi_read_back_around "$tmp/drive" "$raw_size" "$k_start" "$k_size")"
+check "drive size untouched"          $((128 * mib))  "$(stat -c %s "$tmp/drive")"
+rm -f "$tmp/img" "$tmp/drive"
+
 # --- installer.conf -------------------------------------------------------------
 
 conf="$here/../layer/mp-installer.d/customize.overlay/boot/firmware/meltingplot/installer.conf"
@@ -126,6 +223,11 @@ check "state step"                    done              "$(mpi_state_get step)"
 check "state bootloader"              2026-09-25        "$(mpi_state_get bootloader)"
 mpi_state_write mp-duet-pi5-1.0.0 S6EUNX0T123456 writing
 check "no bootloader before done"     ""                "$(mpi_state_get bootloader)"
+check "no layout unless known"        ""                "$(mpi_state_get layout)"
+mpi_state_write mp-duet-pi5-1.0.0 S6EUNX0T123456 writing "" gen3 keep
+check "state layout"                  gen3              "$(mpi_state_get layout)"
+check "state keep"                    keep              "$(mpi_state_get keep)"
+check "still no bootloader"           ""                "$(mpi_state_get bootloader)"
 
 # --- what to do with the drive ----------------------------------------------------
 # An interrupted card must pick its own drive up again without the release
