@@ -550,6 +550,51 @@ could become root or belongs to a group that grants anything, or in which sshd
 would let the administrator in from the machine itself, or, on a final image,
 from outside the printer network.
 
+## Audit log
+
+Both computers keep a lasting record of every intervention in their software,
+configuration and access, as the Machinery Regulation asks (Annex III 1.1.9).
+The requirements, with the reasoning behind each, are in
+[docs/meltingplot-audit-log.md](../docs/meltingplot-audit-log.md); the
+numbers AL-nn and E01 to E23 below refer to it.
+
+`mp-audit.service` (layer `mp-audit`) keeps the log on the partition `audit`
+of layout gen3, which it mounts in its own namespace only: `findmnt` in a
+shell shows nothing, `lsblk` shows the partition. Entries are lines of JSON,
+each with the SHA-256 of the line before. Every 15 minutes of operating time,
+and at once for the class state, an epoch is sealed: signed with a key of its
+own (ECDSA P-256), which announces the key of the next epoch and is destroyed
+right after. The hash of the first entry is the start hash; with it, anyone
+can check the whole log without any secret, and nobody, root on the device
+included, can alter a sealed epoch unnoticed. Budgets per class of event,
+refilled with operating time rather than the system clock, keep a flood from
+crowding out what matters: over the budget, events are counted in summaries
+instead of written one by one.
+
+```bash
+mp-audit status                      # mode, start hash, budgets
+mp-audit show                        # changes and summaries; --all for everything
+mp-audit verify --start <start hash> # chain and seals, against the nameplate
+mp-audit genesis                     # start hash and its fingerprint
+```
+
+The Connect account may read and check (group `adm`); only root records, and
+`mp-audit reset --reason ...` as root is the one way to start a new log, which
+archives the old one and names it in the new one's first entries (AL-17). A
+computer still on layout gen1 or gen2 has no audit partition and no update can
+add one: the service runs there too, writes to the journal only and says so at
+every boot (E17), until the installer card moves it to gen3. An exported log
+is checked off the device with the same tool and `auditlog.py` next to it:
+`mp-audit verify --start <hash> <files>`.
+
+Recorded so far are the computer's own events: commissioning (E01), what the
+installer card found on the drive (E18), a new image and the outcome of its
+trial boot (E02), a boot that ended without a clean stop (E15), the system
+clock set or synchronised (E16) and faults of the log itself (E17). The guards,
+the logins, the state of the security relevant objects, the partner computer
+and the export at the panel follow in the next steps of phase 2 (see
+Umsetzung in the requirements).
+
 ## Updating a fleet
 
 1. Tag the repository `duet-pi5/v<version>`. The workflow builds the image and

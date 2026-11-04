@@ -1,0 +1,26 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-audit
+# X-Env-Layer-Category: device
+# X-Env-Layer-Desc: The audit log (docs/meltingplot-audit-log.md): a lasting
+#  record of every intervention in software, configuration and access, as
+#  the Machinery Regulation asks (Annex III 1.1.9). mp-audit.service keeps
+#  it on the partition of its own (layout gen3, image.private_part_name),
+#  mounted only in its namespace. Entries are chained by hash and sealed in
+#  epochs of operating time, each with a key that is destroyed after use, so
+#  the log can be checked with nothing but its start hash. Budgets per class
+#  keep a flood from crowding out what matters. mp-audit records, shows and
+#  checks it. Without the partition it writes to the journal only and says
+#  so on every boot.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-RequiresProvider: systemd
+# METAEND
+---
+mmdebstrap:
+  packages:
+    - python3
+    # ECDSA P-256 for the seals (AL-57)
+    - python3-cryptography
+    # mkfs.ext4, e2fsck and chattr
+    - e2fsprogs
+  customize-hooks:
+    - $BDEBSTRAP_HOOKS/enable-units "$1" mp-audit

@@ -508,6 +508,31 @@ Phase 1 im Einzelnen:
 - Die Karte vermisst beim Bauen Lage und Größe der Partition im Image (`mp-installer-measure`) und prüft das Rücklesen ohne diesen Bereich.
 - Was sie vorgefunden hat, schreibt sie in `meltingplot/installer.txt` auf der BOOTCONFIG-Partition: `layout_before`, `keep_part`, `kept`.
 
+Phase 1 ist seit Duet rc.75 / HMI rc.11 gebaut und am 2026-11-04 auf dem Bench-HMI installiert.
+
+Phase 2 in Schritten, jeder ein eigener PR und per OTA einspielbar:
+
+- **2a Kern** (Layer `mp-audit`):
+  - `mp-audit.service` (`mp-auditd`): hängt die Partition nur im eigenen Namespace ein und formatiert nur ohne Dateisystem-Signatur (AL-04, AL-34, AL-37); ohne Partition nur Journal und E17 bei jedem Boot (AL-36).
+  - Eintragsformat (AL-01 bis AL-03), Prüfkette (AL-13), `chattr +a` (AL-14), Spiegel ins Journal (AL-08).
+  - Klassen, Budgets nach Betriebszeit, Sammeleinträge mit E19 (AL-39 bis AL-43, AL-46, AL-49), Schreiben in festen Abständen (AL-50, AL-51).
+  - Epochen mit Schlüsselpaar je Epoche, Genesis und Starthash (AL-55 bis AL-57), Prüfung ohne Geheimnis (AL-61).
+  - Lücken nach Absturz, abgebrochene Schreibvorgänge, verlorener Schlüssel (AL-11), Einträge aus dem Journal übernehmen (AL-35), Löschen mit E18 (AL-17).
+  - Eigene Ereignisse: E01, E02, E15, E16, E17, E18 aus `installer.txt`.
+  - Werkzeug `mp-audit` mit `record`, `show`, `verify`, `genesis`, `status`, `reset`.
+  - Test `meltingplot/test/test-mp-audit.sh`.
+- **2b Quellen:** die Wächter rufen `mp-audit record` (USB-Wächter, `mp-bundle-guard`, `mp-role-guard`, `mp-hmi-net-guard`, `mp-dsf-firmware`, `mp-dsf-seed`, `mp-ota-gate`, `mp-hmi-usb`, Kamera); Collector für sshd, sudo, rpi-connect, AppArmor (AL-62); Anmeldung über PAM synchron versiegelt (AL-56); kein Eingriff ohne Nachweis (AL-48); USB am Duet-Pi nur für den Stick (AL-68, ohne Export).
+- **2c Stand:** feste Menge (AL-42, AL-45), E20 bei jedem Boot und täglich, Änderungen unter `0:/sys` (E05), Verschleiß (E21, AL-53), Kürzen nach fünf Jahren (AL-05 bis AL-07).
+- **2d Partner:** Verankerung und Kopie zwischen HMI und Duet-Pi (AL-28 bis AL-32), Starthash des Partners am Panel.
+- **2e Anzeige und Export:** Seite am Panel, Export auf USB-Stick an beiden Systemen (AL-21, AL-31, AL-68, E22), Übergabe beim Pi-Tausch (AL-64 bis AL-67).
+
+Abweichungen in 2a von der Skizze unten:
+
+- Die Signatur einer Epoche deckt über `prev` die ganze Kette bis zu ihr ab. Ein eigener Hash „ihrer Einträge“ und „der vorigen Epoche“ (AL-55) steckt darin.
+- Zusammengefasste Ereignisse bekommen ihre laufende Nummer beim Eintreffen. Ein Sammeleintrag nennt Anzahl, erste und letzte Nummer. Die Prüfung zählt: Jede Nummer bis zur höchsten ist ein Eintrag, steckt in einem Sammeleintrag oder ist als verloren gemeldet (E17 mit `lost`).
+- Ein Sammeleintrag ist höchstens etwa 1 KB groß. Nach einem Tag wird er auch ohne Budget geschrieben (AL-41). Jede Klasse verdient täglich genug für einen Sammeleintrag je Ereignis-ID; das prüft der Test.
+- Epochen ohne neue Einträge werden nicht versiegelt. Ist der Anteil Reserve aufgebraucht, wird stündlich statt alle 15 Minuten versiegelt.
+
 Eine Skizze für das Ganze, nicht bindend:
 
 - Layout (`image/gpt/ab_userdata`, `image-rota`), allgemein für Upstream (AL-38):

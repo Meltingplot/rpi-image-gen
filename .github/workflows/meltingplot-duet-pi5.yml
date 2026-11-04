@@ -82,8 +82,11 @@ jobs:
 
       # The device helpers run under /bin/sh on the printer, so they are
       # checked with dash rather than with the bash the runner defaults to.
+      # The audit log's tests check its signatures, which take
+      # python3-cryptography as on the device.
       - name: Device helper tests
         run: |
+          sudo apt-get install -y --no-install-recommends python3-cryptography
           for f in meltingplot/test/*.sh; do
             dash "$f"
           done

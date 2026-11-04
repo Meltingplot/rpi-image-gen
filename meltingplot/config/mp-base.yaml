@@ -91,3 +91,4 @@ layer:
   identity: mp-identity
   admin: mp-admin
   watchdog: mp-watchdog
+  audit: mp-audit
