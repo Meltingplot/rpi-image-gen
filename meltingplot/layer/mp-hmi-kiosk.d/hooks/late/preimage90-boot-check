@@ -1,0 +1,15 @@
+#!/bin/bash
+# fbcon=rotate (hooks/customize10-cmdline) has to be on the kernel command
+# line the boot partition gets. Late, so after linux-base assembled it.
+
+set -euo pipefail
+
+cmd=${1:?root filesystem}/boot/firmware/cmdline.txt
+case ${IGconf_hmikiosk_rotation:?} in
+   0) exit 0 ;;
+   90) r=1 ;;
+   180) r=2 ;;
+   270) r=3 ;;
+esac
+grep -qw -- "fbcon=rotate:$r" "$cmd" ||
+   { echo "mp-hmi-kiosk: fbcon=rotate:$r is missing from cmdline.txt" >&2; exit 1; }

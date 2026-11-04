@@ -1,0 +1,3 @@
+# Meltingplot: printer SBC is wired only
+dtoverlay=disable-wifi
+dtoverlay=disable-bt

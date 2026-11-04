@@ -1,0 +1,12 @@
+#!/bin/sh
+# dtparam=pciex1 for mpinst.pcie_probe, as a config.txt fragment for
+# rpi-boot-firmware: the card finds the NVMe drive also on an adapter that is
+# not HAT+.
+
+set -eu
+
+[ "${IGconf_mpinst_pcie_probe:-n}" = y ] || exit 0
+dir=$LAYER_WORKDIR/for/rpi-boot-firmware/config.txt.d
+mkdir -p "$dir"
+printf '# Meltingplot installer: the NVMe drive, also on an adapter that is not HAT+\ndtparam=pciex1\n' \
+   > "$dir/80-mp-installer"

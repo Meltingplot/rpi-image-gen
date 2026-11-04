@@ -1,0 +1,13 @@
+#!/bin/bash
+# Wifi and Bluetooth off (mp-net-static.d/for/rpi-boot-firmware/config.txt.d)
+# have to be in the config.txt the boot partition gets. Late, so after
+# rpi-boot-firmware assembled it.
+
+set -euo pipefail
+
+cfg=${1:?root filesystem}/boot/firmware/config.txt
+bad=0
+for line in dtoverlay=disable-wifi dtoverlay=disable-bt; do
+   grep -qxF -- "$line" "$cfg" || { echo "mp-net-static: config.txt lacks $line" >&2; bad=1; }
+done
+exit $bad

@@ -1,0 +1,5 @@
+# Meltingplot operator panel: replaces family-base's fragment of this name.
+# The camera module is named in mp-hmi-hw's own fragment, not detected.
+
+# Automatically load overlays for detected cameras
+camera_auto_detect=0

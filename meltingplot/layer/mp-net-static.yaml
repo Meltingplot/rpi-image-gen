@@ -4,7 +4,7 @@
 # X-Env-Layer-Desc: Static wired networking for a printer SBC that sits behind
 #  the HMI Pi on a dedicated VLAN. Fixed address on eth0, HMI as gateway, DNS
 #  and NTP source, wifi and bluetooth switched off in firmware.
-# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Version: 1.1.0
 # X-Env-Layer-Requires: systemd-net-min,systemd-timesyncd,rpi-boot-firmware
 # X-Env-Layer-AfterProvider: device
 #
@@ -94,16 +94,10 @@ mmdebstrap:
       PollIntervalMinSec=64
       EOF
     # No radios on the printer SBC. The firmware overlays keep the interfaces
-    # from ever appearing, which is stronger than an rfkill at runtime.
-    - |-
-      set -eu
-      cat >> "$1/boot/firmware/config.txt" <<-EOF
-
-      # Meltingplot: printer SBC is wired only
-      [all]
-      dtoverlay=disable-wifi
-      dtoverlay=disable-bt
-      EOF
+    # from ever appearing, which is stronger than an rfkill at runtime. They
+    # are a config.txt fragment (mp-net-static.d/for/rpi-boot-firmware/
+    # config.txt.d), which is assembled from every layer's since upstream
+    # ff5fb45; hooks/late/preimage90-boot-check makes sure they got there.
     # With the radios off, the wireless and bluetooth firmware rpi-device-base
     # installs is dead weight under vendor licence terms; nothing depends on
     # it, raspi-firmware only suggests it. Taken out the way upstream removes

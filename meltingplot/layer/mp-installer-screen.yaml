@@ -9,7 +9,7 @@
 #  console stays. The console turns with the panel, and neither a login
 #  prompt nor kernel messages or screen blanking get in the way. The
 #  display itself is named by the machine's hardware layer.
-# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Version: 1.1.0
 # X-Env-Layer-Requires: mp-installer
 # X-Env-Layer-RequiresProvider: systemd
 #
@@ -30,19 +30,10 @@ mmdebstrap:
     - kbd
     - console-setup-linux
   customize-hooks:
-    - |-
-      set -eu
-      case $IGconf_mpscreen_rotation in
-        0) r= ;;
-        90) r=1 ;;
-        180) r=2 ;;
-        270) r=3 ;;
-      esac
-      cmdline="$1/boot/firmware/cmdline.txt"
-      add="quiet consoleblank=0${r:+ fbcon=rotate:$r}"
-      sed -i "s/\brootwait\b/$add rootwait/" "$cmdline"
-      grep -q "consoleblank=0" "$cmdline" ||
-        { echo "mp-installer-screen: could not extend cmdline.txt" >&2; exit 1; }
+    # quiet, consoleblank=0 and fbcon=rotate for mpscreen.rotation go on the
+    # kernel command line as a fragment, written by hooks/customize10-cmdline
+    # and checked by hooks/late/preimage90-boot-check: the command line is
+    # assembled from every layer's fragments since upstream ff5fb45.
     # The console shows the installer; nobody logs in to the card.
     - $BDEBSTRAP_HOOKS/disable-units "$1" getty@tty1
     - $BDEBSTRAP_HOOKS/enable-units "$1" mp-installer-screen

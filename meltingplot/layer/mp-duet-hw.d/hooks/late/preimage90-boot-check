@@ -1,0 +1,20 @@
+#!/bin/bash
+# The SPI link and the two kernel parameters of this layer (its fragments in
+# mp-duet-hw.d/for) have to be in the config.txt and cmdline.txt the boot
+# partition gets. Late, so after rpi-boot-firmware and linux-base assembled
+# them from every layer's fragments.
+
+set -euo pipefail
+
+fs=${1:?root filesystem}
+cfg=$fs/boot/firmware/config.txt
+cmd=$fs/boot/firmware/cmdline.txt
+bad=0
+fail() { echo "mp-duet-hw: $*" >&2; bad=1; }
+
+grep -qx 'dtparam=spi=on' "$cfg" ||
+   fail "SPI is not enabled in config.txt, so DuetControlServer cannot reach the mainboard"
+for param in lsm=apparmor cgroup_enable=memory; do
+   grep -qw -- "$param" "$cmd" || fail "$param is missing from cmdline.txt"
+done
+exit $bad

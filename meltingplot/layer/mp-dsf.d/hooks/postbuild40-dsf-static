@@ -1,0 +1,50 @@
+#!/bin/bash
+# Mark every file the image ships below the slot-shared paths of dsf.conf as
+# owned by the image, in slot-shared.d/dsf-static.conf.
+#
+# Since upstream 19bcf1d, rpi-persistent-shared-init only adds files missing
+# from the shared copy and never overwrites one. The printer configuration
+# and Duet Web Control live in shared paths, and an update has to bring their
+# new versions: a StaticPath is removed from the shared copy and put back
+# from the active slot on every boot. Listed file by file, so whatever the
+# device added next to them stays: the machine's own files in sys/overrides
+# and sys/generated (protected.list, never in the image), uploaded jobs,
+# filament profiles made in DWC, the web files of a plugin installed later.
+# That is how these paths behaved before the upstream change, when the
+# shared copy was overwritten wherever it differed from the image.
+#
+# Names may hold spaces (filament profiles such as "PLA 1.2mm");
+# rpi-persistent-shared-init reads one path per line. A newline in a name
+# would break that and stops the build.
+
+set -euo pipefail
+
+ROOT=${1:?root filesystem}
+dir=$ROOT/etc/rpi-image-gen/slot-shared.d
+conf=$dir/dsf.conf
+out=$dir/dsf-static.conf
+
+die() { echo "mp-dsf: $*" >&2; exit 1; }
+
+[[ -f $conf ]] || die "$conf is missing"
+
+{
+   echo "# Written by rpi-image-gen layer mp-dsf (postbuild40-dsf-static): every"
+   echo "# file the image ships below the paths of dsf.conf, put back from the"
+   echo "# active slot on every boot. Files the device added stay."
+   echo "Version=1"
+   while IFS= read -r line || [[ -n $line ]]; do
+      [[ $line == Path=* ]] || continue
+      path=${line#Path=}
+      path=/${path#/}
+      path=${path%/}
+      [[ -d $ROOT$path ]] || continue
+      while IFS= read -r -d '' f; do
+         [[ $f != *$'\n'* ]] || die "${f#"$ROOT"} has a newline in its name"
+         printf 'StaticPath=%s\n' "${f#"$ROOT"}"
+      done < <(find "$ROOT$path" -mindepth 1 \( -type f -o -type l \) -print0 | sort -z)
+   done < "$conf"
+} > "$out"
+chmod 0644 "$out"
+
+echo "mp-dsf: $(grep -c '^StaticPath=' "$out") files below the shared paths are put back on every boot" >&2

@@ -1,0 +1,17 @@
+#!/bin/sh
+# The installer card's console shows the installer: quiet, never blanked,
+# and turned with the display (mpscreen.rotation). As a fragment of the
+# kernel command line for linux-base.
+
+set -eu
+
+case ${IGconf_mpscreen_rotation:?} in
+   0) r= ;;
+   90) r=1 ;;
+   180) r=2 ;;
+   270) r=3 ;;
+   *) echo "mp-installer-screen: rotation $IGconf_mpscreen_rotation" >&2; exit 1 ;;
+esac
+mkdir -p "$LAYER_WORKDIR/for/linux-base/cmdline.d"
+echo "quiet consoleblank=0${r:+ -fbcon=rotate:* fbcon=rotate:$r}" \
+   > "$LAYER_WORKDIR/for/linux-base/cmdline.d/80-mp-installer-screen"

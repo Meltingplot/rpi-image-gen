@@ -11,7 +11,7 @@
 #  card releases it. The green LED tells the outcome, meltingplot/installer.log
 #  on the card the details. The image comes from a build of the A/B image and
 #  is checked against the SHA256SUMS that build wrote beside it.
-# X-Env-Layer-Version: 1.1.0
+# X-Env-Layer-Version: 1.2.0
 # X-Env-Layer-Requires: rpi-boot-firmware,rpi-device-secpolicy
 # X-Env-Layer-RequiresProvider: systemd
 #
@@ -124,10 +124,8 @@ mmdebstrap:
         cat "$IGconf_mpinst_identity/bootfs/meltingplot/identity.conf"
       } > "$t"
       install -m 0644 "$t" "$1/boot/firmware/meltingplot/identity.conf"
-    - |-
-      set -eu
-      if [ "$IGconf_mpinst_pcie_probe" = y ]; then
-        printf '\n# Meltingplot installer: the NVMe drive, also on an adapter that is not HAT+\n[all]\ndtparam=pciex1\n' \
-          >> "$1/boot/firmware/config.txt"
-      fi
+    # dtparam=pciex1 for mpinst.pcie_probe is a config.txt fragment, written
+    # by hooks/customize10-configtxt and checked by
+    # hooks/late/preimage90-boot-check: config.txt is assembled from every
+    # layer's fragments since upstream ff5fb45.
     - $BDEBSTRAP_HOOKS/enable-units "$1" mp-installer

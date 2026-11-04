@@ -100,7 +100,6 @@ image boot.img {
    }
    size = 100%
    mountpoint = "/boot/firmware"
-   exec-pre = "<SLOTP> BOOT"
 }
 
 image boot.vfat {

@@ -1,0 +1,11 @@
+#!/bin/bash
+# usbcore.authorized_default=0 (mp-hmi-usb-guard.d/for/linux-base/cmdline.d)
+# has to be on the kernel command line the boot partition gets, or every USB
+# device is configured before the guard runs. Late, so after linux-base
+# assembled the command line.
+
+set -euo pipefail
+
+cmd=${1:?root filesystem}/boot/firmware/cmdline.txt
+grep -qw -- "usbcore.authorized_default=0" "$cmd" ||
+   { echo "mp-hmi-usb-guard: usbcore.authorized_default=0 is missing from cmdline.txt" >&2; exit 1; }
