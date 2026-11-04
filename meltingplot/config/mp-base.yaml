@@ -42,11 +42,20 @@ image:
   # takes about 0.45 GB on the printer SBC and 0.7 GB on the operator panel.
   # Devices written before had 1G (printer SBC) and 2G (operator panel) slots
   # and keep them until they are written anew. The same on both computers; the
-  # whole image, about 12.3 GiB, still fits a 16 GB card.
+  # whole image, about 12.8 GiB with the audit partition below, still fits a
+  # 16 GB card.
   system_part_size: 4G
   # Starting size only. mp-growfs expands it to the medium on first boot, and
   # rpi-sb-provisioner does the same while provisioning.
   data_part_size: 4G
+  # The partition of the audit log (docs/meltingplot-audit-log.md, AL-33):
+  # nothing mounts it but the log service, in its own namespace. Layout gen3;
+  # gen1 (1G/2G slots) and gen2 (4G slots) have none, and an update cannot
+  # add one, so those devices move over with the installer card (decision 7).
+  # The size cannot change on a device once written: half for the device's
+  # own log over five years, half for the copy of the other computer's log.
+  private_part_name: audit
+  private_part_size: 512M
 
 ssh:
   pubkey_user1: ${@SRCROOT}/keys/authorized_keys

@@ -159,7 +159,7 @@ Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal übe
 - **AL-17** Gelöscht wird nur über ein Verfahren, das in der Betriebsanleitung beschrieben ist. Vorschlag: ein Befehl, nur als root, mit Pflichtangabe eines Grundes. Er archiviert das alte Log und beginnt das neue mit einem E18-Eintrag. Dieser enthält Grund, Konto, letzte laufende Nummer und letzten Hash des alten Logs (T44).
 - **AL-18** Die Installerkarte (`mp-installer`) erkennt, welche Generation des Layouts sie auf einer belegten NVMe vorfindet (AL-33), und handelt danach:
   - **gen1 und gen2:** Sie überschreibt die NVMe wie bisher mit `overwrite_nvme=yes` und `identity.conf` von der Karte. Diese Geräte haben kein Audit-Log, zu übernehmen ist nichts.
-  - **gen3:** Sie sichert vorher den Inhalt der Audit-Partition und schreibt ihn danach zurück. Ist das alte Log nicht lesbar, sagt sie das. Eine Neuinstallation ist sonst eine Löschung ohne Nachweis.
+  - **gen3:** Sie lässt den Bereich der Audit-Partition beim Schreiben aus, statt ihn zu kopieren. Der Inhalt bleibt, wo er ist. Das setzt voraus, dass die Partition auf der NVMe genau dort liegt, wo das neue Image sie hat; sonst bricht die Karte ab, ohne zu schreiben. Ein Stromausfall während des Schreibens gefährdet das Log so nicht.
   - **In jedem Fall** gibt sie dem ersten Start über die BOOTCONFIG-Partition mit, was sie vorgefunden hat: Generation, Datum, Image der Karte, übernommen oder nicht. Der erste Start schreibt das als E18 ins Log: „Neuinstallation, Log übernommen“, „Neuinstallation, altes Log nicht lesbar“ oder „Überführung von gen1/gen2, kein früheres Log“. So steht am Anfang jedes Logs, warum es dort beginnt.
 - **AL-19** Pi-Tausch: Das neue Gerät übernimmt das Log aus der Kopie beim anderen System und schreibt es weiter (Festlegung 9, AL-64). Der Starthash bleibt. Nur wenn beide Pis zugleich getauscht werden oder keine gültige Kopie da ist, beginnt ein neues Log mit E01 und neuem Starthash (AL-58). Das Verfahren steht in der Betriebsanleitung.
 
@@ -498,7 +498,17 @@ Alle Fragen sind beantwortet (Interview mit Tim, 2026-11-04). Sie bleiben hier m
 
 ## Umsetzungsvorschlag
 
-Eine Skizze, nicht bindend:
+**Zwei Phasen (Tim, 2026-11-04):**
+- **Phase 1:** Layout gen3 mit der Partition `audit` und eine Installerkarte, die gen1 und gen2 überführt und auf gen3 die Partition stehen lässt.
+- **Phase 2:** Der Log-Dienst kommt danach per OTA auf Geräte, die die Partition schon haben.
+
+Phase 1 im Einzelnen:
+- `image-rota` hat die Variablen `image.private_part_name` und `image.private_part_size`.
+- Die Provisioning-Map unterstützt die Partition vorerst nur mit `pmap: clear`.
+- Die Karte vermisst beim Bauen Lage und Größe der Partition im Image (`mp-installer-measure`) und prüft das Rücklesen ohne diesen Bereich.
+- Was sie vorgefunden hat, schreibt sie in `meltingplot/installer.txt` auf der BOOTCONFIG-Partition: `layout_before`, `keep_part`, `kept`.
+
+Eine Skizze für das Ganze, nicht bindend:
 
 - Layout (`image/gpt/ab_userdata`, `image-rota`), allgemein für Upstream (AL-38):
   - neue Variable in `image.yaml`, etwa `image.private_part_name` und `image.private_part_size`, standardmäßig leer;
@@ -521,7 +531,7 @@ Eine Skizze, nicht bindend:
   - nur zwischen 10.42.0.1 und 10.42.0.2 erreichbar,
   - liest beim Partner nur, schreibt nie in dessen Log.
 - Die Anzeige und der Export des Maschinen-Logs (AL-31) liegen am HMI, weil der Bediener dort steht. Über die Connect-Shell gibt es sie auf beiden Systemen.
-- Installer: Inhalt der Audit-Partition vor dem Überschreiben sichern und danach zurückschreiben (AL-18).
+- Installer: schreibt auf gen3 um die Audit-Partition herum (AL-18), Phase 1.
 - Test `meltingplot/test/test-mp-audit.sh`, deckt ab:
   - Kette, Prüfung und gezielte Manipulation,
   - Löschen mit E18,

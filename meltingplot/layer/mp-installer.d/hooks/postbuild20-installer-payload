@@ -46,16 +46,20 @@ print(r.get("image", ""), r.get("version", ""), r.get("device", {}).get("role", 
 # --- what mp-installer compares the drive with ----------------------------
 
 echo "mp-installer: measuring $file" >&2
-read -r raw_size raw_sha < <(zstd -dc --no-progress "$img" | python3 -c '
-import hashlib, sys
-h, n = hashlib.sha256(), 0
-for chunk in iter(lambda: sys.stdin.buffer.read(1 << 22), b""):
-    h.update(chunk)
-    n += len(chunk)
-print(n, h.hexdigest())
-')
+# Besides the whole image: where the partition to keep (mpinst.keep_part)
+# lies in it, from the GPT at its start, and the checksum of the image without
+# that range, which is what the drive reads back when the card left it alone.
+# "-" for the three when the image has no such partition.
+keep_part=${IGconf_mpinst_keep_part:-}
+read -r raw_size raw_sha keep_start keep_size keep_sha < <(zstd -dc --no-progress "$img" |
+   "${IGconf_mpinst_assetdir:?}/bin/mp-installer-measure" "$keep_part")
 [[ ${raw_size:-0} =~ ^[0-9]+$ && $raw_size -gt 0 && ${raw_sha:-} =~ ^[0-9a-f]{64}$ ]] ||
    die "cannot decompress $file"
+if [[ -n $keep_part && $keep_start == - ]]; then
+   echo "mp-installer: $file has no $keep_part partition; the card writes over all of a drive" >&2
+   keep_part=
+fi
+[[ $keep_start == - ]] && keep_start= keep_size= keep_sha=
 
 # --- the bootloader the card will install ----------------------------------
 # rpi-eeprom-update takes the newest image of its release channel, which
@@ -92,6 +96,10 @@ MPI_PAYLOAD=$payload
 MPI_SHA256=$have
 MPI_RAW_SIZE=$raw_size
 MPI_RAW_SHA256=$raw_sha
+MPI_KEEP_PART=$keep_part
+MPI_KEEP_START=$keep_start
+MPI_KEEP_SIZE=$keep_size
+MPI_RAW_SHA256_KEEP=$keep_sha
 MPI_BOOTLOADER=$bootloader
 MPI_BOOT_ORDER=${IGconf_mpinst_boot_order:?}
 MPI_PSU_MAX_CURRENT=${IGconf_mpinst_psu_max_current:-}

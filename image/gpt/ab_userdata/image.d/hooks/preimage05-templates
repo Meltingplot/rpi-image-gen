@@ -46,8 +46,39 @@ boot_partition=3
 EOF
 
 
+# Optional private partition between the system slots and the data
+# partition. Nothing mounts it: it is for one service to mount in its own
+# namespace, found through /dev/disk/by-slot/<name>. The template carries it
+# between #PRIVATE_BEGIN and #PRIVATE_END, which go when it is wanted and take
+# the block with them when it is not.
+private_name=${IGconf_image_private_part_name:-}
+private_label=
+if [[ -n $private_name ]]; then
+   case $private_name in
+      bootconfig|boot_a|boot_b|system_a|system_b|persistent)
+         echo "image-rota: private_part_name '$private_name' is a partition of the layout already" >&2
+         exit 1 ;;
+   esac
+   private_label=$(echo "$private_name" | tr 'a-z' 'A-Z')
+   private_filter=(-e '/^#PRIVATE_BEGIN$/d' -e '/^#PRIVATE_END$/d')
+
+   install -d "${fs}/etc/udev/rules.d"
+   cat << EOF > "${fs}/etc/udev/rules.d/99-rpi-06-private.rules"
+# Written by image-rota: the private partition (image.private_part_name),
+# which the system does not mount.
+SUBSYSTEM=="block", ENV{RPI_ONBOOTDEV}=="1", ENV{ID_PART_ENTRY_NAME}=="$private_name", SYMLINK+="disk/by-slot/$private_name"
+EOF
+else
+   private_filter=(-e '/^#PRIVATE_BEGIN$/,/^#PRIVATE_END$/d')
+fi
+
+
 # Write genimage template
 cat "$LAYER_DIR/genimage.cfg.in.$IGconf_image_rootfs_type" | sed \
+   "${private_filter[@]}" \
+   -e "s|<PRIVATE_NAME>|$private_name|g" \
+   -e "s|<PRIVATE_LABEL>|$private_label|g" \
+   -e "s|<PRIVATE_SIZE>|${IGconf_image_private_part_size:-}|g" \
    -e "s|<IMAGE_DIR>|$IGconf_image_outputdir|g" \
    -e "s|<IMAGE_NAME>|$IGconf_image_name|g" \
    -e "s|<IMAGE_SUFFIX>|$IGconf_image_suffix|g" \

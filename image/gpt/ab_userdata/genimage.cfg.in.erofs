@@ -68,6 +68,15 @@ image <IMAGE_NAME>.<IMAGE_SUFFIX> {
       partition-type-uuid = L
    }
 
+#PRIVATE_BEGIN
+   # Not mounted by the system; see image.private_part_name
+   partition <PRIVATE_NAME> {
+      in-partition-table = true
+      image = private.ext4
+      partition-type-uuid = L
+   }
+
+#PRIVATE_END
    partition persistent {
       in-partition-table = true
       image = persistent.ext4
@@ -119,6 +128,24 @@ image system.verity {
    }
 }
 
+#PRIVATE_BEGIN
+image private.sparse {
+   android-sparse {
+      image = private.ext4
+   }
+}
+
+image private.ext4 {
+   ext4 {
+      use-mke2fs = true
+      label = "<PRIVATE_LABEL>"
+      extraargs = "<MKE2FS_DATA>"
+   }
+   empty = true
+   size = <PRIVATE_SIZE>
+}
+
+#PRIVATE_END
 image persistent.ext4 {
    ext4 {
       use-mke2fs = true
