@@ -583,7 +583,10 @@ The Connect account may read and check (group `adm`); only root records, and
 archives the old one and names it in the new one's first entries (AL-17). A
 computer still on layout gen1 or gen2 has no audit partition and no update can
 add one: the service runs there too, writes to the journal only and says so at
-every boot (E17), until the installer card moves it to gen3. An exported log
+every boot (E17), until the installer card moves it to gen3. From phase 2b on
+such a computer refuses updates like one whose log cannot be written: a missing
+partition is no exception, or removing it would switch the log off (decision
+20). Every device is moved to gen3 before then. An exported log
 is checked off the device with the same tool and `auditlog.py` next to it:
 `mp-audit verify --start <hash> <files>`.
 
