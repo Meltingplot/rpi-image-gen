@@ -27,6 +27,7 @@ Am 2026-11-04 hat am Labor-HMI die USB-Freigaberegel (`mp-hmi-usb-guard`, noch S
 17. Die USB-Kamera ist nicht sicherheitsrelevant. Das HMI hält fest, wenn sich Gerät oder Softwareversion der Kamera ändern (Frage 9, E23).
 18. Ist das Log gestört, bleiben SSH- und Connect-Anmeldungen möglich (Frage 11, AL-48).
 19. Gerätebindung über den OTP-Schlüssel kommt mit der Secure-Boot-Provisionierung, nicht vorher. Die Prüfung an den Laborgeräten hat ergeben: Der Schlüssel ist dort nicht erzeugt, und ohne Secure Boot könnte root die Lesesperre umgehen (Frage 13, AL-60). Bis dahin trägt der Starthash auf Typenschild, in der Betriebsanleitung und im ERP die Verankerung allein.
+20. Ohne Audit-Partition gibt es keine Ausnahme. Ein Gerät mit gen1 oder gen2 gilt wie eines, dessen Log nicht schreibbar ist, und verweigert ab Phase 2b Updates und die übrigen Eingriffe nach AL-48. Alle Bestandsgeräte werden vorher mit der Installerkarte auf gen3 überführt. Sonst ließe sich das Log abschalten, indem man die Partition aus der Partitionstabelle entfernt: Das Gerät sähe dann aus wie gen2 (Tim, 2026-11-04; AL-36, AL-48).
 
 ## Grundlagen
 
@@ -212,7 +213,7 @@ Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal übe
   - Das Blockgerät bleibt root vorbehalten.
   - Für root ist die Partition sichtbar (`lsblk`) und einhängbar; dagegen schützen AL-13 bis AL-16 und AL-28.
 - **AL-35** Was vor dem Start des Dienstes oder während eines Ausfalls geschieht, geben die Wächter mit einer Kennung ins Journal. Der Dienst übernimmt es beim Start in der richtigen Reihenfolge. So sind auch Wächter erfasst, die früh im Boot laufen, etwa `mp-role-guard`.
-- **AL-36** Geräte mit gen1 oder gen2 haben keine Audit-Partition, und ein OTA kann sie nicht anlegen. Sie werden mit der Installerkarte überführt (Festlegung 7, AL-18). Bis dahin schreibt der Dienst auf ihnen nur ins Journal und meldet bei jedem Boot E17 „keine Audit-Partition, Überführung mit der Installerkarte nötig“.
+- **AL-36** Geräte mit gen1 oder gen2 haben keine Audit-Partition, und ein OTA kann sie nicht anlegen. Sie werden mit der Installerkarte überführt (Festlegung 7, AL-18). Bis dahin schreibt der Dienst auf ihnen nur ins Journal und meldet bei jedem Boot E17 „keine Audit-Partition, Überführung mit der Installerkarte nötig“. Ab Phase 2b verweigern sie außerdem die Eingriffe nach AL-48, Updates eingeschlossen (Festlegung 20). Von außen sieht ein gen3-Gerät, dessen Partition entfernt wurde, genauso aus. Deshalb gibt es für fehlende Partitionen keine Ausnahme.
 - **AL-37** Der Dienst formatiert die Partition nur, wenn sie keinerlei Dateisystem-Signatur trägt (erster Start nach Installation). Ein beschädigtes Dateisystem wird nie neu formatiert, sondern als E17 gemeldet: Es kann der Nachweis sein.
 - **AL-38** Die Änderung an `image-rota` wird allgemein gebaut: eine optionale, nicht eingehängte Partition, deren Name und Größe Variablen sind und die standardmäßig fehlt. So lässt sie sich Upstream (raspberrypi/rpi-image-gen) vorschlagen, statt dauerhaft als eigene Abweichung mitgeführt zu werden.
 
@@ -278,7 +279,7 @@ Der Schutz beruht nicht darauf, Muster zu erkennen. Er beruht auf vier Grenzen, 
   - Der USB-Wächter legt einen Port still, an dem sich ein Gerät immer wieder anmeldet, bis es abgezogen wird.
   - sshd begrenzt Anmeldeversuche je Quelle (`PerSourcePenalties`, `MaxStartups`).
 - **AL-48** Kein Eingriff ohne Nachweis. Kann die Klasse Stand eine Änderung nicht mehr festhalten, verweigert das System die Eingriffe, die es selbst steuert:
-  - Anlass: Partition nicht schreibbar oder Dienst gestört. Nach AL-42 ist ein voller Anteil nicht möglich.
+  - Anlass: Partition fehlt (gen1, gen2 oder entfernt, Festlegung 20), ist nicht schreibbar, oder der Dienst ist gestört. Nach AL-42 ist ein voller Anteil nicht möglich.
   - Verweigert werden: Updates (Bundle-Wächter), Firmware-Flash, USB-Freigaben, Schreiben unter `0:/sys` über DWC.
   - Anmeldungen bleiben möglich, damit der Support das Gerät erreicht. Sie stehen als E17 im Journal (Festlegung 18).
 - **AL-49** Betriebszeit statt Uhrzeit. Was löscht oder Budget gewährt, richtet sich nie nach der Systemuhr. Maßgeblich ist die aufsummierte Betriebszeit:
@@ -521,7 +522,7 @@ Phase 2 in Schritten, jeder ein eigener PR und per OTA einspielbar:
   - Eigene Ereignisse: E01, E02, E15, E16, E17, E18 aus `installer.txt`.
   - Werkzeug `mp-audit` mit `record`, `show`, `verify`, `genesis`, `status`, `reset`.
   - Test `meltingplot/test/test-mp-audit.sh`.
-- **2b Quellen:** die Wächter rufen `mp-audit record` (USB-Wächter, `mp-bundle-guard`, `mp-role-guard`, `mp-hmi-net-guard`, `mp-dsf-firmware`, `mp-dsf-seed`, `mp-ota-gate`, `mp-hmi-usb`, Kamera); Collector für sshd, sudo, rpi-connect, AppArmor (AL-62); Anmeldung über PAM synchron versiegelt (AL-56); kein Eingriff ohne Nachweis (AL-48); USB am Duet-Pi nur für den Stick (AL-68, ohne Export).
+- **2b Quellen:** die Wächter rufen `mp-audit record` (USB-Wächter, `mp-bundle-guard`, `mp-role-guard`, `mp-hmi-net-guard`, `mp-dsf-firmware`, `mp-dsf-seed`, `mp-ota-gate`, `mp-hmi-usb`, Kamera); Collector für sshd, sudo, rpi-connect, AppArmor (AL-62); Anmeldung über PAM synchron versiegelt (AL-56); kein Eingriff ohne Nachweis (AL-48), auch ohne Audit-Partition (Festlegung 20), daher vorher alle Bestandsgeräte auf gen3 überführen; USB am Duet-Pi nur für den Stick (AL-68, ohne Export).
 - **2c Stand:** feste Menge (AL-42, AL-45), E20 bei jedem Boot und täglich, Änderungen unter `0:/sys` (E05), Verschleiß (E21, AL-53), Kürzen nach fünf Jahren (AL-05 bis AL-07).
 - **2d Partner:** Verankerung und Kopie zwischen HMI und Duet-Pi (AL-28 bis AL-32), Starthash des Partners am Panel.
 - **2e Anzeige und Export:** Seite am Panel, Export auf USB-Stick an beiden Systemen (AL-21, AL-31, AL-68, E22), Übergabe beim Pi-Tausch (AL-64 bis AL-67).
