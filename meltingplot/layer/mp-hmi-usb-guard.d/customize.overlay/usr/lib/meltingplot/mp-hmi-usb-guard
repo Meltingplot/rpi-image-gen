@@ -1,0 +1,143 @@
+#!/bin/sh
+# Decide whether a USB interface at the panel gets a driver, and which:
+#
+#   mp-hmi-usb-guard <interface>        e.g. 1-2:1.0
+#
+# run by udev for every new interface (50-mp-hmi-usb-guard.rules), which
+# comes up without a driver. Allowed are
+#
+#   the camera   on its port (MP_USB_CAMERA_PORT), the Meltingplot
+#                rpi-camera with nothing but CDC networking, for cdc_ncm
+#   a USB stick  one interface and nothing else: mass storage, SCSI,
+#                bulk-only or UAS, for uas or usb-storage
+#
+# Everything else stays without a driver and is logged: a keyboard, a mouse,
+# a network adapter, a hub, a stick that also claims to be a keyboard. An
+# interface bound before udev ran (a boot without usbcore.authorized_default
+# =0) loses its driver.
+#
+# An allowed interface is bound to its driver by name, never probed: a probe
+# takes whichever driver matches first, and one that matches by vendor and
+# product ID (a network or serial adapter) would take a "stick" that carries
+# such IDs. The driver is loaded before anything is authorized, so a driver
+# that registers later finds nothing unbound to take, and all interfaces of
+# the device are authorized before the bind: the kernel refuses a driver the
+# claim of an interface that is not (cdc_ncm its data interface). If the
+# driver did not take the device, the device loses its authorization again.
+
+set -eu
+
+MP_SYSFS=${MP_SYSFS:-/sys}
+MP_USB_GUARD_CONF=${MP_USB_GUARD_CONF:-/etc/meltingplot/usb-guard.conf}
+MP_USB_CAMERA_PORT=1-1
+# shellcheck source=/dev/null
+[ ! -r "$MP_USB_GUARD_CONF" ] || . "$MP_USB_GUARD_CONF"
+
+intf=${1:-}
+case $intf in
+   */*) echo "mp-hmi-usb-guard: no USB interface: $intf" >&2; exit 2 ;;
+   # a root hub's own hub interface (1-0:1.0), bound before udev ran: the
+   # whole bus hangs on it
+   *-0:*) exit 0 ;;
+   [0-9]*-[0-9]*:*) ;;
+   *) echo "mp-hmi-usb-guard: no USB interface: $intf" >&2; exit 2 ;;
+esac
+dev=${intf%%:*}
+usb=$MP_SYSFS/bus/usb
+d=$usb/devices/$dev
+
+# An attribute without the padding the kernel puts in front of numbers
+attr() {
+   v=$(cat "$1/$2" 2>/dev/null) || v=
+   echo "${v# }"
+}
+
+# Write a sysfs attribute
+put() {
+   echo "$2" | tee "$1" > /dev/null
+}
+
+interfaces() {
+   for i in "$d":*; do
+      [ ! -e "$i" ] || echo "${i##*/}"
+   done
+}
+
+class() {
+   echo "$(attr "$usb/devices/$1" bInterfaceClass)/$(attr "$usb/devices/$1" bInterfaceSubClass)/$(attr "$usb/devices/$1" bInterfaceProtocol)"
+}
+
+driver() {
+   link=$(readlink "$usb/devices/$1/driver" 2>/dev/null) || return 0
+   echo "${link##*/}"
+}
+
+is_camera() {
+   [ "$dev" = "$MP_USB_CAMERA_PORT" ] &&
+   [ "$(attr "$d" manufacturer)" = meltingplot ] &&
+   [ "$(attr "$d" product)" = "Pi Cam" ] || return 1
+   for i in $(interfaces); do
+      case $(class "$i") in
+         02/*|0a/*) ;;
+         *) return 1 ;;
+      esac
+   done
+}
+
+is_stick() {
+   [ "$(attr "$d" bNumInterfaces)" = 1 ] || return 1
+   case $(class "$intf") in
+      08/06/50|08/06/62) ;;
+      *) return 1 ;;
+   esac
+}
+
+authorize() {
+   for i in $(interfaces); do
+      [ "$(attr "$usb/devices/$i" authorized)" = 1 ] || put "$usb/devices/$i/authorized" 1
+   done
+}
+
+# Bind an interface to the named driver; true if that driver has it. One
+# bound already is left as it is: to another driver, it is refused.
+bind() {
+   current=$(driver "$1")
+   if [ -n "$current" ]; then
+      [ "$current" = "$2" ]
+      return
+   fi
+   [ -e "$usb/drivers/$2/bind" ] || return 1
+   put "$usb/drivers/$2/bind" "$1" 2>/dev/null || true
+   [ "$(driver "$1")" = "$2" ]
+}
+
+refuse() {
+   for i in $(interfaces); do
+      [ "$(attr "$usb/devices/$i" authorized)" = 0 ] || put "$usb/devices/$i/authorized" 0
+   done
+   logger -t mp-hmi-usb-guard "refused $intf: $(attr "$d" idVendor):$(attr "$d" idProduct)" \
+      "'$(attr "$d" manufacturer)' '$(attr "$d" product)', interface $(class "$intf")," \
+      "$(attr "$d" bNumInterfaces) interface(s): $1"
+}
+
+if is_camera; then
+   modprobe -q cdc_ncm || true
+   authorize
+   ok=y
+   for i in $(interfaces); do
+      case $(class "$i") in
+         02/*) bind "$i" cdc_ncm || ok= ;;
+      esac
+   done
+   for i in $(interfaces); do
+      [ "$(driver "$i")" = cdc_ncm ] || ok=
+   done
+   [ -n "$ok" ] || refuse "cdc_ncm did not take the camera"
+elif is_stick; then
+   modprobe -q -a uas usb_storage || true
+   authorize
+   bind "$intf" uas || bind "$intf" usb-storage ||
+      refuse "neither uas nor usb-storage took the stick"
+else
+   refuse "only the camera and a plain USB stick get a driver"
+fi

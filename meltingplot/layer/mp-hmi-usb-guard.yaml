@@ -1,0 +1,48 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-hmi-usb-guard
+# X-Env-Layer-Category: sys
+# X-Env-Layer-Desc: What may be plugged into the operator panel's USB ports.
+#  Only the printer camera on its internal port and a plain USB stick get a
+#  driver; a keyboard, a mouse, a network adapter, a hub or a stick that also
+#  claims to be a keyboard stays without one and is logged. From the first
+#  moment of boot no device is configured before the panel has decided on it
+#  (usbcore.authorized_default=0); the interfaces of a device then come up
+#  without a driver, and mp-hmi-usb-guard authorizes those of an allowed
+#  device. Service at the panel goes through SSH or Raspberry Pi Connect.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-RequiresProvider: systemd
+#
+# X-Env-VarPrefix: hmiusbguard
+#
+# X-Env-Var-cameraport: 1-1
+# X-Env-Var-cameraport-Desc: USB port of the printer camera, as the kernel
+#  names the device on it (bus-port). Only there may a device be the camera,
+#  with nothing but CDC networking; a device that claims to be the camera on
+#  any other port is refused, so a stick at the outer socket cannot open a
+#  network into the panel.
+# X-Env-Var-cameraport-Required: n
+# X-Env-Var-cameraport-Valid: regex:^[0-9]+-[0-9]+(\.[0-9]+)*$
+# X-Env-Var-cameraport-Set: y
+# METAEND
+---
+mmdebstrap:
+  customize-hooks:
+    - |-
+      set -eu
+      install -d "$1/etc/meltingplot"
+      printf 'MP_USB_CAMERA_PORT=%s\n' "$IGconf_hmiusbguard_cameraport" \
+         > "$1/etc/meltingplot/usb-guard.conf"
+    # The kernel authorizes every new device by default and binds its drivers
+    # at once, long before udev is up: a keyboard in the socket at power-on
+    # would type into whatever runs. With 0 a device stays unconfigured until
+    # 50-mp-hmi-usb-guard.rules has made its root hub hold new interfaces
+    # back; root hubs are always authorized.
+    - |-
+      set -eu
+      cmdline="$1/boot/firmware/cmdline.txt"
+      param=usbcore.authorized_default=0
+      if ! grep -q "$param" "$cmdline"; then
+        sed -i "s/\brootwait\b/$param rootwait/" "$cmdline"
+      fi
+      grep -q "$param" "$cmdline" ||
+        { echo "mp-hmi-usb-guard: could not add $param to cmdline.txt" >&2; exit 1; }

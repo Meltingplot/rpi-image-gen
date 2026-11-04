@@ -17,7 +17,7 @@
 # FAT names as ASCII otherwise and turns every umlaut into a question mark.
 # FAT keeps the local time of the computer that wrote the file, without a
 # zone, and the kernel takes it for UTC; the offset of the panel's zone at
-# mounting puts it right (exFAT and NTFS keep UTC).
+# mounting puts it right (exFAT keeps UTC).
 
 set -eu
 
@@ -57,7 +57,6 @@ start)
    case $type in
       vfat)  opts=utf8,time_offset=$(utc_offset) ;;
       exfat) opts=iocharset=utf8 ;;
-      ntfs)  type=ntfs3 opts=iocharset=utf8 ;;
       *)
          echo "mp-hmi-usb-mount: $name holds '$type', which the panel does not read" >&2
          exit 0 ;;

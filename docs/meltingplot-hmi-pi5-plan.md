@@ -44,6 +44,7 @@ layer/
   mp-hmi-camera.yaml (+ .d/)   ● motion als Verteiler der USB-Kamera
   mp-hmi-kiosk.yaml (+ .d/)    ● labwc-Autologin, Chromium, squeekboard, wf-panel-pi, Geste, Splash
   mp-hmi-usb.yaml (+ .d/)      ● USB-Stick read-only einhängen, Druckjobs für die Druckjob-Liste
+  mp-hmi-usb-guard.yaml (+ .d/) ● an USB nur Kamera (interner Port) und reiner Massenspeicher
   mp-hmi-hostname (in .d/)     ● Kundenname vom Duet-Pi holen
   mp-connect.yaml              ○ RequiresProvider rpi-connect-client statt fest rpi-connect-lite
   mp-admin.yaml                ○ Prüfadresse aus dem Netz statt mpnet.gateway
@@ -154,10 +155,23 @@ haproxy auf :80, alle Adressen. Grundlage ist der optimierte Laborstand vom 2026
 
 Steckt ein USB-Stick am Panel, zeigt die Druckjob-Liste der CHX-Oberfläche ihn als Ordner. Von dort wird ein Druckjob auf den Duet-Pi kopiert und gestartet (Tim, 2026-11-03).
 
-- **Einhängen:** `72-mp-hmi-usb.rules` startet für jedes Dateisystem auf einer USB-Platte (FAT, exFAT, NTFS über `ntfs3`) `mp-hmi-usb-mount@<kernelname>`. Das Skript hängt es nach `/run/mp-hmi-usb/<name>/fs` ein, mit `ro,nosuid,nodev,noexec`, alle Dateien lesbar und die Namen in UTF-8. Ohne `utf8` liest der Panel-Kernel FAT-Namen als ASCII (`CONFIG_FAT_DEFAULT_IOCHARSET="ascii"`, Labor-HMI 2026-11-03), und aus jedem Umlaut wird ein Fragezeichen. FAT-Zeiten sind Ortszeit ohne Zone und werden mit `time_offset` (Versatz des Panels beim Einhängen) gelesen, sonst stünden sie in MEZ eine Stunde zu spät da. Danach schreibt es `label`. Solange diese Datei existiert, gilt der Stick als da. Beim Abziehen stoppt `BindsTo=dev-%i.device` die Unit, das Skript nimmt `label` weg und hängt aus.
+- **Einhängen:** `72-mp-hmi-usb.rules` startet für jedes FAT- oder exFAT-Dateisystem auf einer USB-Platte `mp-hmi-usb-mount@<kernelname>`. NTFS nicht mehr (Tim, 2026-11-03): jeder weitere Dateisystem-Parser im Kernel ist Angriffsfläche für einen präparierten Stick. Das Skript hängt es nach `/run/mp-hmi-usb/<name>/fs` ein, mit `ro,nosuid,nodev,noexec`, alle Dateien lesbar und die Namen in UTF-8. Ohne `utf8` liest der Panel-Kernel FAT-Namen als ASCII (`CONFIG_FAT_DEFAULT_IOCHARSET="ascii"`, Labor-HMI 2026-11-03), und aus jedem Umlaut wird ein Fragezeichen. FAT-Zeiten sind Ortszeit ohne Zone und werden mit `time_offset` (Versatz des Panels beim Einhängen) gelesen, sonst stünden sie in MEZ eine Stunde zu spät da. Danach schreibt es `label`. Solange diese Datei existiert, gilt der Stick als da. Beim Abziehen stoppt `BindsTo=dev-%i.device` die Unit, das Skript nimmt `label` weg und hängt aus.
 - **Lesen:** `mp-hmi-usb-serve` (Python, `DynamicUser`, nur Loopback :8083). `GET /list` liefert die Sticks, `GET /list?path=<name>/<ordner>` Ordner und G-Code-Dateien, `GET /file?path=…` eine G-Code-Datei. Endungen wie DWCs `Path.isGCodePath`. Kein `.`/`..`, keine versteckten Namen (macOS legt `._`-Dateien neben jeden Job), keine symbolischen Links. Es wird nichts geschrieben.
 - **Nur das Panel (Tim, 2026-11-03):** haproxy reicht `/hmi/usb/` nur an Verbindungen von `127.0.0.0/8`, `::1` und der Panel-Adresse im Druckernetz weiter. Ein Browser im Kundennetz bekommt 404 und sieht den Ordner nicht.
 - **Kopieren:** macht der Browser. Er holt die Datei vom Panel und lädt sie mit DWCs normalem Upload nach `0:/gcodes`. DSF schreibt erst `.part` und benennt dann um (`MachineEndpoints.cs`), ein laufender Druck behält also seine Datei. Gleicher Name: die Oberfläche fragt vor dem Ersetzen.
+
+## USB-Sperre (`mp-hmi-usb-guard`)
+
+Am externen Port darf nur ein reiner Massenspeicher hängen, und nichts startet von selbst (Tim, 2026-11-03). Umgesetzt für alle Ports außer dem der Kamera, so muss das Image nicht wissen, welcher Port nach außen geht. Keine Ausnahme für Service-Geräte: Service geht über SSH oder Connect.
+
+- **Ab dem Booten:** `usbcore.authorized_default=0` in `cmdline.txt`. Jedes neue Gerät bleibt unkonfiguriert, ohne Interfaces und Treiber, bis udev entschieden hat. Das gilt auch für eins, das beim Einschalten schon steckt. Root-Hubs sind immer autorisiert (`usb_dev_authorized`, drivers/usb/core/usb.c).
+- **`50-mp-hmi-usb-guard.rules`:** Ein Root-Hub bekommt `interface_authorized_default=0`. Danach wird ein Gerät unter ihm konfiguriert, seine Interfaces kommen ohne Treiber hoch (`usb_set_configuration` übernimmt den Bus-Standard), und für jedes läuft `mp-hmi-usb-guard`.
+- **`mp-hmi-usb-guard`:** Er lässt genau zwei Fälle zu:
+  - die Kamera an `hmiusbguard.cameraport` (1-1), „meltingplot“ „Pi Cam“, nur CDC-Interfaces (02/0a);
+  - ein Gerät mit genau einem Interface 08/06/50 (Bulk-Only) oder 08/06/62 (UAS).
+  
+  Ein erlaubtes Interface wird nie geprobt, sondern per Namen an genau einen Treiber gebunden: `cdc_ncm` für die Kamera, `uas` oder `usb-storage` für den Stick. Ein Probe nähme den ersten passenden Treiber, und Treiber für Netzwerk- oder Seriell-Adapter passen über Hersteller- und Produkt-ID, also auch auf einen „Stick“ mit diesen IDs (Security-Review 2026-11-03). Der Treiber wird geladen, bevor etwas autorisiert wird, so findet ein später registrierter Treiber nichts Ungebundenes. Alle Interfaces werden vor dem Bind autorisiert, weil der Kernel den Claim auf ein nicht autorisiertes Interface verweigert (`usb_driver_claim_interface`) und `cdc_ncm` sein Daten-Interface sonst nicht bekäme. Nimmt der Treiber das Gerät nicht, oder hängt schon ein anderer dran, verliert das Gerät die Autorisierung wieder. Alles andere bleibt ohne Treiber und steht mit Kennung und Klasse im Journal (`mp-hmi-usb-guard`): Tastatur, Maus, Netzwerkadapter, Hub, ein Stick, der zugleich Tastatur ist (BadUSB), ATAPI-Laufwerk, die Kamera-Kennung an einem anderen Port. Ein schon gebundenes Interface verliert seinen Treiber.
+- **Kein Autostart:** Es gibt nichts, was einen Stick von sich aus öffnet. Er wird `noexec` eingehängt, der Server gibt nur G-Code heraus, und gedruckt wird erst nach der Jobprüfung. `mp-hmi-usb` bricht den Build ab, falls ein Automounter oder Dateimanager ins Image kommt (udisks2, gvfs, usbmount, autofs, pcmanfm, nautilus, thunar, caja, nemo, dolphin). Ein CD-ROM-Bereich auf dem Stick (U3-Autorun) ist ISO 9660 und wird nicht eingehängt.
 
 ## Hostname (`mp-hmi-hostname`)
 

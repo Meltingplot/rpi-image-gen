@@ -7,10 +7,12 @@
 #  folders and G-code files and hands such a file out; mp-hmi-proxy passes it
 #  on as /hmi/usb/ to the panel's own browser only, since whoever put the
 #  stick in stands at the machine. The interface shows the stick as a folder
-#  and copies a job from it to the printer SBC. FAT, exFAT and NTFS; nothing
-#  on a stick is written or run.
-# X-Env-Layer-Version: 1.0.0
-# X-Env-Layer-Requires: mp-hmi-proxy
+#  and copies a job from it to the printer SBC. FAT and exFAT only; nothing
+#  on a stick is written or run, and the image carries nothing that would
+#  (no automounter, no file manager). Which devices get a driver at all is
+#  mp-hmi-usb-guard's.
+# X-Env-Layer-Version: 1.1.0
+# X-Env-Layer-Requires: mp-hmi-proxy,mp-hmi-usb-guard
 # X-Env-Layer-RequiresProvider: systemd
 # METAEND
 ---
@@ -20,3 +22,20 @@ mmdebstrap:
     - python3
   customize-hooks:
     - $BDEBSTRAP_HOOKS/enable-units "$1" mp-hmi-usb
+    # Nothing on a stick runs: mp-hmi-usb-mount mounts it noexec and the
+    # server only hands out G-code, which the printer runs only once the
+    # operator starts it after the job check. What could open a stick on its
+    # own, an automounter with its autorun prompt or a file manager, must not
+    # come into the image by a dependency either.
+    - |-
+      set -eu
+      found=
+      for p in udisks2 gvfs gvfs-daemons gvfs-backends usbmount autofs \
+               pcmanfm nautilus thunar caja nemo dolphin; do
+        # second column of the listing: i = installed
+        if chroot "$1" dpkg-query -l "$p" 2>/dev/null | grep -q '^.i '; then
+          found="$found $p"
+        fi
+      done
+      [ -z "$found" ] ||
+        { echo "mp-hmi-usb: the panel must not open sticks on its own, but the image has:$found" >&2; exit 1; }

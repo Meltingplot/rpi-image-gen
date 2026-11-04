@@ -87,11 +87,14 @@ check "exFAT: read-only, names in UTF-8" "mount -t exfat -o $opts,iocharset=utf8
 check "exFAT: label as written" "it's \$(touch $tmp/pwned)" "$(cat "$usb/sdb1/label")"
 check "exFAT: label not run" no "$([ -e "$tmp/pwned" ] && echo yes || echo no)"
 
-props sdc ntfs ""
+props sdc vfat ""
 run_mount start sdc
-check "NTFS: through ntfs3" "mount -t ntfs3 -o $opts,iocharset=utf8 /dev/sdc $usb/sdc/fs" \
-   "$(grep '^mount' "$tmp/calls")"
-check "NTFS: empty label" "" "$(cat "$usb/sdc/label")"
+check "whole disk, empty label" "" "$(cat "$usb/sdc/label")"
+
+# no third kernel parser for a prepared stick
+props sdf1 ntfs WINDOWS
+run_mount start sdf1
+check "NTFS: left alone" "0 0 no" "$rc $(grep -c '^mount' "$tmp/calls") $([ -e "$usb/sdf1" ] && echo yes || echo no)"
 
 props sdd1 ext4 data
 run_mount start sdd1
