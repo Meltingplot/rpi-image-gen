@@ -39,3 +39,30 @@ if [ -f "$pmap" ]; then
       '${BOOT_UUID} ${SYSTEM_UUID} ${CRYPT_UUID} ${LUKS_CIPHER} ${LUKS_KEYSIZE} ${LUKS_HASH}' \
       < "$pmap" > "${IGconf_image_outputdir}/provisionmap.json"
 fi
+
+
+# The optional private partition (image.private_part_name) goes in front of
+# the data partition, as in the genimage layout. Only the clear map has a
+# plain data partition to put it next to; the encrypted maps would need a
+# decision on whether it is encrypted too, which nobody has made yet.
+if [ -n "${IGconf_image_private_part_name:-}" ]; then
+   if [ "${IGconf_image_pmap:-}" != clear ]; then
+      echo "image-rota: private_part_name is supported with pmap clear only, not '${IGconf_image_pmap:-}'" >&2
+      exit 1
+   fi
+   python3 - "${IGconf_image_outputdir}/provisionmap.json" "$IGconf_image_private_part_name" << 'EOF'
+import json, sys
+path, name = sys.argv[1], sys.argv[2]
+with open(path) as f:
+    pmap = json.load(f)
+data = [i for i, e in enumerate(pmap)
+        if any(p.get("image") == "persistent" for p in e.get("partitions", []))]
+if len(data) != 1:
+    sys.exit("image-rota: provisionmap has no single persistent partition entry")
+pmap.insert(data[0], {"partitions": [
+    {"comment": "private partition, not mounted by the system", "image": name}]})
+with open(path, "w") as f:
+    json.dump(pmap, f, indent=2)
+    f.write("\n")
+EOF
+fi

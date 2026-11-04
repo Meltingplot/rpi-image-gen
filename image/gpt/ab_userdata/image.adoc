@@ -16,6 +16,7 @@ This system uses an A/B, read‑only root with all writable state on a single pe
 | /var | /persistent/slots/<slot>/var | bind | Per‑slot runtime state (systemd, caches, etc.)
 | /var/log/journal | /persistent/log/journal | bind | Single log directory used by both slots
 | _<slot-shared paths>_ | /persistent/shared/<path> | bind | Application data shared across slots (layer-declared, see <<slot-shared>>)
+| _(not mounted)_ | /dev/disk/by-slot/<name> | ext4 | Optional private partition, see <<private-partition>>
 |===
 
 * **Rationale (immutable root + A/B)**
@@ -54,6 +55,15 @@ If slot GPT labels are missing/duplicated, `/var` binding will fail.
 If slot GPT labels can’t be guaranteed, this layout is not suitable for your device.
 ====
 
+
+[[private-partition]]
+== Private partition
+
+`image.private_part_name` adds one more partition between `system_b` and `persistent`. It holds an empty ext4 filesystem labelled with the name in capitals, sized by `image.private_part_size`. The boot partitions keep numbers 2 and 3, and `persistent` stays last, so it can still grow to the end of the device.
+
+The system does not mount it. It is meant for a single service that mounts it in its own mount namespace, for example with `PrivateMounts=yes`, and finds it as `/dev/disk/by-slot/<name>`. That keeps its contents out of the filesystem every other process sees, and independent of how full `/persistent` is or whether it gets reformatted.
+
+Like every partition it arrives only with a new installation: an update replaces the slots, never the partition table. The provisioning map gets an entry for it with `pmap: clear`; the encrypted maps do not support it yet.
 
 [[slot-shared]]
 == Slot-shared application data
