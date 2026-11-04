@@ -209,10 +209,18 @@ class Report:
     changed   a line does not chain, a seal is not validly signed, or an epoch
               is missing: something was altered after it was written;
     unsealed  valid, but nothing is sealed yet;
+    pending   valid as far as files can show: some numbers are taken to be
+              in summaries the log announces (E19) but has not written yet,
+              which only the service can confirm;
     empty     no lines at all.
 
     A start hash given to the check that differs from the log's makes the
     result "foreign": the log does not begin where the anchor says.
+
+    Numbers counted in a summary that is not written yet (AL-41) are in
+    "pending": exactly, when the service said which summaries are open;
+    otherwise as far as the log itself announces them with E19, and then
+    the result says so.
     """
 
     def __init__(self):
@@ -231,6 +239,9 @@ class Report:
         self.aggregated = 0
         self.torn = 0
         self.rekeys = 0
+        self.pending = 0        # numbers in summaries not written yet
+        self.pending_keys = []  # their class/id
+        self.confirmed = True   # pending as the service said, not inferred
 
     @property
     def result(self):
@@ -242,6 +253,8 @@ class Report:
             return "changed"
         if self.seals == 0:
             return "unsealed"
+        if self.pending and not self.confirmed:
+            return "pending"
         return "valid"
 
     def as_dict(self):
@@ -258,18 +271,28 @@ class Report:
             "last_hash": self.last_hash,
             "aggregated": self.aggregated,
             "lost": self.lost,
+            "pending": self.pending,
+            "pending_keys": self.pending_keys,
             "torn": self.torn,
             "problems": [{"line": n, "epoch": e, "text": t} for n, e, t in self.problems],
         }
 
 
-def verify(lines, start=None):
+def verify(lines, start=None, open_summaries=None):
     """Check a log given as an iterable of lines (with or without newline).
 
     Goes on after a problem, so the report names every place, and keeps
     checking the chain from the altered line onwards.
+
+    open_summaries is what the service reports along with the lines it
+    hands out: [{"key", "from", "to", "n"}] of the summaries it has not
+    written yet. With it every number is accounted for exactly; without it,
+    for a log read from files, a shortfall is accepted only as far as E19
+    entries announce summaries that no summary entry has closed yet.
     """
     rep = Report()
+    announced = {}          # E19 not yet followed by its summary entry
+    gaps = []               # (first, last) of numbers no entry carries
     rep.start_expected = start
     prev = ZERO
     pub = None
@@ -350,6 +373,8 @@ def verify(lines, start=None):
                 rep.problems.append((n, epoch, "sequence number %r out of order" % (seq,)))
                 epoch_ok = False
             else:
+                if seq > rep.last_seq + 1:
+                    gaps.append((rep.last_seq + 1, seq - 1))
                 rep.last_seq = seq
             rep.entries += 1
             rep.unsealed += 1
@@ -362,6 +387,19 @@ def verify(lines, start=None):
             if obj.get("ev") == "E17" and isinstance(data, dict) and isinstance(data.get("lost"), int):
                 rep.accounted += data["lost"]
                 rep.lost += data["lost"]
+            if obj.get("ev") == "E19" and isinstance(data, dict):
+                key = "%s/%s" % (data.get("class"), data.get("event"))
+                first = data.get("from")
+                announced[first if isinstance(first, int) else key] = key
+            if isinstance(agg, dict):
+                # closed: by its first number, or, in logs from before
+                # E19 named it, by class and id
+                key = "%s/%s" % (obj.get("cls"), obj.get("ev"))
+                first = agg.get("from")
+                if isinstance(first, int) and first in announced:
+                    del announced[first]
+                elif key in announced:
+                    del announced[key]
         prev = h
         rep.last_hash = h
 
@@ -369,7 +407,37 @@ def verify(lines, start=None):
         # Cut short at the very end, nothing written after: the crash the
         # service has not yet come back from. Not an alteration.
         rep.torn += 1
-    if rep.accounted != rep.last_seq:
+    short = rep.last_seq - rep.accounted
+    if open_summaries is not None:
+        # From the service, at the moment the lines were read: each number up
+        # to the highest it handed out is on the disk or in one of these.
+        top = max([rep.last_seq] + [o.get("to") or 0 for o in open_summaries])
+        held = sum(o.get("n", 0) for o in open_summaries)
+        if rep.accounted + held != top:
+            rep.problems.append((rep.lines, epoch, "%d events counted and %d in open summaries, %d numbered"
+                                 % (rep.accounted, held, top)))
+        else:
+            rep.last_seq = top
+            rep.pending = held
+            rep.pending_keys = [o.get("key", "") for o in open_summaries]
+    elif short > 0 and announced and short >= len(announced):
+        # Each announced summary holds at least the number before its E19,
+        # and none a number before its first. What is missing before the
+        # earliest of them has to be in the summaries written or declared
+        # lost; only the rest may be in the open ones.
+        firsts = [k for k in announced if isinstance(k, int)]
+        if firsts and len(firsts) == len(announced):
+            first = min(firsts)
+            before = sum(min(b, first - 1) - a + 1 for a, b in gaps if a < first)
+            explained = rep.aggregated + rep.lost
+            if before > explained:
+                rep.problems.append((rep.lines, epoch, "%d numbers missing before the first open summary (%d), "
+                                     "%d in summaries written or declared lost" % (before, first, explained)))
+        if not rep.problems:
+            rep.pending = short
+            rep.pending_keys = sorted(set(announced.values()))
+            rep.confirmed = False
+    elif short != 0:
         rep.problems.append((rep.lines, epoch,
                              "%d events counted, %d numbered" % (rep.accounted, rep.last_seq)))
     return rep
