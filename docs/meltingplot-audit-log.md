@@ -1,0 +1,444 @@
+# Anforderungen: Audit-Log für Duet-Pi und HMI
+
+Stand 2026-11-04, Entwurf zur Abstimmung mit Tim. Nach der Abstimmung wird das Log in beiden Images umgesetzt (`duet-pi5.yaml`, `hmi-pi5.yaml`).
+
+## Anlass
+
+Am 2026-11-04 hat am Labor-HMI die USB-Freigaberegel (`mp-hmi-usb-guard`, noch Side-Load der DSF-Session) eine Cherry-Tastatur abgewiesen. Der Eingriff steht nur im Journal. Dort rotiert er mit allen anderen Meldungen heraus, sobald die 512 MB voll sind (`SystemMaxUse=512M`, `preimage10-slots`). Tim, 2026-11-04: Solche Eingriffe sollen dauerhaft in einem persistenten Log stehen, als eine Art Audit-Log, auf dem HMI und auf dem Duet-Pi.
+
+## Festlegungen (Tim, 2026-11-04)
+
+1. Jedes System führt ein eigenes Audit-Log: das HMI und der Duet-Pi (SBC). Beide lassen sich zum Maschinen-Log zusammenführen (AL-25 bis AL-32).
+2. Das Log liegt auf einer eigenen Partition im neuen Layout. Sie ist nur im Namespace des Log-Dienstes eingehängt; eine Datei auf der Persistenzpartition ist ausgeschlossen (AL-04, AL-33 bis AL-38).
+3. Der Schutz gegen Fluten und gestellte Uhren muss durch die Konstruktion gelten, nicht durch Mustererkennung. Sonst lohnt der Aufwand nicht (AL-39 bis AL-49).
+4. Verschleiß des Datenträgers wird über eine begrenzte Schreiblast berücksichtigt, nicht über eine größere Partition (AL-50 bis AL-54).
+5. Statt WORM, das die Hardware nicht hergibt, wird vorwärtssicher versiegelt, in Schichten nach Betriebszeit (AL-55 bis AL-61).
+6. journald mit Forward-Secure Sealing ist nicht das Audit-Log, weil seine Siegel an der Systemuhr hängen und es alte Einträge verdrängt. journald liefert die Filter für fremde Ereignisse und versiegelt zusätzlich das normale Journal (AL-62, AL-63).
+
+## Grundlagen
+
+- **Maschinenverordnung (EU) 2023/1230, Anhang III 1.1.9 „Schutz gegen Korrumpierung“**, gilt ab 2027-01-20. Die Maschine muss Nachweise über rechtmäßige und unrechtmäßige Eingriffe sammeln: in Hardware, über die man an sicherheitsrelevante Software kommt, und in Software oder Konfiguration. Sie muss außerdem die installierte sicherheitsrelevante Software jederzeit leicht zugänglich angeben können. Den Wortlaut der Verordnung im Amtsblatt (EUR-Lex) prüfen, bevor er in die technische Dokumentation übernommen wird.
+- **DGUV-Prüfgrundsatz GS-IFA-M25, Stand 07-2026** („Grundsätze für die Prüfung und Zertifizierung des Schutzes vor Korrumpierung“), Abschnitt „Protokollierung“ mit den Kriterien T31 bis T47. Die Betriebsanleitung behandeln T20 bis T22. Er nennt als zu protokollierende Eingriffe:
+  - sicherheitsrelevante Parametrierung und Konfiguration (Identifikation über CRC o. ä.),
+  - Update oder Änderung von SRESW und SRASW (Identifikation über CRC, Versionsnummer o. ä.),
+  - Parametrierung von HMIs, falls daraus Gefährdungen entstehen können,
+  - Update oder Änderung von Software zur Darstellung sicherheitsrelevanter Anweisungen.
+- **prEN 50742** (Schutz gegen Korrumpierung). Die Norm ist noch Entwurf, GS-IFA-M25 verwendet ihre Begriffe.
+- **Cyber Resilience Act (EU) 2024/2847, Anhang I Teil I Nr. 2 l:** Aufzeichnung und Überwachung relevanter interner Aktivitäten. Laut Sekundärquellen sieht der Text dafür eine Opt-out-Möglichkeit für den Nutzer vor; das ist am Amtsblatt zu prüfen (siehe offene Frage 1).
+
+Die Kriterien von GS-IFA-M25 sind bei den Anforderungen in Klammern genannt. So lässt sich jede Anforderung einem Prüfpunkt zuordnen.
+
+## Begriffe
+
+- **Eingriff:** jede Änderung an Software oder Konfiguration der Maschine, und jeder Zugang über eine Schnittstelle, über den man an solche Software kommt. Erfasst wird auch der versuchte und der abgewiesene Eingriff.
+- **System:** ein Rechner der Maschine mit eigener, änderbarer Software. Heute loggen zwei Systeme: der Duet-Pi (SBC) und das HMI (siehe „Systeme der Maschine“).
+- **Audit-Log:** das Rückverfolgungsprotokoll im Sinne von GS-IFA-M25 auf einem System. Jedes System führt sein eigenes.
+- **Maschinen-Log:** alle Audit-Logs einer Maschine zusammen. Das ist der Nachweis „der Maschine“ im Sinne von Anhang III 1.1.9.
+- **SRESW, SRASW:** sicherheitsrelevante eingebettete Software (RepRapFirmware auf Mainboard und Erweiterungsboards) und sicherheitsrelevante Anwendungssoftware (die Druckerkonfiguration `chx350-config` unter `0:/sys`), Begriffe nach prEN 50742.
+
+## Geltungsbereich
+
+- Duet-Pi-Image (`duet-pi5.yaml`) und HMI-Image (`hmi-pi5.yaml`), beide über `mp-base.yaml`.
+- Die Installerkarten führen kein eigenes Log. Sie dürfen ein vorhandenes aber nicht stillschweigend löschen (AL-18).
+- Die Boards selbst führen kein Log. Ihre Firmware-Updates erfasst der Duet-Pi, der sie flasht.
+
+## Systeme der Maschine
+
+| System | Software, die sich ändern lässt | Log |
+|---|---|---|
+| Duet-Pi (SBC) | Image (OTA), DSF, DWC, Plugins, Konfiguration `0:/sys`, Firmware der Boards | eigenes Audit-Log |
+| HMI | Image (OTA), Kiosk, Netz-Einstellungen am Panel | eigenes Audit-Log |
+| Boards (MB6HC, Erweiterungen) | RepRapFirmware | im Log des Duet-Pi (E04) |
+| USB-Kamera (rpi-camera) | eigenes Linux mit eigenen Updates | offen (offene Frage 9) |
+
+Beide Pis werden über Connect getrennt aktualisiert, haben getrennte Zugänge und können getrennt ausfallen oder getauscht werden. Das Log muss deshalb auf jedem System für sich vollständig sein, und die Logs müssen sich zu einem Maschinen-Log zusammenführen lassen (AL-25 bis AL-32).
+
+## Ereignisse
+
+„Quelle heute“ nennt, wo das Ereignis heute schon erkannt oder gemeldet wird. MUSS-Ereignisse sind Eingriffe im Sinne von Anhang III 1.1.9. SOLL-Ereignisse dienen der Einordnung und Korrelation.
+
+### Software und Konfiguration
+
+| ID | Ereignis | Gerät | Quelle heute | Stufe |
+|---|---|---|---|---|
+| E01 | Inbetriebnahme: Identität übernommen (Rolle, Druckername), Audit-Log angelegt | beide | `mp-identity` | MUSS (T40) |
+| E02 | Neues Image gestartet (Version, Slot, Image-ID) und Ausgang des Probestarts: übernommen oder zurückgerollt | beide | `slot-var-init`, `mp-role-guard`, Connect-Updater | MUSS |
+| E03 | Update-Auftrag erhalten, gestoppt (falsches Bundle) oder aufgeschoben (Drucker nicht im Leerlauf) | beide (Aufschub nur Duet-Pi) | `mp-bundle-guard`, `mp-ota-gate` | MUSS, Aufschub SOLL |
+| E04 | Firmware eines Boards geflasht: Board, alte und neue Version, CRC32 | Duet-Pi | `mp-dsf-firmware` | MUSS (SRESW) |
+| E05 | Datei unter `0:/sys` geändert: Datei, Hash vorher und nachher, Herkunft (Image-Update, Rücksetzen beim Boot, Änderung über DWC oder Makro) | Duet-Pi | `mp-dsf-seed` beim Boot; Änderungen über DWC werden heute nicht erfasst | MUSS (SRASW, Parametrierung) |
+| E06 | Mainboard-Reset nach Update (`M999`) | Duet-Pi | `mp-dsf` | SOLL |
+| E07 | Plugin installiert, entfernt oder von AppArmor am Start gehindert | Duet-Pi | DSF, Kernel (AppArmor) | MUSS (Software zur Darstellung) |
+| E08 | Druckernetz-Profil am Panel verändert und beim Boot zurückgesetzt | HMI | `mp-hmi-net-guard` | SOLL |
+
+Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal über die Kopie auf dem Gerät. Eine Änderung über DWC wirkt also bis zum nächsten Neustart, in `sys/overrides/` dauerhaft. Beides ist ein Eingriff in die Konfiguration.
+
+### Zugänge und Schnittstellen
+
+| ID | Ereignis | Gerät | Quelle heute | Stufe |
+|---|---|---|---|---|
+| E10 | USB-Gerät angeschlossen und freigegeben oder abgewiesen: Port, VID:PID, Klassen der Schnittstellen, Hersteller- und Produktname | HMI, Duet-Pi falls der Wächter dort kommt | `mp-hmi-usb-guard` (Layer seit PR #119) | MUSS |
+| E11 | USB-Stick eingehängt oder abgezogen | HMI | `mp-hmi-usb-mount` | SOLL |
+| E12 | SSH-Anmeldung angenommen oder abgewiesen: Konto, Schlüssel-Fingerabdruck, Quelladresse | beide | sshd | MUSS |
+| E13 | Root-Rechte per sudo: Konto, Befehl | beide | sudo | MUSS |
+| E14 | Fernzugriff über Raspberry Pi Connect: Shell bzw. Bildschirmfreigabe beginnt oder endet | beide, Bildschirm nur HMI | rpi-connect | MUSS |
+
+### Betrieb des Logs und des Systems
+
+| ID | Ereignis | Gerät | Quelle heute | Stufe |
+|---|---|---|---|---|
+| E15 | Unerwarteter Neustart: Watchdog, Kernel-Panic, Stromausfall (soweit unterscheidbar) | beide | Reset-Grund des Bootloaders, zu klären | SOLL |
+| E16 | Systemuhr springt (mehr als 60 s) oder wird nach dem Boot erstmals synchronisiert | beide | timesyncd (Duet-Pi), chrony (HMI) | MUSS (Korrelation, T45) |
+| E17 | Fehler des Audit-Logs: Schreibfehler, Prüfkette gebrochen, Speicher knapp | beide | – | MUSS (T36) |
+| E18 | Audit-Log gelöscht oder bei einer Neuinstallation übernommen bzw. verloren | beide | – | MUSS (T43, T44) |
+| E19 | Flut erkannt: gleichartige Ereignisse einer Quelle über der Ratengrenze, zusammengefasst (AL-41, AL-43) | beide | – | MUSS |
+| E20 | Stand der festen Menge sicherheitsrelevanter Objekte: geänderte Objekte mit Hash, Zugänge je Konto und Schlüssel, Gesamthash (AL-42, AL-45) | beide | – | MUSS (T46) |
+| E21 | Verschleiß des Datenträgers, monatlich: bei NVMe „Percentage Used“ und „Data Units Written“ (AL-53) | beide | – | SOLL |
+
+## Anforderungen
+
+### Inhalt eines Eintrags (T45)
+
+- **AL-01** Jeder Eintrag enthält:
+  - eine laufende Nummer, die lückenlos ist und nie wiederverwendet wird,
+  - den Boot-Zähler und die Boot-ID,
+  - die Zeit in UTC (ISO 8601) und die Angabe, ob die Uhr da synchronisiert war,
+  - das Gerät: Rolle und Hostname,
+  - die Image-Version,
+  - die Ereignis-ID,
+  - das Ergebnis (zugelassen, abgewiesen, ausgeführt, fehlgeschlagen),
+  - den Akteur, soweit bekannt (Konto, Quelladresse, Dienst),
+  - das Objekt (Datei, Gerät, Version, Hash),
+  - einen kurzen Text.
+- **AL-02** Zeichenketten von außen werden begrenzt und maskiert gespeichert und nie ausgewertet: Namen aus USB-Deskriptoren, Dateinamen, Datenträgernamen.
+- **AL-03** Ein Eintrag pro Zeile, maschinenlesbar (JSON Lines). Ein Werkzeug zeigt das Log menschenlesbar an (AL-20).
+
+### Speicherung und Aufbewahrung (T37, T38, T39)
+
+- **AL-04** Das Log liegt auf einer eigenen Partition, die nur der Log-Dienst nutzt (Entscheidung Tim, 2026-11-04; Layout siehe AL-33 bis AL-38).
+  - Sie steht nicht in der fstab. Der Log-Dienst hängt sie nur in seinem eigenen Mount-Namespace ein, für alle anderen Prozesse ist sie nicht eingehängt.
+  - Sie übersteht OTA und Rollback, weil ein Update die Partitionstabelle nicht ändert.
+  - Sie übersteht das Zurücksetzen von `/var` und das Neuformatieren der Persistenzpartition.
+  - Sie hängt weder von der Rotation des Journals noch vom Füllstand der Persistenzpartition ab.
+  - Der Ort steht in der Betriebsanleitung (T37).
+- **AL-05** Jeder Eintrag bleibt mindestens fünf Jahre erhalten (T39). Gemessen wird in Betriebszeit (AL-49), also mindestens fünf Kalenderjahre. Jüngere Einträge verschwinden nur über das Verfahren aus AL-17.
+- **AL-06** Für jede Ereignis-ID bleibt der letzte Eintrag dauerhaft erhalten, auch wenn er älter als fünf Jahre ist (T38).
+- **AL-07** Die Partition hat eine feste Größe, Vorschlag 512 MiB. Großzügig, weil sie sich nach der Installation nicht mehr ändern lässt. Die Hälfte ist für das eigene Log, die andere für die Kopie des Partners (AL-29). Das eigene Log teilt sich nach AL-40 auf die Klassen auf; das Archiv nach einer Löschung (AL-17) zählt zur Reserve. Schätzung im Normalbetrieb: unter 100 Einträge am Tag zu etwa 400 Byte, über fünf Jahre also unter 75 MB. Erst ab 80 % eines Anteils dürfen Einträge gekürzt werden, die älter als fünf Jahre Betriebszeit sind (AL-06, AL-49). Bei 80 % wird außerdem E17 gemeldet. Neue Einträge werden nie verworfen, höchstens nach AL-41 zusammengefasst. Ein volles Log hält die Maschine nicht an.
+- **AL-08** Jeder Eintrag geht zusätzlich ins Journal, damit man ihn live sieht. Maßgeblich ist nur das Audit-Log.
+
+### Aktivierung und Schutz vor Deaktivierung (T35, T36, T40, T41)
+
+- **AL-09** Das Log schreibt automatisch, ohne Zutun eines Benutzers, ab dem ersten Boot eines Images, also spätestens ab der Inbetriebnahme (E01). Es gibt keinen Schalter, der es abstellt: weder in `identity.conf` noch in DWC noch in einer Datei auf der Persistenzpartition.
+- **AL-10** Einträge nimmt der Log-Dienst nur von root an (AL-34). Das Connect-Konto `meltingplot` darf über den Dienst lesen, aber nicht schreiben oder löschen. DWC-Benutzer erreichen das Log nur über den Export (AL-21).
+- **AL-11** Eine Lücke wird erkannt: Läuft ein Boot ohne sauberes Ende oder fehlen laufende Nummern, steht das beim nächsten Start als E17 im Log.
+- **AL-12** Schlägt das Schreiben fehl, wird das als E17 im Journal und am nächsten möglichen Zeitpunkt im Log festgehalten. SOLL: Hinweis in DWC bzw. am Panel.
+
+### Schutz vor Manipulation (T42, T48)
+
+- **AL-13** Jeder Eintrag enthält den SHA-256 seines Vorgängers (Prüfkette). Eine geänderte, gelöschte oder eingeschobene Zeile fällt bei der Prüfung auf (`verify`). SHA-256 entspricht BSI TR-02102-1 (T48).
+- **AL-14** Die Logdatei ist im Dateisystem nur anhängbar (`chattr +a`). Das schützt gegen versehentliches Ändern.
+- **AL-15** Der letzte Hash der Prüfkette jedes Systems wird regelmäßig beim anderen System hinterlegt (AL-28) und in jeden Export geschrieben. Dann fällt auch auf, wenn root auf einem System das ganze Log neu schreibt oder kürzt.
+- **AL-16** Restrisiko: root kann das Log zerstören und von dem Zeitpunkt an fälschen, zu dem er root geworden ist. Was davor versiegelt wurde, kann er nicht unbemerkt ändern (AL-55 bis AL-59). Das Restrisiko ist zu dokumentieren (T27 bis T30). Gemildert wird es durch die Zugangshärtung: `mpadmin` nur aus dem Druckernetz mit Nitrokey. Außerdem erfassen E12 und E13 jede Anmeldung und jedes sudo.
+
+### Löschen (T43, T44)
+
+- **AL-17** Gelöscht wird nur über ein Verfahren, das in der Betriebsanleitung beschrieben ist. Vorschlag: ein Befehl, nur als root, mit Pflichtangabe eines Grundes. Er archiviert das alte Log und beginnt das neue mit einem E18-Eintrag. Dieser enthält Grund, Konto, letzte laufende Nummer und letzten Hash des alten Logs (T44).
+- **AL-18** Überschreibt die Installerkarte (`mp-installer`) eine NVMe, die schon eine Audit-Partition hat, sichert sie deren Inhalt vorher und schreibt ihn danach zurück. Der nächste Start schreibt E18 „Neuinstallation“. Ist das alte Log nicht lesbar, beginnt das neue mit E18 „nicht übernommen“. Eine Neuinstallation ist sonst eine Löschung ohne Nachweis.
+- **AL-19** Pi-Tausch: Das neue Gerät beginnt mit E01. Das alte Log bleibt auf dem alten Datenträger, eine Kopie beim anderen System (AL-29, AL-32). Das Verfahren steht in der Betriebsanleitung.
+
+### Lesen und Auswerten (T21, T22, T33, T46, T47)
+
+- **AL-20** Ein Werkzeug auf beiden Geräten zeigt das Log menschenlesbar an, mit Filter nach Ereignis und Zeit, und prüft die Kette. Das Connect-Konto darf es aufrufen. Damit kann der Support über die Connect-Shell lesen.
+- **AL-21** SOLL: Ein Export für Betreiber ohne Shell, als Datei zum Herunterladen. Wo, entscheidet Tim (offene Frage 3).
+- **AL-22** Software-Identifikation auf Anfrage, menschenlesbar (T46, T47): Image-Version, DSF-, DWC- und RRF-Versionen mit CRC der Firmware, Hashes der Konfiguration unter `0:/sys`.
+- **AL-23** Die Betriebsanleitung beschreibt (T20 bis T22, T37, T43):
+  - wo das Log liegt, wie man es liest und wie man es interpretiert, mit der Ereignistabelle,
+  - welche Rolle was ändern darf,
+  - das Verfahren zum Löschen.
+
+### Datenschutz
+
+- **AL-24** Erfasst wird nur, was für den Nachweis nötig ist: Kontonamen, Schlüssel-Fingerabdrücke, Quelladressen von Anmeldungen. Nicht erfasst werden Inhalte von Dateien oder Jobs, Passwörter und WLAN-Zugangsdaten. Rechtsgrundlage und Aufbewahrung sind zu klären (offene Frage 6).
+
+### Zwei Systeme einer Maschine
+
+- **AL-25** Beide Systeme loggen mit demselben Werkzeug, demselben Format und denselben Ereignis-IDs, aus einem gemeinsamen Layer. Ein Ereignis, das es nur auf einem System gibt, hat trotzdem eine eindeutige ID.
+- **AL-26** Jeder Eintrag nennt neben dem System (Rolle, Hostname) die Maschine, zu der es gehört. Der Druckername kommt aus `identity.conf` bzw. vom Duet-Pi, wie heute beim Hostnamen des HMI. So lassen sich die Logs beider Systeme ohne Raten zusammenführen.
+- **AL-27** Gemeinsame Zeitbasis: Der Duet-Pi bezieht seine Zeit vom HMI (chrony auf 10.42.0.1), das HMI aus dem Internet. Jeder Eintrag sagt, ob die Uhr synchron war (AL-01). Die Zeitsprünge beider Systeme (E16) stehen im Log. Damit lassen sich Ereignisse über beide Systeme in eine Reihenfolge bringen, auch nach einem Stromausfall ohne Netz.
+- **AL-28** Gegenseitige Verankerung: Jedes System hinterlegt regelmäßig seinen letzten Hash, seine laufende Nummer und seinen Boot-Zähler beim anderen System, über das Druckernetz. Das andere System schreibt sie als Eintrag in sein eigenes Log. Wer ein Log neu schreiben will, muss also beide Systeme manipulieren.
+- **AL-29** SOLL: Jedes System hält zusätzlich eine Kopie des Logs des anderen. Dann übersteht der Nachweis den Ausfall oder Tausch eines Pis über die fünf Jahre (T39). Die Kopie wird gegen die Verankerung aus AL-28 geprüft.
+- **AL-30** Fällt das andere System oder das Druckernetz aus, loggt jedes System ungestört weiter. Verankerung und Kopie werden nachgeholt, sobald die Verbindung wieder steht. Eine Verbindung, die länger als einen Tag fehlt, ist ein Eintrag (E17).
+- **AL-31** Ein Export und eine Anzeige liefern das Maschinen-Log: beide Logs, nach Zeit und laufender Nummer zusammengeführt, mit dem Prüfergebnis jeder Kette. Ist ein System nicht erreichbar, sagt das der Export, statt dessen Teil wegzulassen.
+- **AL-32** Tausch eines Systems (Pi-Tausch, AL-19): Das verbleibende System sieht den neuen Partner an der neuen Kette. Es schreibt den Wechsel als Eintrag und behält die Verankerung des alten Partners.
+
+### Eigene Partition (Layout)
+
+- **AL-33** Neue Partition im A/B-Layout:
+  - GPT-Name `audit`, Dateisystem ext4 mit Label `AUDIT`, Größe nach AL-07.
+  - Sie liegt hinter `system_b` und vor `persistent`. `persistent` bleibt die letzte Partition, weil `mp-growfs` sie bis ans Ende des Datenträgers vergrößert.
+  - Die Boot-Partitionen behalten die Nummern 2 und 3, die Tryboot braucht.
+  - Alles findet die Partitionen über ihren GPT-Namen, die neue über `/dev/disk/by-slot/audit`.
+  - SD und NVMe bekommen dasselbe Layout.
+- **AL-34** Zugriff nur über den Log-Dienst:
+  - Der Dienst hängt die Partition in seinem eigenen Mount-Namespace ein (`PrivateMounts=`) und ist ihr einziger Schreiber.
+  - Einträge nimmt er über einen Socket nur von root an, Lesen erlaubt er der Gruppe `adm`.
+  - Das Blockgerät bleibt root vorbehalten.
+  - Für root ist die Partition sichtbar (`lsblk`) und einhängbar; dagegen schützen AL-13 bis AL-16 und AL-28.
+- **AL-35** Was vor dem Start des Dienstes oder während eines Ausfalls geschieht, geben die Wächter mit einer Kennung ins Journal. Der Dienst übernimmt es beim Start in der richtigen Reihenfolge. So sind auch Wächter erfasst, die früh im Boot laufen, etwa `mp-role-guard`.
+- **AL-36** Geräte, die vor dem neuen Layout installiert wurden, haben keine Audit-Partition, und ein OTA kann sie nicht anlegen. Auf ihnen schreibt der Dienst nur ins Journal und meldet bei jedem Boot E17 „keine Audit-Partition, Neuinstallation nötig“, bis das Gerät mit der Installerkarte neu aufgesetzt ist (offene Frage 10).
+- **AL-37** Der Dienst formatiert die Partition nur, wenn sie keinerlei Dateisystem-Signatur trägt (erster Start nach Installation). Ein beschädigtes Dateisystem wird nie neu formatiert, sondern als E17 gemeldet: Es kann der Nachweis sein.
+- **AL-38** Die Änderung an `image-rota` wird allgemein gebaut: eine optionale, nicht eingehängte Partition, deren Name und Größe Variablen sind und die standardmäßig fehlt. So lässt sie sich Upstream (raspberrypi/rpi-image-gen) vorschlagen, statt dauerhaft als eigene Abweichung mitgeführt zu werden.
+
+### Schutz gegen Fluten und gestellte Uhren
+
+Wer das Verfahren kennt, kann auf mehreren Wegen versuchen, den Nachweis zu beseitigen. Er kennt dabei auch Partitionsgröße, Anteile und Budgets:
+
+1. Er flutet, bis ein Ringpuffer umläuft und ältere Einträge überschreibt.
+2. Er erzeugt rollierend viele verschiedene Ereignisse, verteilt auf alle Klassen, damit sich nichts zusammenfassen lässt.
+3. Er flutet alle Klassen, in die er schreiben kann, bis kein Platz mehr für Wesentliches bleibt, und ändert erst dann.
+4. Er dreht die Uhr vor, damit Einträge als älter als fünf Jahre gelten und gelöscht werden, oder damit sich die Budgets schneller auffüllen.
+5. Er versteckt den eigentlichen Eingriff in der Masse.
+
+Billig zu erzeugen sind zum Beispiel:
+- USB-Geräte, auch ein zugelassener Stick, die sich im Sekundentakt anmelden,
+- SSH-Fehlversuche mit wechselnden Konten und Adressen,
+- Dateien, die über DWC in einer Schleife unter immer neuen Namen geschrieben werden.
+
+Der Schutz beruht nicht darauf, Muster zu erkennen. Er beruht auf vier Grenzen, die durch die Konstruktion gelten:
+- **Fester Speicher für Wesentliches:** Nur eine echte Änderung an einer festen Menge von Objekten kann hineinschreiben.
+- **Feste Anteile mit Budgets:** Jede Klasse kann höchstens ihren Anteil verbrauchen.
+- **Zusammenfassen nur nach Werten des Systems,** nie nach Werten, die der Angreifer wählt.
+- **Betriebszeit statt Uhrzeit,** für alles, was löscht oder Budget gewährt.
+
+- **AL-39** Jede Ereignis-ID gehört zu einer Klasse:
+  - **Stand:** das Wesentliche. Zustand und Zugänge der festen Menge (AL-45), geschrieben nach AL-42. Kein anderes Ereignis schreibt in diese Klasse.
+  - **Änderung:** die Einzelheiten ausgeführter Eingriffe und gewährter Zugänge. E01, E02, E04, E05, E06, E07 (installiert, entfernt), E10 (freigegeben), E12 (angenommen), E13, E14, E18.
+  - **Versuch:** etwas, das abgewiesen wurde. E03 (gestoppt), E07 (blockiert), E10 (abgewiesen), E12 (abgewiesen).
+  - **Betrieb:** alles Übrige. E03 (aufgeschoben), E08, E11, E15, E16, E17, E19, E21.
+- **AL-40** Jede Klasse hat einen festen Anteil des eigenen Logs. Die Anteile sind nicht gleich verteilt: Der Anteil von Stand ergibt sich aus der Größe der festen Menge (AL-42). Vorschlag bei 256 MiB für das eigene Log: Stand 32 MiB, Änderung 96 MiB, Versuch 52 MiB, Betrieb 24 MiB, Reserve 52 MiB.
+  - Jeder Schreibvorgang wird dem Budget seiner Klasse angerechnet. Das Budget füllt sich mit der Betriebszeit auf (AL-49), um den Anteil geteilt durch fünf Jahre, dazu ein Vorrat für kurze Spitzen.
+  - Keine Klasse kann damit mehr als ihren Anteil verbrauchen, gleich wie viele und welche Ereignisse kommen. Den Anteil einer anderen Klasse erreicht sie nie.
+  - Die Klasse Änderung hat im Mittel etwa 54 KB am Tag, rund 135 einzelne Einträge am Tag über fünf Jahre. Das ist ein Vielfaches des Normalbetriebs.
+- **AL-41** Über dem Budget sinkt nur die Detailtiefe, nie die Aufbewahrung.
+  - Zusammengefasst wird nur nach Werten, die das System festlegt: Klasse und Ereignis-ID. Die Liste der Ereignis-IDs ist fest und kurz (E01 bis E20); ein Angreifer kann sie nicht verlängern.
+  - Was der Angreifer wählt (Quelle, Objekt, Text), geht nie in die Gruppierung ein. Wer rollierend verschiedene Ereignisse erzeugt, landet trotzdem im selben Sammeleintrag.
+  - Ein Sammeleintrag hat feste Größe: Anzahl, Zeitraum, laufende Nummern, die zehn häufigsten Quellen und Objekte, die Zahl der übrigen, eine Prüfsumme über alle.
+  - Bleibt das Budget leer, wächst sein Zeitfenster: Minute, Stunde, Tag. Bis dahin zählt der Dienst in einem Zählerstand fester Größe. Er übersteht einen Neustart und wird höchstens einmal pro Minute geschrieben (AL-51).
+  - Der erste und der letzte Eintrag je Ereignis-ID bleiben einzeln erhalten. Das ist mehr, als T38 verlangt.
+  - Jedes zusammengefasste Ereignis zählt in der laufenden Nummer und der Prüfkette mit.
+- **AL-42** Das Wesentliche hat einen eigenen Speicher, den keine Flut erreicht: die Klasse Stand.
+  - In ein Zeitfenster schreibt sie für jedes Objekt der festen Menge, das sich geändert hat: den neuen Hash (SHA-256), die Zahl der Änderungen, die erste und die letzte Zeit.
+  - Für jedes feste Konto und jeden zugelassenen Schlüssel schreibt sie: die Zahl der angenommenen Anmeldungen und der sudo-Aufrufe, die erste und die letzte Quelle.
+  - Im Normalbetrieb ist das Zeitfenster eine einzelne Änderung. Unter Dauerlast wächst es höchstens bis auf einen Tag.
+  - Ein Boot ohne Änderung ist kein Eintrag, sondern ein Zähler.
+  - Hineinschreiben kann ein Angreifer nur, indem er wirklich ein Objekt der Menge ändert oder sich wirklich über ein festes Konto anmeldet. Jedes Byte in dieser Klasse ist also Nachweis, nichts davon Rauschen.
+  - Der Anteil ist so bemessen, dass er fünf Jahre lang reicht, auch wenn sich jedes Objekt der Menge jeden Tag ändert. Rechnung: etwa 160 Objekte, ausgelegt auf 256 Objekte zu je 48 Byte. 256 × 48 Byte × 1826 Tage ≈ 22 MB, dazu die Zugänge mit unter 3 MB. Das passt in 32 MiB.
+  - Wer alle anderen Klassen flutet, ändert an dieser Klasse nichts.
+- **AL-43** Eine Flut ist selbst ein Ereignis (E19): Klasse, Ereignis-ID, Rate, Beginn, häufigste Quellen. Höchstens einmal je Ereignis-ID und Zeitfenster. SOLL: Hinweis am Panel bzw. in DWC.
+- **AL-44** Die Anzeige zeigt standardmäßig die Klassen Stand und Änderung sowie die Sammeleinträge; Versuch und Betrieb auf Wunsch. Ein Bericht „Änderungen seit …“ beruht auf der Klasse Stand.
+- **AL-45** Die feste Menge sicherheitsrelevanter Objekte legt das Image fest. Ein Angreifer kann sie nicht vergrößern. Sie umfasst:
+  - Image-Version,
+  - Firmware-Versionen und CRCs der Boards,
+  - die Dateien, die das Image unter `0:/sys` und `0:/macros` mitbringt,
+  - die bekannten Dateien unter `sys/overrides/` (`global-override.g`, `machine-override`, `dsf-config-override.g`, `spool-catalog.csv`, `printer-name.g`),
+  - die installierten Plugins,
+  - die Konten (`meltingplot`, `mpadmin`, root) und die zugelassenen SSH-Schlüssel,
+  - die Freigabeliste des USB-Wächters.
+
+  Alle übrigen Dateien, auch neue unter `sys/overrides/`, gehen nur als Anzahl und Gesamthash ein. Bei jedem Boot und täglich schreibt die Klasse Stand einen Gesamthash über die ganze Menge. Zwei Stände zeigen jede Änderung an einem sicherheitsrelevanten Objekt, gleich wie viele und wie verschiedene Ereignisse dazwischen lagen.
+- **AL-46** Kein Ringpuffer. Kein Eintrag, der jünger als fünf Jahre Betriebszeit ist (AL-49), wird überschrieben oder gekürzt, auch nicht unter einer Flut.
+- **AL-47** SOLL: Schutz schon an der Quelle.
+  - Der USB-Wächter legt einen Port still, an dem sich ein Gerät immer wieder anmeldet, bis es abgezogen wird.
+  - sshd begrenzt Anmeldeversuche je Quelle (`PerSourcePenalties`, `MaxStartups`).
+- **AL-48** Kein Eingriff ohne Nachweis. Kann die Klasse Stand eine Änderung nicht mehr festhalten, verweigert das System die Eingriffe, die es selbst steuert:
+  - Anlass: Partition nicht schreibbar oder Dienst gestört. Nach AL-42 ist ein voller Anteil nicht möglich.
+  - Verweigert werden: Updates (Bundle-Wächter), Firmware-Flash, USB-Freigaben, Schreiben unter `0:/sys` über DWC.
+  - Anmeldungen bleiben möglich, damit der Support das Gerät erreicht. Sie stehen als E17 im Journal (offene Frage 11).
+- **AL-49** Betriebszeit statt Uhrzeit. Was löscht oder Budget gewährt, richtet sich nie nach der Systemuhr. Maßgeblich ist die aufsummierte Betriebszeit:
+  - Sie zählt die Laufzeit jedes Boots (`CLOCK_BOOTTIME`, lässt sich nicht stellen) und wird laufend in die Partition fortgeschrieben.
+  - Nach einem Absturz fehlt höchstens das letzte Intervall. Das ist die sichere Richtung: weniger Zeit heißt später löschen und weniger Budget.
+  - Die Betriebszeit ist nie größer als die Kalenderzeit. Eintrag „älter als fünf Jahre“ heißt also mindestens fünf Kalenderjahre.
+  - Die Systemuhr dient nur der Anzeige und der Zuordnung zwischen den Systemen. Jeder Sprung steht als E16 im Log.
+  - Die Reihenfolge ergibt sich aus laufender Nummer und Boot-Zähler, nicht aus der Uhr.
+
+**Was ein Angreifer erreicht, der alles kennt:**
+
+- **Umlauf erzwingen: nein.** Es gibt keinen Ringpuffer (AL-46).
+- **Rollierend verschiedene Ereignisse: nein.** Es zählt nur Klasse und Ereignis-ID (AL-41).
+- **Alle Klassen fluten, dann ändern: nein.** Wesentliches steht in der Klasse Stand. Dort kann er nur hineinschreiben, indem er wirklich ändert, und der Platz reicht auch dann fünf Jahre (AL-42). Die übrigen Klassen werden durch die Flut gröber, nicht voll.
+- **Uhr vordrehen: nein.** Löschen und Budget hängen an der Betriebszeit (AL-49). Der Sprung selbst steht als E16 im Log.
+- **Alte Einträge verdrängen oder unbrauchbar machen: nein.** Geschriebenes wird weder gelöscht noch nachträglich zusammengefasst.
+- **Was die Flut kostet:**
+  - Während der Flut werden Versuche, Betriebsereignisse und Einzelheiten von Änderungen (genaue Zeit, Quelle, Befehl) nur noch gezählt.
+  - Welches sicherheitsrelevante Objekt sich geändert hat und welchen Stand es danach hatte, bleibt erhalten, im schlechtesten Fall auf den Tag genau.
+  - Die Flut steht als E19 im Log und ist selbst ein Nachweis für den Angriff.
+- **Restrisiko:** root kann das Log zerstören, und fälschen kann er nur, was nach seinem Zugriff kommt (AL-16). Das Zerstören fällt über die Verankerung auf (AL-28, AL-58).
+
+### Verschleiß des Datenträgers
+
+Eine SSD verschleißt nicht an bestimmten Zellen einer Partition. Ihr Controller verteilt jeden Schreibvorgang über die ganze Platte (Wear Leveling), unabhängig von Partitionsgrenzen und davon, ob dieselbe Adresse immer wieder beschrieben wird. Begrenzt ist die gesamte Schreibmenge über die Lebensdauer (TBW). Eine größere Partition verringert den Verschleiß deshalb nicht. Es kommt darauf an, wie viel das Log insgesamt schreibt.
+
+Bezug Labor-HMI (2026-11-04):
+- Samsung MZ9LQ256HBJD (PM991a, 256 GB).
+- `fstrim.timer` aktiv.
+- Das ganze System schreibt etwa 800 MB am Tag (475 MB in 14,3 h Laufzeit).
+
+Die TBW dieses Modells ist dem Datenblatt zu entnehmen; Geräte dieser Klasse liegen typischerweise bei über 100 TB.
+
+Die Gefahr ist die Flut: Schriebe jedes Ereignis einzeln mit `fsync`, kostet das wegen Blockgröße und ext4-Journal etwa 16 KiB pro Ereignis. Bei 1000 Ereignissen pro Sekunde wären das etwa 1,4 TB am Tag, und die SSD wäre in Monaten verbraucht. Eine Flut ist also auch ein Angriff auf den Datenträger.
+
+- **AL-50** Die Schreiblast des Logs ist durch die Konstruktion begrenzt, unabhängig davon, wie viele Ereignisse ankommen. Auf den Datenträger geht nur, was das Budget erlaubt (AL-40, AL-41). Alles andere wird im Speicher gezählt.
+- **AL-51** Schreiben in festen Abständen:
+  - Einträge der Klasse Stand werden sofort und einzeln dauerhaft geschrieben; sie sind selten und durch die feste Menge begrenzt.
+  - Einträge der übrigen Klassen werden gesammelt und höchstens alle fünf Sekunden geschrieben. Ein Absturz kostet höchstens diese fünf Sekunden. Die laufende Nummer zeigt die Lücke (AL-11).
+  - Zählerstände der Zusammenfassung: höchstens einmal pro Minute.
+  - Betriebszeit (AL-49): höchstens alle zehn Minuten.
+  - Kopie des Partners (AL-29): höchstens stündlich, gebündelt.
+- **AL-52** Obergrenze, nachzuweisen über fünf Jahre im schlechtesten Fall, Dauerflut mit vollem Budget in allen Klassen:
+  - etwa 1,3 Mio. Einträge mit je 16 KiB auf dem Gerät, also etwa 21 GB,
+  - Zählerstände 42 GB, Betriebszeit 4 GB, Kopie des Partners 3 GB,
+  - zusammen unter 75 GB.
+
+  Das sind etwa 40 MB am Tag, rund 5 % dessen, was das HMI heute ohnehin schreibt, und weit unter 0,1 % einer TBW von 100 TB. Die Partition bleibt bei 512 MiB.
+- **AL-53** SOLL: Das System schreibt monatlich den Verschleiß des Datenträgers ins Log (E21): bei NVMe „Percentage Used“ und „Data Units Written“ aus den SMART-Daten. Das ist auch ein Nachweis, falls jemand den Datenträger zu verschleißen versucht. Die Audit-Partition ist nur im Namespace des Dienstes eingehängt. Der Dienst stößt TRIM für sie deshalb selbst an, weil `fstrim.timer` sie nicht sieht.
+- **AL-54** Läuft ein System von einer SD-Karte statt von NVMe, gilt dieselbe Grenze. Billige Karten verteilen Schreibvorgänge oft schlechter; für den Dauerbetrieb von SD sind Industriekarten (pSLC) vorzusehen. Die Betriebsanleitung nennt das.
+
+### Versiegelung mit Vorwärtssicherheit (statt WORM)
+
+Echtes WORM, also ein Speicher, den man physisch nicht mehr überschreiben kann, gibt die verbaute NVMe nicht her. Nötig wäre ein Schreibschutz in der Hardware, etwa der permanente Schreibschutz von eMMC; NVMe-Namespace-Schreibschutz beherrscht die verbaute Samsung PM991a nach meinem Wissen nicht (am Datenblatt zu prüfen). Ein Schutz im Dateisystem (`chattr +a`) und eine reine Hash-Kette (AL-13) halten root nicht auf: Er ändert einen Eintrag und rechnet die Kette in Sekunden neu.
+
+Das Neurechnen absichtlich teuer zu machen, etwa mit langsamen Hashes, hilft nicht. Der Angreifer rechnet auf einem PC und hat Zeit, das Gerät hat beides nicht. Wirksam ist eine Versiegelung, deren Schlüssel nach Gebrauch vernichtet werden (Forward-Secure Sealing nach Schneier und Kelsey, wie `journalctl --setup-keys` bei journald).
+
+- **AL-55** Das Log wird schichtweise versiegelt, in Epochen, die an der Betriebszeit hängen (AL-49). Vorschlag: 15 Minuten Betriebszeit je Epoche.
+  - Das Siegel einer Epoche ist ein HMAC-SHA-256 über ihre Einträge, das Siegel der vorigen Epoche, die Epochennummer, die Betriebszeit und den Boot-Zähler.
+  - Jede Schicht bestätigt also die vorige.
+- **AL-56** Jede Epoche hat ihren eigenen Schlüssel.
+  - Am Ende einer Epoche wird der nächste Schlüssel über eine Einwegfunktion aus dem aktuellen abgeleitet. Der aktuelle wird überschrieben, im Speicher wie auf der Partition. Aus einem späteren Schlüssel lässt sich kein früherer zurückrechnen.
+  - Einträge der Klasse Stand schließen ihre Epoche sofort ab.
+  - Anmeldungen werden beim Aufbau der Sitzung über PAM synchron erfasst und versiegelt, bevor die Shell startet. Wer sich root verschafft, findet seine Anmeldung schon versiegelt vor.
+- **AL-57** Den Startschlüssel erzeugt das Gerät bei der Inbetriebnahme.
+  - Er wird sofort mit einem öffentlichen Schlüssel von Meltingplot verschlüsselt, der im Image liegt. Die Klartext-Kopie wird vernichtet.
+  - Verschlüsselter Startschlüssel und Hash stehen im ersten Eintrag des Logs (Genesis).
+  - Die Siegel prüfen kann nur, wer den zugehörigen privaten Schlüssel hat: Meltingplot, offline auf einem Hardware-Token, auf Wunsch zusätzlich eine Prüfstelle.
+  - Die Verfahren richten sich nach BSI TR-02102-1 (T48), z. B. ECIES auf P-256 oder RSA-OAEP mit 3072 Bit für den Startschlüssel.
+- **AL-58** Der Anfang wird außerhalb verankert. Der Hash des Genesis-Eintrags verlässt die Maschine bei der Inbetriebnahme: ins Inbetriebnahmeprotokoll bei Meltingplot und zum Partner-System (AL-28). Ein komplett neu angelegtes Log hätte einen anderen Anfang. Das gilt auch, wenn es mit einem neuen, korrekt verschlüsselten Startschlüssel angelegt wurde.
+- **AL-59** Was daraus folgt: Wer zum Zeitpunkt T root wird, kann nichts unbemerkt ändern, was vor T versiegelt wurde, auch seine eigene Anmeldung nicht. Das ist nicht nur aufwendig, sondern ohne den Startschlüssel unmöglich.
+  - Er kann ab T fälschen.
+  - Er kann das Log löschen oder neu anlegen. Beides fällt über AL-58 auf.
+  - Die Prüfkette (AL-13) bleibt daneben bestehen: Mit ihr lässt sich am Gerät ohne Schlüssel prüfen, ob Einträge fehlen oder umgestellt sind.
+- **AL-60** SOLL: Bindung an das Gerät.
+  - Zusätzlich signiert der Pi 5 jedes Epochensiegel mit seinem gerätegebundenen Schlüssel im OTP, über die Firmware (`rpi-fw-crypto`, dieselbe Geräteidentität, mit der sich Connect anmeldet). Linux kann damit signieren lassen, den Schlüssel aber nicht lesen.
+  - Ein gefälschtes Log ließe sich dann nur auf diesem Gerät erzeugen, nicht auf einem PC.
+  - Voraussetzung: Der Schlüssel ist provisioniert und gegen Auslesen gesperrt. Zu prüfen.
+- **AL-61** Ein Prüfwerkzeug für Meltingplot und Prüfstellen entschlüsselt den Startschlüssel, rechnet die Schlüsselfolge nach und meldet je Epoche gültig, verändert oder fehlend. Es läuft außerhalb der Maschine.
+
+### Warum nicht journald mit Forward-Secure Sealing allein
+
+Geprüft am Quelltext von systemd v257, der Version in trixie (Tim, 2026-11-04: `journalctl --setup-keys` mit eigenen Filtern statt eines eigenen Logs?):
+
+- **Die Versiegelung hängt an der Systemuhr.**
+  - `journal_file_get_epoch` (`src/libsystemd/sd-journal/journal-authenticate.c`) berechnet die Epoche aus `CLOCK_REALTIME`.
+  - Der Schlüssel wird beim Fortschreiben in der Schlüsseldatei überschrieben. Das ist gewollt, sonst wäre er nicht vorwärtssicher.
+  - Wird die Uhr einmal vorgedreht, steht der Schlüssel danach unwiderruflich in der Zukunft. Mit wieder richtiger Zeit liefert `journal_file_fsprg_need_evolve` `-ESTALE`, und `journal_file_maybe_append_tag` hängt dann ohne Fehlermeldung kein Siegel mehr an, bis die echte Zeit aufgeholt hat. Uhr zehn Jahre vor heißt zehn Jahre ohne Siegel.
+  - Das widerspricht AL-49.
+- **Die Aufbewahrung ist ein Ringpuffer.** journald löscht die ältesten Dateien, sobald `SystemMaxUse` oder `SystemKeepFree` erreicht ist. Eine Flut verdrängt also alte Einträge (gegen AL-46). Ohne dieses Löschen gehen bei voller Platte neue Einträge verloren. Klassen, Budgets, Stand und „letzter Eintrag je Art“ (T38) gibt es nicht. `RateLimitBurst` verwirft Meldungen je Dienst, statt sie zu zählen.
+- **Ein Schlüssel für die ganze Maschine.** Er liegt fest unter `/var/log/journal/<machine-id>/fss` (`journal_file_fss_load`, `--setup-keys`) und gilt für alle Namespaces, also auf der Persistenzpartition, nicht auf der Audit-Partition. Gelöscht wird über `journalctl --vacuum-*` oder `rm`, ohne eigenen Eintrag (gegen T43, T44).
+
+Was journald gut kann und wir nutzen:
+
+- **AL-62** Die Filter für fremde Ereignisse sind journald-Matches auf das normale Journal. Der Collector (`mp-audit-collect`) liest nur diese, zum Beispiel:
+  - `_SYSTEMD_UNIT=ssh.service`, `SYSLOG_IDENTIFIER=sudo`,
+  - die AppArmor-Meldungen des Kernels,
+  - die Meldungen von rpi-connect.
+
+  Was er übernimmt, geht durch Budget und Klassen (AL-39 bis AL-48).
+- **AL-63** SOLL: Zusätzlich wird das normale Journal versiegelt, als zweite, unabhängige Schicht über alles, auch über die Quellen des Collectors. Das kostet wenig:
+  - `Seal=yes` ist Standard; es fehlt nur `journalctl --setup-keys` bei der Inbetriebnahme.
+  - Der Prüfschlüssel wird wie der Startschlüssel des Audit-Logs verschlüsselt an Meltingplot übergeben (AL-57).
+  - Die Abhängigkeit von der Uhr bleibt bei dieser Schicht bestehen. Ein Sprung steht als E16 im Audit-Log.
+- Das Audit-Log selbst bleibt eigen, aber klein:
+  - der Dienst mit Budgets, Zusammenfassung und Stand,
+  - die Ablage auf der privaten Partition,
+  - die Versiegelung nach Betriebszeit (AL-55 bis AL-61) und das Prüfwerkzeug.
+
+  Das Prinzip ist dasselbe wie bei journald: vorwärtssicherer Schlüssel, Prüfschlüssel außerhalb der Maschine. Der Unterschied ist die Uhr.
+
+## Nicht-Ziele
+
+- Sammeln außerhalb der Maschine (Cloud, Server von Meltingplot).
+- Alarmierung in Echtzeit.
+- Protokoll jeder G-Code-Zeile aus der DWC-Konsole (offene Frage 4).
+- Physische Siegel am Gehäuse. Das ist eine eigene Maßnahme (T31, T34).
+
+## Offene Fragen
+
+1. **CRA-Opt-out gegen MVO-Pflicht:** Der CRA sieht für das Aufzeichnen interner Aktivitäten offenbar ein Opt-out vor, GS-IFA-M25 verlangt Schutz gegen Deaktivierung (T36). Vorschlag: Alle Ereignisse dieser Liste gelten als Nachweis nach MVO und haben kein Opt-out.
+2. **Aufbewahrung:** Fünf Jahre für alle Ereignisse, oder nur für die MUSS-Ereignisse und kürzer für E11 und E15?
+3. **Export für Betreiber (AL-21):** als Datei in `0:/sys` (dann für jeden DWC-Benutzer im Kundennetz lesbar), als Seite am Panel, oder nur über Connect?
+4. **Parameter zur Laufzeit:** Ein G-Code aus der DWC-Konsole kann Sicherheitsgrenzen bis zum Reset ändern (z. B. `M564`, `M208`, Heizerlimits). Erfassen, und wenn ja, über DSF?
+5. **Uhr ohne Netz:** Haben die Pis eine RTC-Batterie? Ohne Netz und ohne Batterie stimmt die Zeit nach einem Stromausfall nicht. Laufende Nummer und Boot-Zähler reichen für die Korrelation (T45), die Zeit wäre dann als nicht synchronisiert markiert.
+6. **Datenschutz:** Fünf Jahre Quelladressen und Kontonamen. Reicht die rechtliche Pflicht als Grundlage?
+7. **Zwei Systeme:** Die gegenseitige Verankerung (AL-28) ist als MUSS vorgeschlagen, die vollständige Kopie des anderen Logs (AL-29) als SOLL. Einverstanden?
+8. **USB-Wächter auch auf dem Duet-Pi?** Seine Buchsen sind nur im Schaltschrank zugänglich.
+9. **USB-Kamera:** Sie ist ein drittes Linux-System mit eigenen Updates und hängt am HMI. Ist ihre Software für die Sicherheit relevant? Wenn ja, braucht sie ein eigenes Log oder einen Eintrag im HMI-Log bei jedem Update.
+10. **Bestandsgeräte (AL-36):** Werden alle bisher installierten Geräte mit der Installerkarte neu aufgesetzt, sobald das neue Layout da ist? Bis dahin führen sie kein Audit-Log, nur das Journal.
+11. **Anmeldung bei vollem Log (AL-48):** Sollen SSH und Connect dann auch verweigert werden? Das wäre strenger, sperrt aber den Support aus, gerade wenn das Gerät gestört ist.
+12. **Schlüssel für die Versiegelung (AL-57, AL-58):**
+    - Wer hält den privaten Schlüssel zum Prüfen: nur Meltingplot, auch der Kunde, eine Prüfstelle?
+    - Wie wird er verwahrt (Nitrokey, Zweitkopie) und gewechselt?
+    - Wie kommt der Genesis-Hash bei der Inbetriebnahme sicher zu Meltingplot: Inbetriebnahmeprotokoll, Connect, Foto vom Panel?
+13. **Gerätebindung (AL-60):** Ist der OTP-Schlüssel auf unseren Pis provisioniert und gesperrt, und darf das Log ihn neben Connect mitbenutzen?
+
+## Umsetzungsvorschlag
+
+Eine Skizze, nicht bindend:
+
+- Layout (`image/gpt/ab_userdata`, `image-rota`), allgemein für Upstream (AL-38):
+  - neue Variable in `image.yaml`, etwa `image.private_part_name` und `image.private_part_size`, standardmäßig leer;
+  - die Partition in `genimage.cfg.in.erofs` und `.ext4` sowie die Größe in `preimage05-templates`;
+  - je ein Eintrag in den vier `provisionmap-*.json`;
+  - die udev-Regel für `/dev/disk/by-slot/<name>` in `99-rpi-05-image.rules`.
+  - `mp-base.yaml` setzt dann `audit` und `256M`.
+- Neuer Layer `mp-audit` in `mp-base.yaml`, also für beide Geräte, wie `mp-watchdog`.
+  - `mp-audit.service`: hängt die Partition privat ein (`PrivateMounts=yes`, AL-34), formatiert sie nur nach AL-37 und nimmt Einträge über einen Socket an. Er führt laufende Nummer, Boot-Zähler, Prüfkette und den letzten Eintrag je Ereignis-ID und gibt jeden Eintrag zusätzlich ins Journal.
+  - `/usr/sbin/mp-audit` mit den Unterbefehlen `record`, `show`, `verify`, `reset` und `export`, alle über den Socket des Dienstes. Läuft der Dienst nicht, gibt `record` den Eintrag gekennzeichnet ins Journal (AL-35).
+- Unsere Wächter rufen `mp-audit record` direkt auf: USB-Wächter, `mp-bundle-guard`, `mp-role-guard`, `mp-hmi-net-guard`, `mp-dsf-firmware`, `mp-dsf-seed`.
+- `mp-audit-boot.service`, früh im Boot:
+  - zählt den Boot-Zähler hoch,
+  - prüft das saubere Ende des letzten Boots und den Image-Wechsel (E02, E15, E17),
+  - prüft die Kette.
+- `mp-audit-collect.service` liest das Journal mit und übernimmt Ereignisse fremder Programme: sshd (E12), sudo (E13), rpi-connect (E14), AppArmor-Meldungen des Kernels (E07), Zeitsprünge (E16).
+- Änderungen unter `0:/sys` außerhalb des Boots (E05): ein Dienst, der das Verzeichnis per inotify überwacht und Hashes vergleicht.
+- `mp-audit-peer.service` auf beiden Systemen, über das Druckernetz:
+  - tauscht Verankerung und Kopie aus (AL-28 bis AL-30),
+  - nur zwischen 10.42.0.1 und 10.42.0.2 erreichbar,
+  - liest beim Partner nur, schreibt nie in dessen Log.
+- Die Anzeige und der Export des Maschinen-Logs (AL-31) liegen am HMI, weil der Bediener dort steht. Über die Connect-Shell gibt es sie auf beiden Systemen.
+- Installer: Inhalt der Audit-Partition vor dem Überschreiben sichern und danach zurückschreiben (AL-18).
+- Test `meltingplot/test/test-mp-audit.sh`, deckt ab:
+  - Kette, Prüfung und gezielte Manipulation,
+  - Löschen mit E18,
+  - Maskierung fremder Zeichenketten,
+  - paralleles Schreiben,
+  - Budget und Kürzung mit AL-06.
+
+## Nachweis
+
+| Kriterium GS-IFA-M25 | Anforderung | Prüfung |
+|---|---|---|
+| T33 lesbar und zugänglich | AL-20, AL-21 | Log über Connect-Shell anzeigen |
+| T35 automatisch | AL-09 | Tastatur anstecken, Eintrag E10 ohne weiteres Zutun |
+| T36 Schutz vor Deaktivierung | AL-09 bis AL-12 | Dienst als `meltingplot` stoppen: verweigert; als root stoppen: Lücke beim nächsten Boot als E17 |
+| T37 Speicherort dokumentiert | AL-04, AL-23 | Betriebsanleitung |
+| T38 letzter Eintrag je Art | AL-06 | Test mit gekürztem Log |
+| T39 fünf Jahre | AL-05, AL-07 | Budgetrechnung, Test mit gealterten Einträgen |
+| T40, T41 aktiv ab Inbetriebnahme | AL-09, E01 | frisch installierte Karte: E01 im Log |
+| T42 Manipulationsschutz | AL-13 bis AL-16 | Zeile ändern oder löschen: `verify` meldet die Stelle |
+| T43, T44 Löschen | AL-17, AL-18 | Löschen per Befehl und Neuinstallation: E18 im neuen Log |
+| T45 Inhalt | AL-01 | Test |
+| T46, T47 Software-Identifikation | AL-22 | Ausgabe am Gerät |
+| T36, T37 eigene Partition | AL-04, AL-33 bis AL-37 | `findmnt` in einer Shell zeigt keinen Einhängepunkt, `lsblk` die Partition. Persistenzpartition vollschreiben oder neu formatieren: Das Log schreibt weiter bzw. bleibt erhalten. Neuinstallation über eine belegte NVMe: Das alte Log ist danach da, mit E18. |
+| T36, T42 gegen Fluten | AL-39 bis AL-48 | Test mit simulierter Betriebszeit: fünf Jahre Dauerflut über alle Klassen, in die man schreiben kann, mit rollierend wechselnden Quellen, Objekten und Texten (USB-Kennungen, auch ein zugelassener Stick, SSH-Konten und Adressen, Dateinamen unter `0:/sys`). Vorher, mittendrin und am Ende je eine Anmeldung als `mpadmin` und eine Änderung an `config.g`. Danach: kein Anteil über seiner Grenze; alle Einträge von vor der Flut unverändert (Prüfkette); in der Klasse Stand jede der Änderungen und Anmeldungen mindestens auf den Tag genau; die Flut als E19 mit Sammeleinträgen. Zusätzlich jedes Objekt der festen Menge täglich geändert: Die Klasse Stand bleibt unter ihrem Anteil. Partition nicht schreibbar simuliert: Update und Firmware-Flash werden verweigert. |
+| Verschleiß (kein eigenes Kriterium, Voraussetzung für T39) | AL-50 bis AL-54 | Eine Stunde lang 1000 Ereignisse pro Sekunde: Die Schreibmenge auf den Datenträger laut `/sys/block/*/stat` bleibt unter 5 MB für diese Stunde. Rechnung AL-52 gegen die TBW aus dem Datenblatt der verbauten SSD. |
+| T42, T48 Versiegelung | AL-55 bis AL-61 | Auf einem Testgerät als root einen Eintrag einer früheren Epoche ändern und Kette sowie Siegel mit allem neu rechnen, was auf dem Gerät liegt: Das Prüfwerkzeug meldet die Epoche als verändert. Log löschen und neu anlegen: Der Genesis-Hash passt nicht zum Inbetriebnahmeprotokoll. Nach einem Login als `mpadmin`: Die Anmeldung ist versiegelt, bevor die Shell kommt. |
+| T39, T42 gegen gestellte Uhr | AL-46, AL-49 | Uhr um sechs Jahre vordrehen, dann fluten: Nichts wird gelöscht, kein Budget füllt sich schneller auf, E16 steht im Log. Uhr zurückdrehen: Reihenfolge nach laufender Nummer bleibt richtig. |
+| T37, T42 über beide Systeme | AL-25 bis AL-32 | Log auf einem System kürzen: das andere meldet die Abweichung. Druckernetz eine Stunde trennen: beide loggen weiter, die Verankerung wird nachgeholt. Export am HMI enthält beide Logs. |
