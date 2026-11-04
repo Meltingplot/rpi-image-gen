@@ -16,6 +16,17 @@ Am 2026-11-04 hat am Labor-HMI die USB-Freigaberegel (`mp-hmi-usb-guard`, noch S
 6. journald mit Forward-Secure Sealing ist nicht das Audit-Log, weil seine Siegel an der Systemuhr hängen und es alte Einträge verdrängt. journald liefert die Filter für fremde Ereignisse und versiegelt zusätzlich das normale Journal (AL-62, AL-63).
 7. Bestandsgeräte werden mit der Installerkarte auf das neue Layout überführt, so wie beim Wechsel auf die 4G-Slots (offene Frage 10). Sie können noch das Layout gen1 oder gen2 haben (AL-33). Ein Audit-Log haben sie noch nicht, zu übernehmen ist also nichts. Die Karte muss nur das Layout überführen (AL-18, AL-36).
 8. Der Starthash jedes Systems entsteht bei der Inbetriebnahme auf dem Gerät und wird dort ausgelesen. Festgehalten wird er in der Betriebsanleitung, im ERP und auf dem Typenschild des Geräts (offene Frage 12, AL-58).
+9. Beim Tausch eines Pis übernimmt das neue Gerät das Log aus der Kopie beim anderen System und schreibt es weiter. Der Starthash und damit das Typenschild bleiben gültig (AL-19, AL-64).
+10. Kein Opt-out. Alle Ereignisse gelten als Nachweis nach der Maschinenverordnung und lassen sich nicht abschalten (Frage 1, AL-09).
+11. Fünf Jahre Aufbewahrung für alle Ereignisse (Frage 2, AL-05).
+12. Betreiber ohne Shell sehen das Log auf einer Seite am Panel und exportieren es dort auf einen USB-Stick. Der Duet-Pi nimmt nur einen USB-Stick an, und nur zum Export: Er exportiert automatisch beim Einstecken (Fragen 3 und 8, AL-21, AL-68).
+13. Sicherheitsrelevante G-Codes aus der DWC-Konsole werden später als eigenes Paket erfasst (Frage 4).
+14. Beide Pis bekommen künftig eine RTC-Batterie. Bei Geräten ohne Batterie reicht die Markierung „Uhr nicht synchron“ (Frage 5, AL-27).
+15. Rechtsgrundlage nach DSGVO ist die rechtliche Pflicht (Art. 6 Abs. 1 lit. c). Die Betriebsanleitung legt offen, was das Log festhält (Frage 6, AL-24).
+16. Gegenseitige Verankerung und Kopie des Partner-Logs sind beide Pflicht (Frage 7, AL-28, AL-29).
+17. Die USB-Kamera ist nicht sicherheitsrelevant. Das HMI hält fest, wenn sich Gerät oder Softwareversion der Kamera ändern (Frage 9, E23).
+18. Ist das Log gestört, bleiben SSH- und Connect-Anmeldungen möglich (Frage 11, AL-48).
+19. Gerätebindung über den OTP-Schlüssel kommt mit der Secure-Boot-Provisionierung, nicht vorher. Die Prüfung an den Laborgeräten hat ergeben: Der Schlüssel ist dort nicht erzeugt, und ohne Secure Boot könnte root die Lesesperre umgehen (Frage 13, AL-60). Bis dahin trägt der Starthash auf Typenschild, in der Betriebsanleitung und im ERP die Verankerung allein.
 
 ## Grundlagen
 
@@ -51,7 +62,7 @@ Die Kriterien von GS-IFA-M25 sind bei den Anforderungen in Klammern genannt. So 
 | Duet-Pi (SBC) | Image (OTA), DSF, DWC, Plugins, Konfiguration `0:/sys`, Firmware der Boards | eigenes Audit-Log |
 | HMI | Image (OTA), Kiosk, Netz-Einstellungen am Panel | eigenes Audit-Log |
 | Boards (MB6HC, Erweiterungen) | RepRapFirmware | im Log des Duet-Pi (E04) |
-| USB-Kamera (rpi-camera) | eigenes Linux mit eigenen Updates | offen (offene Frage 9) |
+| USB-Kamera (rpi-camera) | eigenes Linux mit eigenen Updates, nicht sicherheitsrelevant | im Log des HMI (E23, Festlegung 17) |
 
 Beide Pis werden über Connect getrennt aktualisiert, haben getrennte Zugänge und können getrennt ausfallen oder getauscht werden. Das Log muss deshalb auf jedem System für sich vollständig sein, und die Logs müssen sich zu einem Maschinen-Log zusammenführen lassen (AL-25 bis AL-32).
 
@@ -78,7 +89,7 @@ Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal übe
 
 | ID | Ereignis | Gerät | Quelle heute | Stufe |
 |---|---|---|---|---|
-| E10 | USB-Gerät angeschlossen und freigegeben oder abgewiesen: Port, VID:PID, Klassen der Schnittstellen, Hersteller- und Produktname | HMI, Duet-Pi falls der Wächter dort kommt | `mp-hmi-usb-guard` (Layer seit PR #119) | MUSS |
+| E10 | USB-Gerät angeschlossen und freigegeben oder abgewiesen: Port, VID:PID, Klassen der Schnittstellen, Hersteller- und Produktname | beide; am Duet-Pi ist nur ein USB-Stick zum Export zugelassen (AL-68) | `mp-hmi-usb-guard` (Layer seit PR #119), am Duet-Pi neu | MUSS |
 | E11 | USB-Stick eingehängt oder abgezogen | HMI | `mp-hmi-usb-mount` | SOLL |
 | E12 | SSH-Anmeldung angenommen oder abgewiesen: Konto, Schlüssel-Fingerabdruck, Quelladresse | beide | sshd | MUSS |
 | E13 | Root-Rechte per sudo: Konto, Befehl | beide | sudo | MUSS |
@@ -95,6 +106,8 @@ Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal übe
 | E19 | Flut erkannt: gleichartige Ereignisse einer Quelle über der Ratengrenze, zusammengefasst (AL-41, AL-43) | beide | – | MUSS |
 | E20 | Stand der festen Menge sicherheitsrelevanter Objekte: geänderte Objekte mit Hash, Zugänge je Konto und Schlüssel, Gesamthash (AL-42, AL-45) | beide | – | MUSS (T46) |
 | E21 | Verschleiß des Datenträgers, monatlich: bei NVMe „Percentage Used“ und „Data Units Written“ (AL-53) | beide | – | SOLL |
+| E22 | Log exportiert: Ziel (USB-Stick), Umfang, letzte laufende Nummer, Ergebnis der Prüfung (AL-21, AL-68) | beide | – | MUSS |
+| E23 | USB-Kamera am HMI: anderes Gerät oder neue Softwareversion (Festlegung 17) | HMI | `mp-hmi-camera` | SOLL |
 
 ## Anforderungen
 
@@ -148,12 +161,16 @@ Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal übe
   - **gen1 und gen2:** Sie überschreibt die NVMe wie bisher mit `overwrite_nvme=yes` und `identity.conf` von der Karte. Diese Geräte haben kein Audit-Log, zu übernehmen ist nichts.
   - **gen3:** Sie sichert vorher den Inhalt der Audit-Partition und schreibt ihn danach zurück. Ist das alte Log nicht lesbar, sagt sie das. Eine Neuinstallation ist sonst eine Löschung ohne Nachweis.
   - **In jedem Fall** gibt sie dem ersten Start über die BOOTCONFIG-Partition mit, was sie vorgefunden hat: Generation, Datum, Image der Karte, übernommen oder nicht. Der erste Start schreibt das als E18 ins Log: „Neuinstallation, Log übernommen“, „Neuinstallation, altes Log nicht lesbar“ oder „Überführung von gen1/gen2, kein früheres Log“. So steht am Anfang jedes Logs, warum es dort beginnt.
-- **AL-19** Pi-Tausch: Das neue Gerät beginnt mit E01. Das alte Log bleibt auf dem alten Datenträger, eine Kopie beim anderen System (AL-29, AL-32). Das Verfahren steht in der Betriebsanleitung.
+- **AL-19** Pi-Tausch: Das neue Gerät übernimmt das Log aus der Kopie beim anderen System und schreibt es weiter (Festlegung 9, AL-64). Der Starthash bleibt. Nur wenn beide Pis zugleich getauscht werden oder keine gültige Kopie da ist, beginnt ein neues Log mit E01 und neuem Starthash (AL-58). Das Verfahren steht in der Betriebsanleitung.
 
 ### Lesen und Auswerten (T21, T22, T33, T46, T47)
 
 - **AL-20** Ein Werkzeug auf beiden Geräten zeigt das Log menschenlesbar an, mit Filter nach Ereignis und Zeit, und prüft die Kette. Das Connect-Konto darf es aufrufen. Damit kann der Support über die Connect-Shell lesen.
-- **AL-21** SOLL: Ein Export für Betreiber ohne Shell, als Datei zum Herunterladen. Wo, entscheidet Tim (offene Frage 3).
+- **AL-21** Export für Betreiber ohne Shell: eine Seite am Panel, nur an der Maschine selbst erreichbar wie `/hmi/usb/` (Festlegung 12).
+  - Sie zeigt das Maschinen-Log, beide Systeme, und die Prüfergebnisse.
+  - Sie exportiert es auf einen eingesteckten USB-Stick: beide Logs, die Starthashes und das Prüfergebnis.
+  - Der Stick ist für die Jobliste nur lesend eingehängt (`mp-hmi-usb`). Für den Export hängt ihn der Log-Dienst in seinem eigenen Namespace kurz schreibbar ein und danach wieder aus.
+  - Jeder Export ist ein Eintrag (E22).
 - **AL-22** Software-Identifikation auf Anfrage, menschenlesbar (T46, T47): Image-Version, DSF-, DWC- und RRF-Versionen mit CRC der Firmware, Hashes der Konfiguration unter `0:/sys`.
 - **AL-23** Die Betriebsanleitung beschreibt (T20 bis T22, T37, T43):
   - wo das Log liegt, wie man es liest und wie man es interpretiert, mit der Ereignistabelle,
@@ -162,18 +179,18 @@ Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal übe
 
 ### Datenschutz
 
-- **AL-24** Erfasst wird nur, was für den Nachweis nötig ist: Kontonamen, Schlüssel-Fingerabdrücke, Quelladressen von Anmeldungen. Nicht erfasst werden Inhalte von Dateien oder Jobs, Passwörter und WLAN-Zugangsdaten. Rechtsgrundlage und Aufbewahrung sind zu klären (offene Frage 6).
+- **AL-24** Erfasst wird nur, was für den Nachweis nötig ist: Kontonamen, Schlüssel-Fingerabdrücke, Quelladressen von Anmeldungen. Nicht erfasst werden Inhalte von Dateien oder Jobs, Passwörter und WLAN-Zugangsdaten. Rechtsgrundlage ist die rechtliche Pflicht nach Art. 6 Abs. 1 lit. c DSGVO; die Betriebsanleitung legt offen, was das Log festhält und wie lange (Festlegung 15).
 
 ### Zwei Systeme einer Maschine
 
 - **AL-25** Beide Systeme loggen mit demselben Werkzeug, demselben Format und denselben Ereignis-IDs, aus einem gemeinsamen Layer. Ein Ereignis, das es nur auf einem System gibt, hat trotzdem eine eindeutige ID.
 - **AL-26** Jeder Eintrag nennt neben dem System (Rolle, Hostname) die Maschine, zu der es gehört. Der Druckername kommt aus `identity.conf` bzw. vom Duet-Pi, wie heute beim Hostnamen des HMI. So lassen sich die Logs beider Systeme ohne Raten zusammenführen.
-- **AL-27** Gemeinsame Zeitbasis: Der Duet-Pi bezieht seine Zeit vom HMI (chrony auf 10.42.0.1), das HMI aus dem Internet. Jeder Eintrag sagt, ob die Uhr synchron war (AL-01). Die Zeitsprünge beider Systeme (E16) stehen im Log. Damit lassen sich Ereignisse über beide Systeme in eine Reihenfolge bringen, auch nach einem Stromausfall ohne Netz.
+- **AL-27** Gemeinsame Zeitbasis: Der Duet-Pi bezieht seine Zeit vom HMI (chrony auf 10.42.0.1), das HMI aus dem Internet. Jeder Eintrag sagt, ob die Uhr synchron war (AL-01). Die Zeitsprünge beider Systeme (E16) stehen im Log. Damit lassen sich Ereignisse über beide Systeme in eine Reihenfolge bringen, auch nach einem Stromausfall ohne Netz. Künftige Geräte bekommen eine RTC-Batterie in beiden Pis (Festlegung 14).
 - **AL-28** Gegenseitige Verankerung: Jedes System hinterlegt regelmäßig seinen letzten Hash, seine laufende Nummer und seinen Boot-Zähler beim anderen System, über das Druckernetz. Das andere System schreibt sie als Eintrag in sein eigenes Log. Wer ein Log neu schreiben will, muss also beide Systeme manipulieren.
-- **AL-29** SOLL: Jedes System hält zusätzlich eine Kopie des Logs des anderen. Dann übersteht der Nachweis den Ausfall oder Tausch eines Pis über die fünf Jahre (T39). Die Kopie wird gegen die Verankerung aus AL-28 geprüft.
+- **AL-29** Jedes System hält eine Kopie des Logs des anderen. Dann übersteht der Nachweis den Ausfall oder Tausch eines Pis über die fünf Jahre (T39), und ein Ersatzgerät kann das Log weiterschreiben (AL-64). Die Kopie wird gegen Starthash und Verankerung geprüft (AL-28, AL-58). Sie enthält nie einen privaten Schlüssel. Einträge der Klasse Stand gehen innerhalb einer Minute zum Partner, alle übrigen gebündelt (AL-51).
 - **AL-30** Fällt das andere System oder das Druckernetz aus, loggt jedes System ungestört weiter. Verankerung und Kopie werden nachgeholt, sobald die Verbindung wieder steht. Eine Verbindung, die länger als einen Tag fehlt, ist ein Eintrag (E17).
 - **AL-31** Ein Export und eine Anzeige liefern das Maschinen-Log: beide Logs, nach Zeit und laufender Nummer zusammengeführt, mit dem Prüfergebnis jeder Kette. Ist ein System nicht erreichbar, sagt das der Export, statt dessen Teil wegzulassen.
-- **AL-32** Tausch eines Systems (Pi-Tausch, AL-19): Das verbleibende System sieht den neuen Partner an der neuen Kette. Es schreibt den Wechsel als Eintrag und behält die Verankerung des alten Partners.
+- **AL-32** Tausch eines Systems (Pi-Tausch, AL-19): Das verbleibende System beglaubigt die Übergabe an das Ersatzgerät in seinem eigenen Log (AL-64). Es behält die Verankerung des alten Partners.
 
 ### Eigene Partition (Layout)
 
@@ -222,15 +239,15 @@ Der Schutz beruht nicht darauf, Muster zu erkennen. Er beruht auf vier Grenzen, 
 
 - **AL-39** Jede Ereignis-ID gehört zu einer Klasse:
   - **Stand:** das Wesentliche. Zustand und Zugänge der festen Menge (AL-45), geschrieben nach AL-42. Kein anderes Ereignis schreibt in diese Klasse.
-  - **Änderung:** die Einzelheiten ausgeführter Eingriffe und gewährter Zugänge. E01, E02, E04, E05, E06, E07 (installiert, entfernt), E10 (freigegeben), E12 (angenommen), E13, E14, E18.
+  - **Änderung:** die Einzelheiten ausgeführter Eingriffe und gewährter Zugänge. E01, E02, E04, E05, E06, E07 (installiert, entfernt), E10 (freigegeben), E12 (angenommen), E13, E14, E18, E23.
   - **Versuch:** etwas, das abgewiesen wurde. E03 (gestoppt), E07 (blockiert), E10 (abgewiesen), E12 (abgewiesen).
-  - **Betrieb:** alles Übrige. E03 (aufgeschoben), E08, E11, E15, E16, E17, E19, E21.
+  - **Betrieb:** alles Übrige. E03 (aufgeschoben), E08, E11, E15, E16, E17, E19, E21, E22.
 - **AL-40** Jede Klasse hat einen festen Anteil des eigenen Logs. Die Anteile sind nicht gleich verteilt: Der Anteil von Stand ergibt sich aus der Größe der festen Menge (AL-42). Vorschlag bei 256 MiB für das eigene Log: Stand 32 MiB, Änderung 96 MiB, Versuch 52 MiB, Betrieb 24 MiB, Reserve 52 MiB.
   - Jeder Schreibvorgang wird dem Budget seiner Klasse angerechnet. Das Budget füllt sich mit der Betriebszeit auf (AL-49), um den Anteil geteilt durch fünf Jahre, dazu ein Vorrat für kurze Spitzen.
   - Keine Klasse kann damit mehr als ihren Anteil verbrauchen, gleich wie viele und welche Ereignisse kommen. Den Anteil einer anderen Klasse erreicht sie nie.
   - Die Klasse Änderung hat im Mittel etwa 54 KB am Tag, rund 135 einzelne Einträge am Tag über fünf Jahre. Das ist ein Vielfaches des Normalbetriebs.
 - **AL-41** Über dem Budget sinkt nur die Detailtiefe, nie die Aufbewahrung.
-  - Zusammengefasst wird nur nach Werten, die das System festlegt: Klasse und Ereignis-ID. Die Liste der Ereignis-IDs ist fest und kurz (E01 bis E20); ein Angreifer kann sie nicht verlängern.
+  - Zusammengefasst wird nur nach Werten, die das System festlegt: Klasse und Ereignis-ID. Die Liste der Ereignis-IDs ist fest und kurz (E01 bis E23); ein Angreifer kann sie nicht verlängern.
   - Was der Angreifer wählt (Quelle, Objekt, Text), geht nie in die Gruppierung ein. Wer rollierend verschiedene Ereignisse erzeugt, landet trotzdem im selben Sammeleintrag.
   - Ein Sammeleintrag hat feste Größe: Anzahl, Zeitraum, laufende Nummern, die zehn häufigsten Quellen und Objekte, die Zahl der übrigen, eine Prüfsumme über alle.
   - Bleibt das Budget leer, wächst sein Zeitfenster: Minute, Stunde, Tag. Bis dahin zählt der Dienst in einem Zählerstand fester Größe. Er übersteht einen Neustart und wird höchstens einmal pro Minute geschrieben (AL-51).
@@ -263,7 +280,7 @@ Der Schutz beruht nicht darauf, Muster zu erkennen. Er beruht auf vier Grenzen, 
 - **AL-48** Kein Eingriff ohne Nachweis. Kann die Klasse Stand eine Änderung nicht mehr festhalten, verweigert das System die Eingriffe, die es selbst steuert:
   - Anlass: Partition nicht schreibbar oder Dienst gestört. Nach AL-42 ist ein voller Anteil nicht möglich.
   - Verweigert werden: Updates (Bundle-Wächter), Firmware-Flash, USB-Freigaben, Schreiben unter `0:/sys` über DWC.
-  - Anmeldungen bleiben möglich, damit der Support das Gerät erreicht. Sie stehen als E17 im Journal (offene Frage 11).
+  - Anmeldungen bleiben möglich, damit der Support das Gerät erreicht. Sie stehen als E17 im Journal (Festlegung 18).
 - **AL-49** Betriebszeit statt Uhrzeit. Was löscht oder Budget gewährt, richtet sich nie nach der Systemuhr. Maßgeblich ist die aufsummierte Betriebszeit:
   - Sie zählt die Laufzeit jedes Boots (`CLOCK_BOOTTIME`, lässt sich nicht stellen) und wird laufend in die Partition fortgeschrieben.
   - Nach einem Absturz fehlt höchstens das letzte Intervall. Das ist die sichere Richtung: weniger Zeit heißt später löschen und weniger Budget.
@@ -303,7 +320,7 @@ Die Gefahr ist die Flut: Schriebe jedes Ereignis einzeln mit `fsync`, kostet das
   - Einträge der übrigen Klassen werden gesammelt und höchstens alle fünf Sekunden geschrieben. Ein Absturz kostet höchstens diese fünf Sekunden. Die laufende Nummer zeigt die Lücke (AL-11).
   - Zählerstände der Zusammenfassung: höchstens einmal pro Minute.
   - Betriebszeit (AL-49): höchstens alle zehn Minuten.
-  - Kopie des Partners (AL-29): höchstens stündlich, gebündelt.
+  - Kopie des Partners (AL-29): Einträge der Klasse Stand innerhalb einer Minute, alle übrigen höchstens stündlich, gebündelt.
 - **AL-52** Obergrenze, nachzuweisen über fünf Jahre im schlechtesten Fall, Dauerflut mit vollem Budget in allen Klassen:
   - etwa 1,3 Mio. Einträge mit je 16 KiB auf dem Gerät, also etwa 21 GB,
   - Zählerstände 42 GB, Betriebszeit 4 GB, Kopie des Partners 3 GB,
@@ -356,8 +373,9 @@ Prüfen lässt sie sich ohne jedes Geheimnis, nur mit dem öffentlichen Startwer
   - Mit Gerätebindung (AL-60) ist er zusätzlich vom Gerät signiert.
   - Ein komplett neu angelegtes Log hat einen anderen Starthash und fällt beim Abgleich mit Typenschild, Betriebsanleitung oder ERP auf.
   - Eine Neuinstallation, die das Log übernimmt (AL-18), behält den Starthash. Das Typenschild bleibt also gültig.
+  - Ein Pi-Tausch mit Übergabe (AL-64) behält den Starthash ebenfalls.
   - Beginnt ein Log neu, geht der neue Starthash denselben Weg: ins ERP, als Nachtrag in die Betriebsanleitung und als zusätzliches Schild neben das Typenschild. Gründe für einen Neubeginn:
-    - Pi-Tausch (AL-19),
+    - beide Pis zugleich getauscht, oder keine gültige Kopie beim Partner (AL-19),
     - ein altes Log, das nicht lesbar war (AL-18),
     - eine Löschung nach AL-17,
     - die Überführung eines Bestandsgeräts.
@@ -369,10 +387,19 @@ Prüfen lässt sie sich ohne jedes Geheimnis, nur mit dem öffentlichen Startwer
   - Er kann ab T fälschen.
   - Er kann das Log löschen oder ein neues anlegen. Beides fällt über den verankerten Starthash auf (AL-58).
 - **AL-60** SOLL: Bindung an das Gerät.
-  - Der Pi 5 signiert den Starthash zusätzlich mit seinem gerätegebundenen Schlüssel im OTP, über die Firmware (`rpi-fw-crypto`, dieselbe Geräteidentität, mit der sich Connect anmeldet). Linux kann damit signieren lassen, den Schlüssel aber nicht lesen.
+  - Der Pi 5 signiert den Starthash zusätzlich mit seinem gerätegebundenen Schlüssel im OTP, über die Firmware (`rpi-fw-crypto`, ECDSA P-256, Steckplatz 1). Linux kann damit signieren lassen, den Schlüssel aber nicht lesen.
   - Ein Prüfer prüft diese Signatur mit dem öffentlichen Schlüssel des Geräts.
   - Ein neu angelegtes Log müsste dann auf genau diesem Gerät entstehen.
-  - Voraussetzung: Der Schlüssel ist provisioniert und gegen Auslesen gesperrt. Zu prüfen.
+  - Befund an den Laborgeräten (2026-11-04, nur lesend geprüft, HMI rc.7 und Duet-Pi rc.73, beide gleich):
+    - `rpi-fw-crypto get-num-otp-keys` meldet einen Steckplatz.
+    - `get-key-status 1` meldet `0x101` (`DEVICE READ_LOCKED`).
+    - `pubkey` und `sign --key-id 1` schlagen mit „Key not set (all zeros)“ fehl. Der Schlüssel ist also nicht erzeugt.
+    - Das rohe Auslesen über die Mailbox ist gesperrt. Die Sperre kommt aus `lock_device_private_key=1` im Upstream-Template `templates/rpi/boot-firmware/config.txt` und steht in der `config.txt` in `boot.img`.
+    - `rpi-eeprom-config` zeigt kein `SIGNED_BOOT`. Ohne Secure Boot kann root `boot.img` tauschen, die Sperre entfernen und nach einem Neustart den Rohschlüssel lesen.
+  - Voraussetzungen, damit die Bindung trägt:
+    - der Schlüssel wird in der Firmware erzeugt (`rpi-fw-crypto genkey --key-id 1 --alg ec`; ein OTP-Schreibvorgang, unwiderruflich),
+    - Secure Boot ist aktiv, damit die Sperre in `boot.img` bleibt.
+  - Entscheidung (Tim, 2026-11-04, Festlegung 19): Die Bindung kommt mit der Secure-Boot-Provisionierung (rpi-sb-provisioner). Dort ist der Geräteschlüssel ohnehin für die Verschlüsselung von `/persistent` vorgesehen. Vorher wird kein Schlüssel einzeln erzeugt. Bis dahin hängt die Verankerung allein am Starthash (AL-58).
 - **AL-61** Das Prüfwerkzeug ist öffentlich und braucht nur Log und Starthash.
   - Es rechnet die Kette der Schlüssel und Signaturen nach und meldet je Epoche: gültig, verändert oder fehlend.
   - Es läuft auf dem Gerät (`mp-audit verify`) wie außerhalb.
@@ -409,28 +436,65 @@ Was journald gut kann und wir nutzen:
 
   Gemeinsam mit journald ist der vorwärtssichere Schlüssel. Anders sind zwei Dinge: Das Audit-Log hängt an der Betriebszeit statt an der Uhr, und es ist mit einem öffentlichen Startwert prüfbar statt mit einem geheimen Schlüssel.
 
+### Übergabe beim Pi-Tausch
+
+Tauscht man einen Pi, kann das Ersatzgerät das Log weiterschreiben. Der Starthash bleibt dann gleich, und das Typenschild bleibt gültig (Festlegung 9). Den privaten Schlüssel der letzten Epoche hat das Ersatzgerät nicht: Er lag nur auf dem alten Gerät und darf nie kopiert werden (AL-56). Die Übergabe beglaubigt deshalb das verbleibende System mit seiner eigenen, signierten Kette.
+
+- **AL-64** Ablauf der Übergabe:
+  1. Das Ersatzgerät wird mit der Installerkarte als Ersatz in Betrieb genommen, ausdrücklich angestoßen durch einen Eintrag in `identity.conf`. Eine Übergabe geschieht nie von selbst.
+  2. Es holt die Kopie seines Logs vom Partner (AL-29). Es prüft sie vom Starthash aus, mit dem Starthash vom Typenschild (AL-58, AL-61). Ist sie nicht gültig, beginnt ein neues Log (AL-19).
+  3. Es erzeugt ein neues Schlüsselpaar. Das verbleibende System schreibt einen Übergabe-Eintrag in sein eigenes Log (Klasse Stand) und signiert ihn mit seinem laufenden Epochenschlüssel. Der Eintrag nennt:
+     - den letzten Eintrag des alten Geräts in der Kopie: laufende Nummer, Hash, Epoche,
+     - die Identität des alten und des neuen Geräts: Seriennummer der NVMe, bei Gerätebindung der öffentliche OTP-Schlüssel (AL-60),
+     - den ersten öffentlichen Schlüssel des Ersatzgeräts,
+     - Datum und Image der Installerkarte.
+  4. Das Ersatzgerät setzt die Kette mit einem Übergabe-Eintrag fort. Dieser verweist auf den letzten übernommenen Eintrag und auf den Übergabe-Eintrag des Partners.
+  5. Das Prüfwerkzeug geht so vor: Bis zur Übergabe prüft es die alte Kette mit den alten Schlüsseln. Die Übergabe prüft es über die Kette des Partners, die es von dessen Starthash aus prüft. Danach prüft es mit den Schlüsseln des Ersatzgeräts weiter.
+- **AL-65** Lücke: Einträge, die das alte Gerät nach dem letzten Abgleich geschrieben hat, sind nicht in der Kopie.
+  - Der Übergabe-Eintrag nennt die Lücke ausdrücklich: Er sagt, ab welcher laufenden Nummer nichts übernommen ist.
+  - Ist der Datenträger des alten Geräts noch lesbar, werden diese Einträge nachträglich übernommen und gegen die alten Schlüssel geprüft.
+  - Einträge der Klasse Stand gehen innerhalb einer Minute zum Partner (AL-29). Wesentliches fehlt deshalb höchstens aus der letzten Minute.
+- **AL-66** Schutz gegen einen vorgetäuschten Tausch. Wer einen Tausch vortäuscht, könnte damit die jüngsten Einträge verschwinden lassen. Deshalb:
+  - Eine Übergabe ist nur möglich, wenn sich die Geräteidentität vom alten Gerät unterscheidet: Seriennummer der NVMe bzw. OTP-Schlüssel.
+  - Eine Übergabe ist ein Eintrag der Klasse Stand in beiden Logs.
+  - Das alte Gerät, falls es noch läuft, schreibt den Versuch als E17.
+  - Jede Übergabe kommt wie ein neuer Starthash ins ERP und als Nachtrag in die Betriebsanleitung.
+- **AL-67** Werden beide Pis zugleich getauscht, gibt es niemanden, der die Übergabe beglaubigen kann. Dann beginnen beide Logs neu, mit neuem Starthash (AL-58). Die alten Logs bleiben auf den alten Datenträgern.
+
+### USB am Duet-Pi: nur zum Export
+
+- **AL-68** Der Duet-Pi lässt an USB nur einen einfachen USB-Stick zu (Festlegung 12). Es gilt dieselbe Regel wie beim USB-Wächter am HMI, aber ohne Kamera. Alles andere bleibt ohne Treiber und steht als E10 im Log.
+  - Ein zugelassener Stick dient nur dem Export, nicht der Jobliste und nicht zum Einspielen von Dateien.
+  - Steckt man ihn ein, exportiert der Duet-Pi automatisch das Maschinen-Log darauf: sein eigenes Log und die Kopie des HMI-Logs (AL-29), mit beiden Starthashes und dem Prüfergebnis.
+  - Der Log-Dienst hängt den Stick dafür nur in seinem eigenen Namespace schreibbar ein und danach wieder aus.
+  - Das Ende meldet er im Journal und als Hinweis am Panel. Dorthin gelangt der Hinweis über das Druckernetz, weil der Duet-Pi keinen Bildschirm hat.
+  - Jeder Export ist ein Eintrag (E22).
+  - So bleibt der Nachweis lesbar, auch wenn das HMI ausgefallen ist (T33).
+
 ## Nicht-Ziele
 
 - Sammeln außerhalb der Maschine (Cloud, Server von Meltingplot).
 - Alarmierung in Echtzeit.
-- Protokoll jeder G-Code-Zeile aus der DWC-Konsole (offene Frage 4).
+- Sicherheitsrelevante G-Codes aus der DWC-Konsole, vorerst. Sie kommen später als eigenes Paket (Festlegung 13).
 - Physische Siegel am Gehäuse. Das ist eine eigene Maßnahme (T31, T34).
 
 ## Offene Fragen
 
-1. **CRA-Opt-out gegen MVO-Pflicht:** Der CRA sieht für das Aufzeichnen interner Aktivitäten offenbar ein Opt-out vor, GS-IFA-M25 verlangt Schutz gegen Deaktivierung (T36). Vorschlag: Alle Ereignisse dieser Liste gelten als Nachweis nach MVO und haben kein Opt-out.
-2. **Aufbewahrung:** Fünf Jahre für alle Ereignisse, oder nur für die MUSS-Ereignisse und kürzer für E11 und E15?
-3. **Export für Betreiber (AL-21):** als Datei in `0:/sys` (dann für jeden DWC-Benutzer im Kundennetz lesbar), als Seite am Panel, oder nur über Connect?
-4. **Parameter zur Laufzeit:** Ein G-Code aus der DWC-Konsole kann Sicherheitsgrenzen bis zum Reset ändern (z. B. `M564`, `M208`, Heizerlimits). Erfassen, und wenn ja, über DSF?
-5. **Uhr ohne Netz:** Haben die Pis eine RTC-Batterie? Ohne Netz und ohne Batterie stimmt die Zeit nach einem Stromausfall nicht. Laufende Nummer und Boot-Zähler reichen für die Korrelation (T45), die Zeit wäre dann als nicht synchronisiert markiert.
-6. **Datenschutz:** Fünf Jahre Quelladressen und Kontonamen. Reicht die rechtliche Pflicht als Grundlage?
-7. **Zwei Systeme:** Die gegenseitige Verankerung (AL-28) ist als MUSS vorgeschlagen, die vollständige Kopie des anderen Logs (AL-29) als SOLL. Einverstanden?
-8. **USB-Wächter auch auf dem Duet-Pi?** Seine Buchsen sind nur im Schaltschrank zugänglich.
-9. **USB-Kamera:** Sie ist ein drittes Linux-System mit eigenen Updates und hängt am HMI. Ist ihre Software für die Sicherheit relevant? Wenn ja, braucht sie ein eigenes Log oder einen Eintrag im HMI-Log bei jedem Update.
+Alle Fragen sind beantwortet (Interview mit Tim, 2026-11-04). Sie bleiben hier mit ihrer Antwort stehen, damit die Nummern in den Verweisen gültig bleiben.
+
+1. **CRA-Opt-out gegen MVO-Pflicht:** Beantwortet (Tim, 2026-11-04): kein Opt-out (Festlegung 10).
+2. **Aufbewahrung:** Beantwortet (Tim, 2026-11-04): fünf Jahre für alle (Festlegung 11).
+3. **Export für Betreiber (AL-21):** Beantwortet (Tim, 2026-11-04): Seite am Panel mit Export auf USB-Stick (Festlegung 12).
+4. **Parameter zur Laufzeit:** Beantwortet (Tim, 2026-11-04): später, eigenes Thema (Festlegung 13).
+5. **Uhr ohne Netz:** Beantwortet (Tim, 2026-11-04): nachrüsten; bis dahin reicht die Markierung (Festlegung 14).
+6. **Datenschutz:** Beantwortet (Tim, 2026-11-04): die rechtliche Pflicht reicht (Festlegung 15).
+7. **Zwei Systeme:** Beantwortet (Tim, 2026-11-04): beides Pflicht (Festlegung 16).
+8. **USB-Wächter auch auf dem Duet-Pi?** Beantwortet (Tim, 2026-11-04): Der Duet-Pi nimmt nur einen USB-Stick an, nur zum Export der Logs, automatisch beim Einstecken (Festlegung 12, AL-68).
+9. **USB-Kamera:** Beantwortet (Tim, 2026-11-04): Updates und Gerätewechsel der Kamera stehen im HMI-Log (Festlegung 17).
 10. **Bestandsgeräte (AL-36):** Beantwortet (Tim, 2026-11-04). Ja, alle werden mit der Installerkarte überführt. Sie haben noch kein Log, die Karte muss nur das Layout gen1 oder gen2 überführen (Festlegung 7, AL-18).
-11. **Anmeldung bei vollem Log (AL-48):** Sollen SSH und Connect dann auch verweigert werden? Das wäre strenger, sperrt aber den Support aus, gerade wenn das Gerät gestört ist.
+11. **Anmeldung bei vollem Log (AL-48):** Beantwortet (Tim, 2026-11-04): Anmeldungen bleiben erlaubt (Festlegung 18).
 12. **Verankerung des Starthashes (AL-58):** Beantwortet (Tim, 2026-11-04). Ein Prüfschlüssel entfällt, weil die Kette mit öffentlichen Schlüsseln prüfbar ist. Der Starthash entsteht bei der Inbetriebnahme auf dem Gerät, wird ausgelesen und in Betriebsanleitung, ERP und Typenschild festgehalten (Festlegung 8). Für das normale Journal (AL-63) bleibt der geheime Schlüssel von journald zu verwahren.
-13. **Gerätebindung (AL-60):** Ist der OTP-Schlüssel auf unseren Pis provisioniert und gesperrt, und darf das Log ihn neben Connect mitbenutzen?
+13. **Gerätebindung (AL-60):** Beantwortet (Tim, 2026-11-04). Am Laborgerät geprüft: Der Schlüssel ist nicht erzeugt, Secure Boot ist nicht aktiv. Die Bindung kommt mit der Secure-Boot-Provisionierung (Festlegung 19, Befund in AL-60).
 
 ## Umsetzungsvorschlag
 
@@ -469,7 +533,7 @@ Eine Skizze, nicht bindend:
 
 | Kriterium GS-IFA-M25 | Anforderung | Prüfung |
 |---|---|---|
-| T33 lesbar und zugänglich | AL-20, AL-21 | Log über Connect-Shell anzeigen |
+| T33 lesbar und zugänglich | AL-20, AL-21, AL-68 | Log über Connect-Shell anzeigen. Am Panel auf einen USB-Stick exportieren: Der Stick enthält beide Logs, die Starthashes und das Prüfergebnis, E22 steht im Log. Einen Stick am Duet-Pi einstecken: Export ohne weiteres Zutun, Hinweis am Panel. Eine Tastatur am Duet-Pi: abgewiesen, E10. |
 | T21, T22 Zugriff und Auswertung laut Betriebsanleitung | AL-23, AL-58, AL-61 | Nach der Betriebsanleitung: QR-Code vom Typenschild scannen, `mp-audit verify` mit diesem Starthash ausführen. Das Ergebnis meldet je System, ob die Kette lückenlos von genau diesem Anfang ausgeht. |
 | T35 automatisch | AL-09 | Tastatur anstecken, Eintrag E10 ohne weiteres Zutun |
 | T36 Schutz vor Deaktivierung | AL-09 bis AL-12 | Dienst als `meltingplot` stoppen: verweigert; als root stoppen: Lücke beim nächsten Boot als E17 |
@@ -485,5 +549,6 @@ Eine Skizze, nicht bindend:
 | T36, T42 gegen Fluten | AL-39 bis AL-48 | Test mit simulierter Betriebszeit: fünf Jahre Dauerflut über alle Klassen, in die man schreiben kann, mit rollierend wechselnden Quellen, Objekten und Texten (USB-Kennungen, auch ein zugelassener Stick, SSH-Konten und Adressen, Dateinamen unter `0:/sys`). Vorher, mittendrin und am Ende je eine Anmeldung als `mpadmin` und eine Änderung an `config.g`. Danach: kein Anteil über seiner Grenze; alle Einträge von vor der Flut unverändert (Prüfkette); in der Klasse Stand jede der Änderungen und Anmeldungen mindestens auf den Tag genau; die Flut als E19 mit Sammeleinträgen. Zusätzlich jedes Objekt der festen Menge täglich geändert: Die Klasse Stand bleibt unter ihrem Anteil. Partition nicht schreibbar simuliert: Update und Firmware-Flash werden verweigert. |
 | Verschleiß (kein eigenes Kriterium, Voraussetzung für T39) | AL-50 bis AL-54 | Eine Stunde lang 1000 Ereignisse pro Sekunde: Die Schreibmenge auf den Datenträger laut `/sys/block/*/stat` bleibt unter 5 MB für diese Stunde. Rechnung AL-52 gegen die TBW aus dem Datenblatt der verbauten SSD. |
 | T42, T48 Signaturkette | AL-55 bis AL-61 | Auf einem Testgerät als root einen Eintrag einer früheren Epoche ändern und Kette sowie Signaturen mit allem neu rechnen, was auf dem Gerät liegt: Das Prüfwerkzeug meldet die Epoche als verändert, geprüft nur mit dem Starthash. Log löschen und neu anlegen: Der Starthash passt nicht zum Inbetriebnahmeprotokoll. Nach einem Login als `mpadmin`: Die Anmeldung ist signiert, bevor die Shell kommt. |
+| T39, T43 Pi-Tausch | AL-19, AL-29, AL-64 bis AL-67 | Ein System durch einen leeren Pi ersetzen, Übergabe über `identity.conf`. Danach: `mp-audit verify` mit dem Starthash vom Typenschild meldet die Kette als gültig über die Übergabe hinweg; der Übergabe-Eintrag steht in beiden Logs und nennt die Lücke. Dieselbe Übergabe mit demselben Gerät (gleiche Identität) wird abgewiesen. |
 | T39, T42 gegen gestellte Uhr | AL-46, AL-49 | Uhr um sechs Jahre vordrehen, dann fluten: Nichts wird gelöscht, kein Budget füllt sich schneller auf, E16 steht im Log. Uhr zurückdrehen: Reihenfolge nach laufender Nummer bleibt richtig. |
 | T37, T42 über beide Systeme | AL-25 bis AL-32 | Log auf einem System kürzen: das andere meldet die Abweichung. Druckernetz eine Stunde trennen: beide loggen weiter, die Verankerung wird nachgeholt. Export am HMI enthält beide Logs. |
