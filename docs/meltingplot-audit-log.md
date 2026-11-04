@@ -26,7 +26,7 @@ Am 2026-11-04 hat am Labor-HMI die USB-Freigaberegel (`mp-hmi-usb-guard`, noch S
 16. Gegenseitige Verankerung und Kopie des Partner-Logs sind beide Pflicht (Frage 7, AL-28, AL-29).
 17. Die USB-Kamera ist nicht sicherheitsrelevant. Das HMI hält fest, wenn sich Gerät oder Softwareversion der Kamera ändern (Frage 9, E23).
 18. Ist das Log gestört, bleiben SSH- und Connect-Anmeldungen möglich (Frage 11, AL-48).
-19. Gerätebindung über den OTP-Schlüssel: erst am Laborgerät prüfen, ob er provisioniert und gesperrt ist, dann nutzen (Frage 13, AL-60).
+19. Gerätebindung über den OTP-Schlüssel kommt mit der Secure-Boot-Provisionierung, nicht vorher. Die Prüfung an den Laborgeräten hat ergeben: Der Schlüssel ist dort nicht erzeugt, und ohne Secure Boot könnte root die Lesesperre umgehen (Frage 13, AL-60). Bis dahin trägt der Starthash auf Typenschild, in der Betriebsanleitung und im ERP die Verankerung allein.
 
 ## Grundlagen
 
@@ -387,10 +387,19 @@ Prüfen lässt sie sich ohne jedes Geheimnis, nur mit dem öffentlichen Startwer
   - Er kann ab T fälschen.
   - Er kann das Log löschen oder ein neues anlegen. Beides fällt über den verankerten Starthash auf (AL-58).
 - **AL-60** SOLL: Bindung an das Gerät.
-  - Der Pi 5 signiert den Starthash zusätzlich mit seinem gerätegebundenen Schlüssel im OTP, über die Firmware (`rpi-fw-crypto`, dieselbe Geräteidentität, mit der sich Connect anmeldet). Linux kann damit signieren lassen, den Schlüssel aber nicht lesen.
+  - Der Pi 5 signiert den Starthash zusätzlich mit seinem gerätegebundenen Schlüssel im OTP, über die Firmware (`rpi-fw-crypto`, ECDSA P-256, Steckplatz 1). Linux kann damit signieren lassen, den Schlüssel aber nicht lesen.
   - Ein Prüfer prüft diese Signatur mit dem öffentlichen Schlüssel des Geräts.
   - Ein neu angelegtes Log müsste dann auf genau diesem Gerät entstehen.
-  - Voraussetzung: Der Schlüssel ist provisioniert und gegen Auslesen gesperrt. Zu prüfen.
+  - Befund an den Laborgeräten (2026-11-04, nur lesend geprüft, HMI rc.7 und Duet-Pi rc.73, beide gleich):
+    - `rpi-fw-crypto get-num-otp-keys` meldet einen Steckplatz.
+    - `get-key-status 1` meldet `0x101` (`DEVICE READ_LOCKED`).
+    - `pubkey` und `sign --key-id 1` schlagen mit „Key not set (all zeros)“ fehl. Der Schlüssel ist also nicht erzeugt.
+    - Das rohe Auslesen über die Mailbox ist gesperrt. Die Sperre kommt aus `lock_device_private_key=1` im Upstream-Template `templates/rpi/boot-firmware/config.txt` und steht in der `config.txt` in `boot.img`.
+    - `rpi-eeprom-config` zeigt kein `SIGNED_BOOT`. Ohne Secure Boot kann root `boot.img` tauschen, die Sperre entfernen und nach einem Neustart den Rohschlüssel lesen.
+  - Voraussetzungen, damit die Bindung trägt:
+    - der Schlüssel wird in der Firmware erzeugt (`rpi-fw-crypto genkey --key-id 1 --alg ec`; ein OTP-Schreibvorgang, unwiderruflich),
+    - Secure Boot ist aktiv, damit die Sperre in `boot.img` bleibt.
+  - Entscheidung (Tim, 2026-11-04, Festlegung 19): Die Bindung kommt mit der Secure-Boot-Provisionierung (rpi-sb-provisioner). Dort ist der Geräteschlüssel ohnehin für die Verschlüsselung von `/persistent` vorgesehen. Vorher wird kein Schlüssel einzeln erzeugt. Bis dahin hängt die Verankerung allein am Starthash (AL-58).
 - **AL-61** Das Prüfwerkzeug ist öffentlich und braucht nur Log und Starthash.
   - Es rechnet die Kette der Schlüssel und Signaturen nach und meldet je Epoche: gültig, verändert oder fehlend.
   - Es läuft auf dem Gerät (`mp-audit verify`) wie außerhalb.
@@ -485,7 +494,7 @@ Alle Fragen sind beantwortet (Interview mit Tim, 2026-11-04). Sie bleiben hier m
 10. **Bestandsgeräte (AL-36):** Beantwortet (Tim, 2026-11-04). Ja, alle werden mit der Installerkarte überführt. Sie haben noch kein Log, die Karte muss nur das Layout gen1 oder gen2 überführen (Festlegung 7, AL-18).
 11. **Anmeldung bei vollem Log (AL-48):** Beantwortet (Tim, 2026-11-04): Anmeldungen bleiben erlaubt (Festlegung 18).
 12. **Verankerung des Starthashes (AL-58):** Beantwortet (Tim, 2026-11-04). Ein Prüfschlüssel entfällt, weil die Kette mit öffentlichen Schlüsseln prüfbar ist. Der Starthash entsteht bei der Inbetriebnahme auf dem Gerät, wird ausgelesen und in Betriebsanleitung, ERP und Typenschild festgehalten (Festlegung 8). Für das normale Journal (AL-63) bleibt der geheime Schlüssel von journald zu verwahren.
-13. **Gerätebindung (AL-60):** Beantwortet (Tim, 2026-11-04): erst am Laborgerät prüfen, dann nutzen (Festlegung 19). Die Prüfung steht noch aus.
+13. **Gerätebindung (AL-60):** Beantwortet (Tim, 2026-11-04). Am Laborgerät geprüft: Der Schlüssel ist nicht erzeugt, Secure Boot ist nicht aktiv. Die Bindung kommt mit der Secure-Boot-Provisionierung (Festlegung 19, Befund in AL-60).
 
 ## Umsetzungsvorschlag
 
