@@ -2,11 +2,22 @@
 
 # Create shared directories under /persistent/shared for paths declared
 # by layers in /etc/rpi-image-gen/slot-shared.d/*.conf.
+#
+# Paths are kept one per line and always quoted, so a declared path may
+# contain spaces or glob characters: "StaticPath=/data/PLA 1.2mm/load.g" must
+# not become "/data/PLA" and "1.2mm/load.g", and rm -rf must only ever see
+# the path as declared.
+#
+# RPI_SHARED_INIT_ROOT prefixes every path, for tests against a fake root.
 
 set -eu
 
-CONF_DIR=/etc/rpi-image-gen/slot-shared.d
-SHARED_BASE=/persistent/shared
+ROOT=${RPI_SHARED_INIT_ROOT:-}
+CONF_DIR=${ROOT}/etc/rpi-image-gen/slot-shared.d
+SHARED_BASE=${ROOT}/persistent/shared
+
+nl='
+'
 
 [ -d "$CONF_DIR" ] || exit 0
 
@@ -28,8 +39,8 @@ for conf in "${CONF_DIR}"/*.conf; do
        [ -n "${value#/}" ] || continue
        case "$key" in
            Version)    version="$value" ;;
-           Path)       cpaths="$cpaths /${value#/}" ;;
-           StaticPath) cstatics="$cstatics /${value#/}" ;;
+           Path)       cpaths="${cpaths}${nl}/${value#/}" ;;
+           StaticPath) cstatics="${cstatics}${nl}/${value#/}" ;;
        esac
    done < "$conf"
 
@@ -39,19 +50,23 @@ for conf in "${CONF_DIR}"/*.conf; do
        continue
    fi
 
-   paths="$paths$cpaths"
-   statics="$statics$cstatics"
+   paths="${paths}${cpaths}"
+   statics="${statics}${cstatics}"
 done
 
 # Image-owned entries are replaced from the active slot by the copy below
-for static in $statics; do
+printf '%s\n' "$statics" | while IFS= read -r static; do
+   [ -n "$static" ] || continue
    printf 'persistent-shared-init: static %s\n' "$static"
    rm -rf -- "${SHARED_BASE}${static}"
 done
 
-for path in $paths; do
+printf '%s\n' "$paths" | while IFS= read -r path; do
+   [ -n "$path" ] || continue
    printf 'persistent-shared-init: %s\n' "$path"
    mkdir -p "${SHARED_BASE}${path}"
    # Write missing files into shared, never overwriting existing ones
-   [ -d "${path}" ] && rsync -av --ignore-existing "${path}/" "${SHARED_BASE}${path}/"
+   if [ -d "${ROOT}${path}" ]; then
+      rsync -av --ignore-existing "${ROOT}${path}/" "${SHARED_BASE}${path}/"
+   fi
 done
