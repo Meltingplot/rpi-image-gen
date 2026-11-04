@@ -16,6 +16,7 @@ Am 2026-11-04 hat am Labor-HMI die USB-Freigaberegel (`mp-hmi-usb-guard`, noch S
 6. journald mit Forward-Secure Sealing ist nicht das Audit-Log, weil seine Siegel an der Systemuhr hängen und es alte Einträge verdrängt. journald liefert die Filter für fremde Ereignisse und versiegelt zusätzlich das normale Journal (AL-62, AL-63).
 7. Bestandsgeräte werden mit der Installerkarte auf das neue Layout überführt, so wie beim Wechsel auf die 4G-Slots (offene Frage 10). Sie können noch das Layout gen1 oder gen2 haben (AL-33). Ein Audit-Log haben sie noch nicht, zu übernehmen ist also nichts. Die Karte muss nur das Layout überführen (AL-18, AL-36).
 8. Der Starthash jedes Systems entsteht bei der Inbetriebnahme auf dem Gerät und wird dort ausgelesen. Festgehalten wird er in der Betriebsanleitung, im ERP und auf dem Typenschild des Geräts (offene Frage 12, AL-58).
+9. Beim Tausch eines Pis übernimmt das neue Gerät das Log aus der Kopie beim anderen System und schreibt es weiter. Der Starthash und damit das Typenschild bleiben gültig (AL-19, AL-64).
 
 ## Grundlagen
 
@@ -148,7 +149,7 @@ Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal übe
   - **gen1 und gen2:** Sie überschreibt die NVMe wie bisher mit `overwrite_nvme=yes` und `identity.conf` von der Karte. Diese Geräte haben kein Audit-Log, zu übernehmen ist nichts.
   - **gen3:** Sie sichert vorher den Inhalt der Audit-Partition und schreibt ihn danach zurück. Ist das alte Log nicht lesbar, sagt sie das. Eine Neuinstallation ist sonst eine Löschung ohne Nachweis.
   - **In jedem Fall** gibt sie dem ersten Start über die BOOTCONFIG-Partition mit, was sie vorgefunden hat: Generation, Datum, Image der Karte, übernommen oder nicht. Der erste Start schreibt das als E18 ins Log: „Neuinstallation, Log übernommen“, „Neuinstallation, altes Log nicht lesbar“ oder „Überführung von gen1/gen2, kein früheres Log“. So steht am Anfang jedes Logs, warum es dort beginnt.
-- **AL-19** Pi-Tausch: Das neue Gerät beginnt mit E01. Das alte Log bleibt auf dem alten Datenträger, eine Kopie beim anderen System (AL-29, AL-32). Das Verfahren steht in der Betriebsanleitung.
+- **AL-19** Pi-Tausch: Das neue Gerät übernimmt das Log aus der Kopie beim anderen System und schreibt es weiter (Festlegung 9, AL-64). Der Starthash bleibt. Nur wenn beide Pis zugleich getauscht werden oder keine gültige Kopie da ist, beginnt ein neues Log mit E01 und neuem Starthash (AL-58). Das Verfahren steht in der Betriebsanleitung.
 
 ### Lesen und Auswerten (T21, T22, T33, T46, T47)
 
@@ -170,10 +171,10 @@ Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal übe
 - **AL-26** Jeder Eintrag nennt neben dem System (Rolle, Hostname) die Maschine, zu der es gehört. Der Druckername kommt aus `identity.conf` bzw. vom Duet-Pi, wie heute beim Hostnamen des HMI. So lassen sich die Logs beider Systeme ohne Raten zusammenführen.
 - **AL-27** Gemeinsame Zeitbasis: Der Duet-Pi bezieht seine Zeit vom HMI (chrony auf 10.42.0.1), das HMI aus dem Internet. Jeder Eintrag sagt, ob die Uhr synchron war (AL-01). Die Zeitsprünge beider Systeme (E16) stehen im Log. Damit lassen sich Ereignisse über beide Systeme in eine Reihenfolge bringen, auch nach einem Stromausfall ohne Netz.
 - **AL-28** Gegenseitige Verankerung: Jedes System hinterlegt regelmäßig seinen letzten Hash, seine laufende Nummer und seinen Boot-Zähler beim anderen System, über das Druckernetz. Das andere System schreibt sie als Eintrag in sein eigenes Log. Wer ein Log neu schreiben will, muss also beide Systeme manipulieren.
-- **AL-29** SOLL: Jedes System hält zusätzlich eine Kopie des Logs des anderen. Dann übersteht der Nachweis den Ausfall oder Tausch eines Pis über die fünf Jahre (T39). Die Kopie wird gegen die Verankerung aus AL-28 geprüft.
+- **AL-29** Jedes System hält eine Kopie des Logs des anderen. Dann übersteht der Nachweis den Ausfall oder Tausch eines Pis über die fünf Jahre (T39), und ein Ersatzgerät kann das Log weiterschreiben (AL-64). Die Kopie wird gegen Starthash und Verankerung geprüft (AL-28, AL-58). Sie enthält nie einen privaten Schlüssel. Einträge der Klasse Stand gehen innerhalb einer Minute zum Partner, alle übrigen gebündelt (AL-51).
 - **AL-30** Fällt das andere System oder das Druckernetz aus, loggt jedes System ungestört weiter. Verankerung und Kopie werden nachgeholt, sobald die Verbindung wieder steht. Eine Verbindung, die länger als einen Tag fehlt, ist ein Eintrag (E17).
 - **AL-31** Ein Export und eine Anzeige liefern das Maschinen-Log: beide Logs, nach Zeit und laufender Nummer zusammengeführt, mit dem Prüfergebnis jeder Kette. Ist ein System nicht erreichbar, sagt das der Export, statt dessen Teil wegzulassen.
-- **AL-32** Tausch eines Systems (Pi-Tausch, AL-19): Das verbleibende System sieht den neuen Partner an der neuen Kette. Es schreibt den Wechsel als Eintrag und behält die Verankerung des alten Partners.
+- **AL-32** Tausch eines Systems (Pi-Tausch, AL-19): Das verbleibende System beglaubigt die Übergabe an das Ersatzgerät in seinem eigenen Log (AL-64). Es behält die Verankerung des alten Partners.
 
 ### Eigene Partition (Layout)
 
@@ -303,7 +304,7 @@ Die Gefahr ist die Flut: Schriebe jedes Ereignis einzeln mit `fsync`, kostet das
   - Einträge der übrigen Klassen werden gesammelt und höchstens alle fünf Sekunden geschrieben. Ein Absturz kostet höchstens diese fünf Sekunden. Die laufende Nummer zeigt die Lücke (AL-11).
   - Zählerstände der Zusammenfassung: höchstens einmal pro Minute.
   - Betriebszeit (AL-49): höchstens alle zehn Minuten.
-  - Kopie des Partners (AL-29): höchstens stündlich, gebündelt.
+  - Kopie des Partners (AL-29): Einträge der Klasse Stand innerhalb einer Minute, alle übrigen höchstens stündlich, gebündelt.
 - **AL-52** Obergrenze, nachzuweisen über fünf Jahre im schlechtesten Fall, Dauerflut mit vollem Budget in allen Klassen:
   - etwa 1,3 Mio. Einträge mit je 16 KiB auf dem Gerät, also etwa 21 GB,
   - Zählerstände 42 GB, Betriebszeit 4 GB, Kopie des Partners 3 GB,
@@ -356,8 +357,9 @@ Prüfen lässt sie sich ohne jedes Geheimnis, nur mit dem öffentlichen Startwer
   - Mit Gerätebindung (AL-60) ist er zusätzlich vom Gerät signiert.
   - Ein komplett neu angelegtes Log hat einen anderen Starthash und fällt beim Abgleich mit Typenschild, Betriebsanleitung oder ERP auf.
   - Eine Neuinstallation, die das Log übernimmt (AL-18), behält den Starthash. Das Typenschild bleibt also gültig.
+  - Ein Pi-Tausch mit Übergabe (AL-64) behält den Starthash ebenfalls.
   - Beginnt ein Log neu, geht der neue Starthash denselben Weg: ins ERP, als Nachtrag in die Betriebsanleitung und als zusätzliches Schild neben das Typenschild. Gründe für einen Neubeginn:
-    - Pi-Tausch (AL-19),
+    - beide Pis zugleich getauscht, oder keine gültige Kopie beim Partner (AL-19),
     - ein altes Log, das nicht lesbar war (AL-18),
     - eine Löschung nach AL-17,
     - die Überführung eines Bestandsgeräts.
@@ -408,6 +410,31 @@ Was journald gut kann und wir nutzen:
   - die Signaturkette nach Betriebszeit (AL-55 bis AL-61) und das Prüfwerkzeug.
 
   Gemeinsam mit journald ist der vorwärtssichere Schlüssel. Anders sind zwei Dinge: Das Audit-Log hängt an der Betriebszeit statt an der Uhr, und es ist mit einem öffentlichen Startwert prüfbar statt mit einem geheimen Schlüssel.
+
+### Übergabe beim Pi-Tausch
+
+Tauscht man einen Pi, kann das Ersatzgerät das Log weiterschreiben. Der Starthash bleibt dann gleich, und das Typenschild bleibt gültig (Festlegung 9). Den privaten Schlüssel der letzten Epoche hat das Ersatzgerät nicht: Er lag nur auf dem alten Gerät und darf nie kopiert werden (AL-56). Die Übergabe beglaubigt deshalb das verbleibende System mit seiner eigenen, signierten Kette.
+
+- **AL-64** Ablauf der Übergabe:
+  1. Das Ersatzgerät wird mit der Installerkarte als Ersatz in Betrieb genommen, ausdrücklich angestoßen durch einen Eintrag in `identity.conf`. Eine Übergabe geschieht nie von selbst.
+  2. Es holt die Kopie seines Logs vom Partner (AL-29). Es prüft sie vom Starthash aus, mit dem Starthash vom Typenschild (AL-58, AL-61). Ist sie nicht gültig, beginnt ein neues Log (AL-19).
+  3. Es erzeugt ein neues Schlüsselpaar. Das verbleibende System schreibt einen Übergabe-Eintrag in sein eigenes Log (Klasse Stand) und signiert ihn mit seinem laufenden Epochenschlüssel. Der Eintrag nennt:
+     - den letzten Eintrag des alten Geräts in der Kopie: laufende Nummer, Hash, Epoche,
+     - die Identität des alten und des neuen Geräts: Seriennummer der NVMe, bei Gerätebindung der öffentliche OTP-Schlüssel (AL-60),
+     - den ersten öffentlichen Schlüssel des Ersatzgeräts,
+     - Datum und Image der Installerkarte.
+  4. Das Ersatzgerät setzt die Kette mit einem Übergabe-Eintrag fort. Dieser verweist auf den letzten übernommenen Eintrag und auf den Übergabe-Eintrag des Partners.
+  5. Das Prüfwerkzeug geht so vor: Bis zur Übergabe prüft es die alte Kette mit den alten Schlüsseln. Die Übergabe prüft es über die Kette des Partners, die es von dessen Starthash aus prüft. Danach prüft es mit den Schlüsseln des Ersatzgeräts weiter.
+- **AL-65** Lücke: Einträge, die das alte Gerät nach dem letzten Abgleich geschrieben hat, sind nicht in der Kopie.
+  - Der Übergabe-Eintrag nennt die Lücke ausdrücklich: Er sagt, ab welcher laufenden Nummer nichts übernommen ist.
+  - Ist der Datenträger des alten Geräts noch lesbar, werden diese Einträge nachträglich übernommen und gegen die alten Schlüssel geprüft.
+  - Einträge der Klasse Stand gehen innerhalb einer Minute zum Partner (AL-29). Wesentliches fehlt deshalb höchstens aus der letzten Minute.
+- **AL-66** Schutz gegen einen vorgetäuschten Tausch. Wer einen Tausch vortäuscht, könnte damit die jüngsten Einträge verschwinden lassen. Deshalb:
+  - Eine Übergabe ist nur möglich, wenn sich die Geräteidentität vom alten Gerät unterscheidet: Seriennummer der NVMe bzw. OTP-Schlüssel.
+  - Eine Übergabe ist ein Eintrag der Klasse Stand in beiden Logs.
+  - Das alte Gerät, falls es noch läuft, schreibt den Versuch als E17.
+  - Jede Übergabe kommt wie ein neuer Starthash ins ERP und als Nachtrag in die Betriebsanleitung.
+- **AL-67** Werden beide Pis zugleich getauscht, gibt es niemanden, der die Übergabe beglaubigen kann. Dann beginnen beide Logs neu, mit neuem Starthash (AL-58). Die alten Logs bleiben auf den alten Datenträgern.
 
 ## Nicht-Ziele
 
@@ -485,5 +512,6 @@ Eine Skizze, nicht bindend:
 | T36, T42 gegen Fluten | AL-39 bis AL-48 | Test mit simulierter Betriebszeit: fünf Jahre Dauerflut über alle Klassen, in die man schreiben kann, mit rollierend wechselnden Quellen, Objekten und Texten (USB-Kennungen, auch ein zugelassener Stick, SSH-Konten und Adressen, Dateinamen unter `0:/sys`). Vorher, mittendrin und am Ende je eine Anmeldung als `mpadmin` und eine Änderung an `config.g`. Danach: kein Anteil über seiner Grenze; alle Einträge von vor der Flut unverändert (Prüfkette); in der Klasse Stand jede der Änderungen und Anmeldungen mindestens auf den Tag genau; die Flut als E19 mit Sammeleinträgen. Zusätzlich jedes Objekt der festen Menge täglich geändert: Die Klasse Stand bleibt unter ihrem Anteil. Partition nicht schreibbar simuliert: Update und Firmware-Flash werden verweigert. |
 | Verschleiß (kein eigenes Kriterium, Voraussetzung für T39) | AL-50 bis AL-54 | Eine Stunde lang 1000 Ereignisse pro Sekunde: Die Schreibmenge auf den Datenträger laut `/sys/block/*/stat` bleibt unter 5 MB für diese Stunde. Rechnung AL-52 gegen die TBW aus dem Datenblatt der verbauten SSD. |
 | T42, T48 Signaturkette | AL-55 bis AL-61 | Auf einem Testgerät als root einen Eintrag einer früheren Epoche ändern und Kette sowie Signaturen mit allem neu rechnen, was auf dem Gerät liegt: Das Prüfwerkzeug meldet die Epoche als verändert, geprüft nur mit dem Starthash. Log löschen und neu anlegen: Der Starthash passt nicht zum Inbetriebnahmeprotokoll. Nach einem Login als `mpadmin`: Die Anmeldung ist signiert, bevor die Shell kommt. |
+| T39, T43 Pi-Tausch | AL-19, AL-29, AL-64 bis AL-67 | Ein System durch einen leeren Pi ersetzen, Übergabe über `identity.conf`. Danach: `mp-audit verify` mit dem Starthash vom Typenschild meldet die Kette als gültig über die Übergabe hinweg; der Übergabe-Eintrag steht in beiden Logs und nennt die Lücke. Dieselbe Übergabe mit demselben Gerät (gleiche Identität) wird abgewiesen. |
 | T39, T42 gegen gestellte Uhr | AL-46, AL-49 | Uhr um sechs Jahre vordrehen, dann fluten: Nichts wird gelöscht, kein Budget füllt sich schneller auf, E16 steht im Log. Uhr zurückdrehen: Reihenfolge nach laufender Nummer bleibt richtig. |
 | T37, T42 über beide Systeme | AL-25 bis AL-32 | Log auf einem System kürzen: das andere meldet die Abweichung. Druckernetz eine Stunde trennen: beide loggen weiter, die Verankerung wird nachgeholt. Export am HMI enthält beide Logs. |
