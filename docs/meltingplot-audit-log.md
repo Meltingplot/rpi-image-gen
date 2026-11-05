@@ -530,7 +530,7 @@ Phase 2 in Schritten, jeder ein eigener PR und per OTA einspielbar:
   - Test `meltingplot/test/test-mp-audit.sh`.
 - **2b Quellen:** die Wächter rufen `mp-audit record` (USB-Wächter, `mp-bundle-guard`, `mp-role-guard`, `mp-hmi-net-guard`, `mp-dsf-firmware`, `mp-dsf-seed`, `mp-ota-gate`, `mp-hmi-usb`, Kamera); Collector für sshd, sudo, rpi-connect, AppArmor (AL-62); Anmeldung über PAM synchron versiegelt (AL-56); kein Eingriff ohne Nachweis (AL-48), auch ohne Audit-Partition (Festlegung 20), daher vorher alle Bestandsgeräte auf gen3 überführen; USB am Duet-Pi nur für den Stick (AL-68, ohne Export).
 - **2c Stand:** feste Menge (AL-42, AL-45), E20 bei jedem Boot und täglich, Änderungen unter `0:/sys` (E05), Verschleiß (E21, AL-53), Kürzen nach fünf Jahren (AL-05 bis AL-07).
-- **2d Partner:** Verankerung und Kopie zwischen HMI und Duet-Pi (AL-28 bis AL-32), Starthash des Partners am Panel.
+- **2d Partner:** Verankerung und Kopie zwischen HMI und Duet-Pi (AL-28 bis AL-32), Starthash des Partners am Panel. Entwurf mit Corosync unter „Entwurf für 2d“, zurückgestellt hinter 2b (Tim, 2026-11-05).
 - **2e Anzeige und Export:** Seite am Panel, Export auf USB-Stick an beiden Systemen (AL-21, AL-31, AL-68, E22), Übergabe beim Pi-Tausch (AL-64 bis AL-67).
 
 Abweichungen in 2a von der Skizze unten:
@@ -545,6 +545,38 @@ Abweichungen in 2a von der Skizze unten:
 - E02 steht auch im Boot, der das Log anlegt. Das ist meist der Probestart des ersten Images mit Audit-Log, also gehört auch sein Ausgang hinein. Der Ausgang wird auch dann eingetragen, wenn der Dienst ihn erst beim nächsten Start sieht: Commit in der letzten Minute oder Rückfall auf ein Image ohne Audit-Log.
 
 Bench-Test 2026-11-04 (HMI rc.12 per OTA auf dem Bench-HMI, Log im Probestart angelegt): Namespace, `chattr +a`, Schlüssel je Epoche, Rechte, Journal-Übernahme, Absturz des Dienstes mit zurückgeholtem Eintrag, E15 nach hartem Reset, E16 bei Zeitsprüngen, Flut mit E19, periodisches Versiegeln und Prüfung einer Kopie auf einem anderen Rechner liefen wie beschrieben. Die vier Punkte oben kamen aus diesem Test.
+
+### Entwurf für 2d: Abgleich über Corosync
+
+Stand 2026-11-05, zurückgestellt: erst Phase 2b. Grundlage ist ein Gespräch mit Tim.
+
+Vorgaben:
+
+- Alle Teilnehmer hängen per Ethernet am selben Switch im Druckernetz. Weitere Teilnehmer sollen später dazukommen können, nicht nur HMI und Duet-Pi.
+- Kein Peer-to-Peer-Geflecht. Jeder Teilnehmer verteilt sein eigenes Log an die Gruppe; keiner reicht Logs anderer weiter.
+- Standard-Software statt eines eigenen Transportprotokolls: Corosync, wie es Proxmox für sein Cluster-Dateisystem `pmxcfs` nutzt.
+
+Ablauf:
+
+- **Transport:** Corosync 3 (Debian trixie: 3.1.9) mit Closed Process Groups (CPG). Das bringt zuverlässige Zustellung an alle Mitglieder in fester Reihenfolge und Meldungen, wer dazukommt oder ausfällt. Als Transport dient knet mit fester Teilnehmerliste (`nodelist`) aus dem Image, nach den festen Adressen im Druckernetz (10.42.0.1, .2, später weitere). Ein neuer Teilnehmertyp kommt mit einem Update auf alle Geräte. Das Quorum von Corosync wird nicht gebraucht. UDP-Port 5405 nur im Druckernetz.
+- **Laufend:** Jede neue Zeile eines Logs, Eintrag oder Siegel, geht als CPG-Nachricht an die Gruppe: Starthash als Name des Logs, Zeilennummer, die Zeile so, wie sie auf der Platte steht. Die Empfänger hängen sie nur lückenlos und in Reihenfolge an ihre Kopie unter `partner/<Starthash>/` an. Die Kopie ist nur anhängbar (`chattr +a`). Vor dem Anhängen prüfen sie die Kette, abgeschlossene Epochen an ihren Siegeln.
+- **Nachholen:** Corosync hält keine Historie, Nachrichten erreichen nur verbundene Mitglieder. Deshalb senden bei jeder Änderung der Mitgliedschaft alle ihren Stand: Starthash, Zeilenzahl, letzter Hash, Epoche, Boot-Zähler. Wer zurückliegt, fordert die fehlenden Zeilen über die Gruppe an, und nur der Eigentümer des Logs schickt sie nach, gedrosselt. So holt auch ein neuer Teilnehmer auf. Proxmox gleicht in `pmxcfs` ebenso bei jeder Änderung der Mitgliedschaft ab.
+- **Verankerung (AL-28):** Aus den Ständen schreibt jeder Teilnehmer regelmäßig Anker der anderen in sein eigenes Log, und sofort nach einem Eintrag der Klasse Stand beim Partner.
+- **Bindung:** Beim ersten Kontakt hält jeder den Starthash jedes anderen Teilnehmers fest, als Eintrag der Klasse Stand. Ein anderer Starthash unter derselben Teilnehmerkennung ist ein E17, außer bei einer angestoßenen Übergabe (AL-64).
+- **Platz:** Jeder Teilnehmer hält eine Kopie jedes Logs der Gruppe. Bei zwei Teilnehmern passt das in 1 GiB (2 × 256 MiB). Bei mehr wächst `audit` in die Reserve (Layout LY-03).
+- **Anbindung:** Debian hat keine Python-Anbindung für Corosync. `mp-auditd` spricht `libcpg` über `ctypes` an, oder über ein kleines C-Hilfsprogramm.
+
+Verworfen:
+
+- Abholen per TCP zwischen den Geräten: keine Gruppe, jedes Paar einzeln.
+- Ein Geflecht nach dem Vorbild von Secure Scuttlebutt, bei dem jeder Logs anderer weiterreicht: kein Peer-to-Peer.
+- Ein eigenes Protokoll über UDP-Broadcast nach dem Muster von RTPS oder NORM: Es müsste Verluste, Reihenfolge und Zerlegung selbst lösen, die Corosync schon löst.
+
+Offen:
+
+1. Verschlüsselung in knet mit einem `authkey` je Drucker, der bei der Inbetriebnahme verteilt wird, oder ohne. Ohne bleiben die Daten fälschungssicher, weil Kette, Siegel und Starthash sie schützen; nur die Gruppe ließe sich dann am Switch stören.
+2. Ereignis-ID und Klasse des Ankers: Unter E01 bis E23 passt keine. Vorschlag: E24, Klasse Betrieb.
+3. Ob jedes Log auf jedem Teilnehmer liegt oder bei vielen Teilnehmern nur auf einigen.
 
 Eine Skizze für das Ganze, nicht bindend:
 
