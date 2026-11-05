@@ -88,6 +88,13 @@ connect:
   # commissioning left for it. Quoted because YAML reads a bare on as a boolean.
   "on": y
 
+connectota:
+  # The update bundle has to suit the applicator of the device receiving it,
+  # which is the one in the image that device runs now. rpi-connect-ota 1.3.18
+  # cannot read a manifest-only bundle, and otamaker means to make that its
+  # default, so no sync with upstream gets to change this behind our back.
+  bfmt: transitional
+
 artefact:
   # A local build is always a development build, which is what allows it to
   # carry prereleases. The release workflow passes a version from the git tag.
