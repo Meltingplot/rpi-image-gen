@@ -112,6 +112,26 @@
 # X-Env-Var-compression-Valid: string
 # X-Env-Var-compression-Set: y
 #
+# X-Env-Var-updatefmt: none
+# X-Env-Var-updatefmt-Desc: Format of the update bundle produced for this image.
+#  none: No update bundle.
+#  otamaker: Raspberry Pi Connect Remote Update bundle.
+# X-Env-Var-updatefmt-Required: n
+# X-Env-Var-updatefmt-Valid: none,otamaker
+# X-Env-Var-updatefmt-Set: lazy
+# X-Env-Var-updatefmt-Conflicts: IGconf_image_updatefmt == 'otamaker' and not layer('rpi-connect-ota')
+# X-Env-Var-updatefmt-Triggers:
+#  when=layer('rpi-connect-ota') set IGconf_image_updatefmt=otamaker policy=lazy
+#  when=IGconf_image_updatefmt == 'otamaker' set IG_ENABLE_HOST_OTAMAKER=y policy=force
+#
+# X-Env-Var-updatetpl: ${DOTD}/device/otamaker-full.yaml
+# X-Env-Var-updatetpl-Desc: otamaker contents template used to pack the update
+#  bundle. References of the form ${IGconf_<name>} are substituted from the
+#  build environment. Payload sources are resolved relative to the image output directory.
+# X-Env-Var-updatetpl-Required: n
+# X-Env-Var-updatetpl-Valid: file-nzero
+# X-Env-Var-updatetpl-Set: lazy
+#
 # METAEND
 ---
 mmdebstrap:
