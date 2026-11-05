@@ -19,6 +19,7 @@ Weitere Änderungen werden kommen. Daraus folgt ein Layout, das spätere Änderu
 2. Die Reserve liegt zwischen `audit` und `persistent`, ungefähr 8 bis 16 GB.
 3. Sie wird leer ausgeliefert und erst per OTA genutzt, wie die Audit-Partition in Phase 1 und 2.
 4. Zielmedium ist immer eine SSD mit mindestens 128 GB, in der Regel 256 GB. SD-Karten sind kein Zielmedium; die Karte im Labordrucker wird ersetzt.
+5. Mit gen4 wächst `audit` von 512 MiB auf 1 GiB, damit eigenes Log und Kopie des Partners sicher Platz haben.
 
 ## Layout gen4
 
@@ -29,11 +30,11 @@ Am Beispiel der 256-GB-SSD des Bench-HMI (238,5 GiB):
 | 1 | `bootconfig` | 32 MiB | FAT, `autoboot.txt`, `identity.conf`, `installer.txt` | – |
 | 2, 3 | `boot_a`, `boot_b` | je 128 MiB | FAT mit `boot.img` | 49 MiB (38 %) |
 | 4, 5 | `system_a`, `system_b` | je 4 GiB | erofs | 0,45 GB Duet-Pi, 0,7 GB HMI |
-| 6 | `audit` | 512 oder 640 MiB, siehe „Zu entscheiden“ | **kein Dateisystem** | – |
+| 6 | `audit` | 1 GiB | **kein Dateisystem** | – |
 | 7 | `reserve` | 16 GiB | **kein Dateisystem, nie eingehängt** | – |
 | 8 | `persistent` | Rest | ext4, wächst beim ersten Boot bis zum Plattenende | 254 MB |
 
-Gegenüber gen3 neu sind `reserve` und das rohe `audit`. `persistent` wird damit Partition 8 statt 7 und bleibt die letzte Partition: `mp-growfs` und `expand-to-fit` beim Provisionieren bleiben unverändert.
+Gegenüber gen3 neu sind `reserve`, das rohe `audit` und seine Größe von 1 GiB statt 512 MiB. `persistent` wird damit Partition 8 statt 7 und bleibt die letzte Partition: `mp-growfs` und `expand-to-fit` beim Provisionieren bleiben unverändert.
 
 16 GiB sind 12,5 % einer 128-GB-SSD und 6,7 % einer 256-GB-SSD. Begründung der Größe unter LY-03.
 
@@ -49,7 +50,7 @@ Gegenüber gen3 neu sind `reserve` und das rohe `audit`. `persistent` wird damit
   - `audit` vergrößern, ohne Umkopieren, weil es direkt davor liegt;
   - beide Systemslots verdoppeln, mit 8 GiB: `system_b` neu in der Reserve, umschalten, dann `system_a` über die alte Fläche von A und B;
   - `persistent` verschlüsseln (LUKS, Upstream-Layout `cryptdata`): Inhalt in eine neue verschlüsselte Partition in der Reserve kopieren, das alte `persistent` löschen, die neue Partition über dessen Fläche bis zum Plattenende vergrößern. Das geht, weil beide nebeneinander liegen, und ohne Verkleinern eines Dateisystems.
-- **LY-04** Partitionen, die erst später genutzt werden, werden ohne Dateisystem ausgeliefert. Der Dienst, der sie nutzt, formatiert sie selbst, mit den Vorgaben des Geräts. Für `audit` tut `mp-auditd` das schon (AL-37); auf dem Pi 5 entstehen dann 4-KiB-Blöcke und ein 16-MiB-Journal. Nutzbar sind dann 487 MiB von 512 MiB bzw. 613 MiB von 640 MiB (gemessen mit `mkfs.ext4 -b 4096`).
+- **LY-04** Partitionen, die erst später genutzt werden, werden ohne Dateisystem ausgeliefert. Der Dienst, der sie nutzt, formatiert sie selbst, mit den Vorgaben des Geräts. Für `audit` tut `mp-auditd` das schon (AL-37); auf dem Pi 5 entstehen dann 4-KiB-Blöcke und ein 16-MiB-Journal. Nutzbar sind dann 973 MiB von 1 GiB (gemessen mit `mkfs.ext4 -b 4096`; zum Vergleich 487 MiB bei 512 MiB).
 - **LY-05** Die Generation steht ausdrücklich auf dem Gerät: `meltingplot/layout.txt` auf `bootconfig` mit `layout=gen4`. Der Installer schreibt sie, jede spätere Änderung nach LY-02 schreibt sie fort. Erkennen über Partitionsgrößen bleibt nur für gen1 bis gen3.
 - **LY-06** Geplant wird nach Nutzfläche, nicht nach Partitionsgröße. Der Build prüft für jede Partition mit festem Zweck, dass ihr Dateisystem fasst, was geplant ist. Für `audit`: Die Anteile des eigenen Logs und die Kopie des Partners (AL-07, AL-40) passen in ein Dateisystem, wie es das Gerät anlegt. Sonst bricht der Build ab.
 - **LY-07** Ein Update muss zum Layout passen. `mp-bundle-guard` verweigert ein Bundle, dessen Boot- oder Systemabbild nicht in die Slots des Geräts passt oder das eine neuere Generation verlangt, als das Gerät hat.
@@ -80,15 +81,13 @@ Raspberry Pi Imager ist dafür kein Ersatz: Er schreibt ebenfalls das ganze entp
 Alle Bestandsgeräte gehen nach Festlegung 20 des Audit-Logs ohnehin noch einmal über die Installerkarte. gen4 kommt in diesen Durchgang; einen weiteren gibt es dafür nicht.
 
 - gen1, gen2: werden komplett neu geschrieben.
-- gen3 (nur das Bench-HMI): Bleibt `audit` bei 512 MiB, liegt es in gen4 an derselben Stelle und wird übernommen, mit seinem vorhandenen Dateisystem. Mit 640 MiB wird es neu angelegt; auf dem Bench-HMI liegt nur ein Testlog. `persistent` rückt in beiden Fällen nach hinten und wird neu geschrieben.
+- gen3 (nur das Bench-HMI): `audit` hat in gen4 eine andere Größe und wird neu angelegt; auf dem Bench-HMI liegt nur ein Testlog. `persistent` rückt nach hinten und wird neu geschrieben.
+- Ab gen4 übernimmt jede Neuinstallation `audit` (AL-18), solange das Layout gleich bleibt.
 - Für die Laborgeräte bleibt es beim Sichern und Zurückspielen von `/persistent` von Hand.
 
-## Zu entscheiden
+## Größe von `audit`
 
-**Größe von `audit`.** LY-06 verlangt, dass das eigene Log (256 MiB nach AL-40) und die Kopie des Partners (noch einmal 256 MiB, AL-07) in das Dateisystem passen. Mit 512 MiB und 487 MiB Nutzfläche geht das nicht.
-
-- **640 MiB (Vorschlag):** 613 MiB nutzbar. Die Anteile bleiben wie entworfen; etwa 100 MiB bleiben für Archive nach einem Löschen nach AL-17. Kostet 128 MiB mehr, das gen3-Testlog des Bench-HMI wird nicht übernommen.
-- **512 MiB:** Die Anteile schrumpfen auf je 200 MiB (der Budget-Test bleibt grün, die Klasse Betrieb hat dann etwa 18 % Luft), und `audit` kann später in die Reserve wachsen (LY-03).
+LY-06 verlangt, dass das eigene Log (256 MiB nach AL-40) und die Kopie des Partners (noch einmal 256 MiB, AL-07) in das Dateisystem passen. Mit 512 MiB und 487 MiB Nutzfläche ging das nicht. Mit 1 GiB (Festlegung 5) sind 973 MiB nutzbar: Die Anteile bleiben wie entworfen, und etwa 460 MiB bleiben für Archive nach einem Löschen nach AL-17.
 
 ## Offene Prüfpunkte
 
