@@ -72,11 +72,21 @@ image <IMAGE_NAME>.<IMAGE_SUFFIX> {
    # Not mounted by the system; see image.private_part_name
    partition <PRIVATE_NAME> {
       in-partition-table = true
-      image = private.ext4
+      image = <PRIVATE_IMAGE>
       partition-type-uuid = L
    }
 
 #PRIVATE_END
+#RESERVE_BEGIN
+   # Never mounted; space for a later change of the layout, see
+   # image.reserve_part_size
+   partition reserve {
+      in-partition-table = true
+      image = reserve.raw
+      partition-type-uuid = 8DA63339-0007-60C0-C436-083AC8230908
+   }
+
+#RESERVE_END
    partition persistent {
       in-partition-table = true
       image = persistent.ext4
@@ -131,10 +141,11 @@ image system.verity {
 #PRIVATE_BEGIN
 image private.sparse {
    android-sparse {
-      image = private.ext4
+      image = <PRIVATE_IMAGE>
    }
 }
 
+#PRIVATE_EXT4_BEGIN
 image private.ext4 {
    ext4 {
       use-mke2fs = true
@@ -145,7 +156,32 @@ image private.ext4 {
    size = <PRIVATE_SIZE>
 }
 
+#PRIVATE_EXT4_END
+#PRIVATE_RAW_BEGIN
+# No filesystem: a file of the partition's size that is all hole, made by
+# the template hook. It stays a hole in the disk image and is "don't care"
+# in the sparse image, so nothing is written to the partition.
+image private.raw {
+   file {
+   }
+}
+
+#PRIVATE_RAW_END
 #PRIVATE_END
+#RESERVE_BEGIN
+# All hole as well, see private.raw
+image reserve.raw {
+   file {
+   }
+}
+
+image reserve.sparse {
+   android-sparse {
+      image = reserve.raw
+   }
+}
+
+#RESERVE_END
 image persistent.ext4 {
    ext4 {
       use-mke2fs = true

@@ -51,16 +51,41 @@ EOF
 # namespace, found through /dev/disk/by-slot/<name>. The template carries it
 # between #PRIVATE_BEGIN and #PRIVATE_END, which go when it is wanted and take
 # the block with them when it is not.
+#
+# It ships with an empty ext4 filesystem, or with none (image.private_part_fs)
+# so that its service formats it with the device's defaults; then it is a file
+# of its size that is all hole, a hole in the disk image and "don't care" in
+# the sparse image, and nothing is written to it on installation.
+#
+# A reserve (image.reserve_part_size) follows the private partition in the
+# same way, never with a filesystem: space a later update can take to change
+# the layout, which an update cannot otherwise.
 private_name=${IGconf_image_private_part_name:-}
 private_label=
+private_image=
 if [[ -n $private_name ]]; then
    case $private_name in
-      bootconfig|boot_a|boot_b|system_a|system_b|persistent)
+      bootconfig|boot_a|boot_b|system_a|system_b|persistent|reserve)
          echo "image-rota: private_part_name '$private_name' is a partition of the layout already" >&2
          exit 1 ;;
    esac
    private_label=$(echo "$private_name" | tr 'a-z' 'A-Z')
    private_filter=(-e '/^#PRIVATE_BEGIN$/d' -e '/^#PRIVATE_END$/d')
+   case ${IGconf_image_private_part_fs:-ext4} in
+      ext4)
+         private_image=private.ext4
+         private_filter+=(-e '/^#PRIVATE_EXT4_BEGIN$/d' -e '/^#PRIVATE_EXT4_END$/d'
+                          -e '/^#PRIVATE_RAW_BEGIN$/,/^#PRIVATE_RAW_END$/d') ;;
+      none)
+         private_image=private.raw
+         rm -f "${genimg_in}/private.raw"
+         truncate -s "$IGconf_image_private_part_size" "${genimg_in}/private.raw"
+         private_filter+=(-e '/^#PRIVATE_RAW_BEGIN$/d' -e '/^#PRIVATE_RAW_END$/d'
+                          -e '/^#PRIVATE_EXT4_BEGIN$/,/^#PRIVATE_EXT4_END$/d') ;;
+      *)
+         echo "image-rota: private_part_fs '${IGconf_image_private_part_fs}' is neither ext4 nor none" >&2
+         exit 1 ;;
+   esac
 
    install -d "${fs}/etc/udev/rules.d"
    cat << EOF > "${fs}/etc/udev/rules.d/99-rpi-06-private.rules"
@@ -72,11 +97,22 @@ else
    private_filter=(-e '/^#PRIVATE_BEGIN$/,/^#PRIVATE_END$/d')
 fi
 
+reserve_size=${IGconf_image_reserve_part_size:-}
+if [[ -n $reserve_size ]]; then
+   rm -f "${genimg_in}/reserve.raw"
+   truncate -s "$reserve_size" "${genimg_in}/reserve.raw"
+   reserve_filter=(-e '/^#RESERVE_BEGIN$/d' -e '/^#RESERVE_END$/d')
+else
+   reserve_filter=(-e '/^#RESERVE_BEGIN$/,/^#RESERVE_END$/d')
+fi
+
 
 # Write genimage template
 cat "$LAYER_DIR/genimage.cfg.in.$IGconf_image_rootfs_type" | sed \
    "${private_filter[@]}" \
+   "${reserve_filter[@]}" \
    -e "s|<PRIVATE_NAME>|$private_name|g" \
+   -e "s|<PRIVATE_IMAGE>|$private_image|g" \
    -e "s|<PRIVATE_LABEL>|$private_label|g" \
    -e "s|<PRIVATE_SIZE>|${IGconf_image_private_part_size:-}|g" \
    -e "s|<IMAGE_DIR>|$IGconf_image_outputdir|g" \

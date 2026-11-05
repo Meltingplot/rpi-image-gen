@@ -65,6 +65,15 @@ The system does not mount it. It is meant for a single service that mounts it in
 
 Like every partition it arrives only with a new installation: an update replaces the slots, never the partition table. The provisioning map gets an entry for it with `pmap: clear`; the encrypted maps do not support it yet.
 
+With `image.private_part_fs: none` it ships without a filesystem, so that its service formats it on the device with the device's own defaults rather than the build's. genimage then gets a file of the partition's size that is all hole: it stays a hole in the disk image, becomes "don't care" in the sparse image, and nothing is written to the partition on installation. The service has to format an empty partition itself, and should leave alone one that holds anything else.
+
+[[reserve-partition]]
+== Reserve partition
+
+An update cannot change the partition table, so a layout that turns out too small needs a new installation of every device. `image.reserve_part_size` keeps space for that: a partition named `reserve` in front of `persistent`, after the private partition if there is one, without a filesystem and never mounted. Its content is undefined. Like the raw private partition it is all hole in the images, so an installation writes nothing to it.
+
+A later update can take space from it while the system runs, since nothing mounts it: shrink the `reserve` entry and create a new partition next to it, or let the private partition in front of it grow into it. Because `persistent` stays last, it still grows to the end of the device. The provisioning map gets an entry for it with `pmap: clear`.
+
 [[slot-shared]]
 == Slot-shared application data
 
