@@ -31,6 +31,13 @@ device:
   # (docs/meltingplot-layout.md, decision 4).
   storage_type: nvme
 
+# Both computers run from an NVMe SSD on an M.2 HAT, declared the way
+# config/device/pi5.yaml of rpi-image-gen does it. It is what allows
+# device.storage_type nvme.
+trait:
+  hw:storage:nvme: true
+  hw:pcie:m2: true
+
 image:
   layer: image-rota
   rootfs_type: erofs
