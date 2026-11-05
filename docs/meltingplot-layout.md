@@ -72,6 +72,8 @@ Jedes Release enthält schon das IDP-Archiv (`<image>.idp.tar.zst`, beim HMI 665
 
   Karte und späteres Secure-Boot-Provisioning nutzen damit dieselbe Layoutquelle und dieselbe Software auf dem Gerät.
 
+`rpi-fastbootd` braucht kein Secure Boot (Quelltext und `rpi-sb-provisioner` 2.3.4, geprüft 2026-11-05): Die Gerätesperre ist fest aus (`GetDeviceLockStatus()` gibt `false` zurück). Den Geräteschlüssel im OTP verlangt `oem idpinit` nur für verschlüsselte Container, die gen4 nicht hat. Der Provisioner signiert Boot-Slots nur bei `PROVISIONING_STYLE=secure-boot`. Mit Secure Boot müssen die Boot-Slots signiert ins IDP; das kann der Build über `bootsign_cmd`.
+
 `rpi-fastbootd` gibt es nicht als eigenes Paket im apt-Archiv von Raspberry Pi (geprüft 2026-11-05: `rpi-sb-provisioner` 2.3.4 und `librpifwcrypto0` sind dort, `rpi-fastbootd` nicht). Es steckt nur in den Gadget-Images des Provisioners, die über USB von einem zweiten Rechner gestartet werden; für die Karte im Feld taugt das nicht. Vorschlag: bei Raspberry Pi anfragen, `rpi-fastbootd` ins Archiv aufzunehmen, und bis dahin das Paket mit dessen eigenem `build-package.sh` aus dem offiziellen Repository an einem festen Commit in unserer CI bauen und als Release pinnen, wie die DSF-Pakete. Ohne `libcryptsetup` gebaut bleibt es Apache 2.0; Verschlüsselung braucht die Karte heute nicht.
 
 Raspberry Pi Imager ist dafür kein Ersatz: Er schreibt ebenfalls das ganze entpackte Image, und auf der Karte ohne Bildschirm wäre er als Qt-Anwendung eine schwere Abhängigkeit.
