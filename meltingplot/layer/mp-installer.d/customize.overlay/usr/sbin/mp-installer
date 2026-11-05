@@ -2,11 +2,13 @@
 # Write the A/B image this card carries to the NVMe drive, with nobody at the
 # machine, and make the bootloader start from the drive.
 #
-#   1. find exactly one NVMe drive, empty unless installer.conf releases it,
-#      and tell which layout it holds (gen1, gen2, gen3)
+#   1. find exactly one NVMe drive of at least the size installer.conf names,
+#      empty unless installer.conf releases it, and tell which layout it holds
+#      (gen1 to gen4, docs/meltingplot-layout.md)
 #   2. check identity.conf on the card and the image on the card
-#   3. write the image, read it back and compare; on a drive of the layout
-#      gen3 around its audit partition, which stays as it is
+#   3. write the image, read it back and compare; never the reserve, which is
+#      discarded instead, and on a drive of the image's own layout not its
+#      audit partition either, which stays as it is
 #   4. hand identity.conf to the drive's BOOTCONFIG and reset the card's copy
 #   5. update the bootloader and set it to start from NVMe first
 #   6. restart, into the drive
@@ -68,6 +70,9 @@ size=$(blockdev --getsize64 "$dev")
 mpi_log "drive $dev: $(mpi_drive_model "$dev"), serial ${serial:-unknown}, $size bytes"
 [ "$size" -ge "$MPI_RAW_SIZE" ] ||
    fail "$MPI_E_FAILED" "$dev holds $size bytes, the image needs $MPI_RAW_SIZE"
+# The target is an SSD of at least 128 GB (docs/meltingplot-layout.md, LY-08).
+[ "$size" -ge "${MPI_MIN_DRIVE_BYTES:-0}" ] ||
+   fail "$MPI_E_FAILED" "$dev holds $size bytes, less than the $MPI_MIN_DRIVE_BYTES this card writes to"
 
 blank=n
 mpi_drive_blank "$dev" && blank=y
@@ -90,18 +95,29 @@ case $action in
 esac
 
 # What the drive held, and whether its audit partition stays as it is
-# (docs/meltingplot-audit-log.md, AL-18). Devices of the layouts gen1 and
-# gen2 have no audit log and move to this layout as a whole. On gen3 the
-# card writes around the audit partition, which has to lie where this image
-# puts it. Once writing began the drive no longer shows what it held, so a
-# start after an interruption takes both from the card's state.
+# (docs/meltingplot-audit-log.md, AL-18). The card keeps it only on a drive of
+# the layout its image has: gen4 when the image has a reserve (MPI_SKIP),
+# gen3 otherwise. There the partition has to lie where this image puts it.
+# gen1 and gen2 have no audit log; the audit partition of gen3 is 512M and
+# moves to gen4 written anew (docs/meltingplot-layout.md: only the bench panel
+# had gen3, with a test log). A gen4 drive whose reserve is not where the
+# image puts it was changed in the field by a layout newer than this card,
+# which then does not write. Once writing began the drive no longer shows
+# what it held, so a start after an interruption takes both from the card's
+# state.
+image_layout=gen3
+[ -z "${MPI_SKIP:-}" ] || image_layout=gen4
 layout=blank
 keep=none
 case $action in
    overwrite)
       parts=$(mpi_partitions "$dev")
-      layout=$(printf '%s\n' "$parts" | mpi_layout_generation "${MPI_KEEP_PART:-}")
-      if [ "$layout" = gen3 ]; then
+      skip_names=$(mpi_skip_list "${MPI_SKIP:-}" | cut -d' ' -f1 | tr '\n' ' ')
+      layout=$(printf '%s\n' "$parts" | mpi_layout_generation "${MPI_KEEP_PART:-}" "$skip_names")
+      if [ "$layout" = "$image_layout" ]; then
+         moved=$(printf '%s\n' "$parts" | mpi_skip_moved "${MPI_SKIP:-}")
+         [ -z "$moved" ] ||
+            fail "$MPI_E_FAILED" "$dev has its $moved partition somewhere else than $MPI_IMAGE puts it: its layout was changed after this card was made, and this card does not write it"
          keep=$(printf '%s\n' "$parts" |
             mpi_keep_decision "$MPI_KEEP_PART" "${MPI_KEEP_START:-}" "${MPI_KEEP_SIZE:-}")
          [ "$keep" != moved ] ||
@@ -109,7 +125,12 @@ case $action in
       fi
       case $layout in
          gen1|gen2) mpi_log "$dev holds the A/B layout $layout, without an audit log; it moves to the layout of $MPI_IMAGE" ;;
-         gen3) mpi_log "$dev holds the A/B layout gen3; its $MPI_KEEP_PART partition stays as it is" ;;
+         gen3|gen4)
+            if [ "$keep" = keep ]; then
+               mpi_log "$dev holds the A/B layout $layout; its $MPI_KEEP_PART partition stays as it is"
+            else
+               mpi_log "$dev holds the A/B layout $layout; it moves to the layout $image_layout of $MPI_IMAGE, and its $MPI_KEEP_PART partition is written anew"
+            fi ;;
          *) mpi_log "$dev holds no Meltingplot A/B layout ($layout)" ;;
       esac ;;
    rewrite|bootloader)
@@ -145,32 +166,37 @@ if [ "$action" != bootloader ]; then
    # before it is done, the next start knows the drive as its own work.
    mpi_state_write "$MPI_IMAGE" "$serial" writing "" "$layout" "$keep"
 
-   rm -f "$WORK/pipe.err"
+   # The ranges left as the drive has them: the reserve always (LY-10), the
+   # audit partition when it is kept. In blocks of 4 MiB: the build checked
+   # that they are aligned to that (mp-installer-measure). The image's bytes
+   # for them are read and dropped.
    if [ "$keep" = keep ]; then
-      # In blocks of 4 MiB: the build checked that the partition is aligned
-      # to that (mp-installer-measure). The range in between is read from the
-      # image and dropped, so the drive keeps what it has there.
-      mpi_log "writing $MPI_IMAGE to $dev around $MPI_KEEP_PART ($MPI_KEEP_SIZE bytes from byte $MPI_KEEP_START), which stays as it is"
-      { zstd -dc --no-progress "$MPI_PAYLOAD" || echo zstd > "$WORK/pipe.err"; } |
-         { mpi_write_around "$dev" "$MPI_KEEP_START" "$MPI_KEEP_SIZE" || echo dd >> "$WORK/pipe.err"; }
+      ranges=$(mpi_ranges "${MPI_SKIP:-}" "$MPI_KEEP_START" "$MPI_KEEP_SIZE")
+      mpi_log "writing $MPI_IMAGE to $dev; $MPI_KEEP_PART ($MPI_KEEP_SIZE bytes from byte $MPI_KEEP_START) stays as it is"
    else
+      ranges=$(mpi_ranges "${MPI_SKIP:-}")
       mpi_log "writing $MPI_IMAGE to $dev"
-      { zstd -dc --no-progress "$MPI_PAYLOAD" || echo zstd > "$WORK/pipe.err"; } |
-         { dd of="$dev" bs=4M iflag=fullblock conv=fsync status=none || echo dd >> "$WORK/pipe.err"; }
    fi
+   [ -z "${MPI_SKIP:-}" ] || mpi_log "never written: $MPI_SKIP (name:start:size)"
+   rm -f "$WORK/pipe.err"
+   { zstd -dc --no-progress "$MPI_PAYLOAD" || echo zstd > "$WORK/pipe.err"; } |
+      { mpi_write_skipping "$dev" "$ranges" || echo dd >> "$WORK/pipe.err"; }
    [ ! -s "$WORK/pipe.err" ] ||
       fail "$MPI_E_FAILED" "writing $dev failed in $(tr '\n' ' ' < "$WORK/pipe.err")"
+   if [ -n "${MPI_SKIP:-}" ]; then
+      undiscarded=$(mpi_discard_skipped "$dev" "$MPI_SKIP" | tr '\n' ' ')
+      [ -z "$undiscarded" ] || mpi_log "$dev cannot discard $undiscarded; what it held there stays, unread"
+   fi
 
    mpi_log "reading $dev back"
    sync
    echo 3 > /proc/sys/vm/drop_caches
    blockdev --flushbufs "$dev"
+   read_back=$(mpi_read_back_skipping "$dev" "$MPI_RAW_SIZE" "$ranges")
    if [ "$keep" = keep ]; then
-      read_back=$(mpi_read_back_around "$dev" "$MPI_RAW_SIZE" "$MPI_KEEP_START" "$MPI_KEEP_SIZE")
       want_back=$MPI_RAW_SHA256_KEEP
    else
-      read_back=$(head -c "$MPI_RAW_SIZE" "$dev" | sha256sum | cut -d' ' -f1)
-      want_back=$MPI_RAW_SHA256
+      want_back=${MPI_RAW_SHA256_SKIP:-$MPI_RAW_SHA256}
    fi
    [ "$read_back" = "$want_back" ] ||
       fail "$MPI_E_FAILED" "$dev does not read back what was written; the drive may be faulty"

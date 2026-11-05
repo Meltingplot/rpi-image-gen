@@ -47,19 +47,25 @@ print(r.get("image", ""), r.get("version", ""), r.get("device", {}).get("role", 
 
 echo "mp-installer: measuring $file" >&2
 # Besides the whole image: where the partition to keep (mpinst.keep_part)
-# lies in it, from the GPT at its start, and the checksum of the image without
-# that range, which is what the drive reads back when the card left it alone.
-# "-" for the three when the image has no such partition.
+# lies in it, from the GPT at its start; the partitions the card never writes
+# (mpinst.skip_parts, the reserve); and the checksums of the image without
+# the skipped ranges, and without those and the kept one, which is what the
+# drive reads back. "-" for what the image does not have.
 keep_part=${IGconf_mpinst_keep_part:-}
-read -r raw_size raw_sha keep_start keep_size keep_sha < <(zstd -dc --no-progress "$img" |
-   "${IGconf_mpinst_assetdir:?}/bin/mp-installer-measure" "$keep_part")
-[[ ${raw_size:-0} =~ ^[0-9]+$ && $raw_size -gt 0 && ${raw_sha:-} =~ ^[0-9a-f]{64}$ ]] ||
+read -r -a skip_parts <<< "${IGconf_mpinst_skip_parts:-}"
+read -r raw_size raw_sha keep_start keep_size keep_sha skip skip_sha < <(zstd -dc --no-progress "$img" |
+   "${IGconf_mpinst_assetdir:?}/bin/mp-installer-measure" "$keep_part" "${skip_parts[@]}")
+[[ ${raw_size:-0} =~ ^[0-9]+$ && $raw_size -gt 0 && ${raw_sha:-} =~ ^[0-9a-f]{64}$ &&
+   ${skip_sha:-} =~ ^[0-9a-f]{64}$ ]] ||
    die "cannot decompress $file"
 if [[ -n $keep_part && $keep_start == - ]]; then
    echo "mp-installer: $file has no $keep_part partition; the card writes over all of a drive" >&2
    keep_part=
 fi
 [[ $keep_start == - ]] && keep_start= keep_size= keep_sha=
+[[ $skip == - ]] && skip=
+[[ -z $skip ]] ||
+   echo "mp-installer: the card never writes $skip (name:start:size)" >&2
 
 # --- the bootloader the card will install ----------------------------------
 # rpi-eeprom-update takes the newest image of its release channel, which
@@ -78,7 +84,7 @@ bootloader=${bootloader%.bin}
 
 # --- into the image ----------------------------------------------------------
 
-for tool in wipefs blockdev lsblk findmnt blkid mountpoint zstd dd sha256sum head od cmp \
+for tool in wipefs blkdiscard blockdev lsblk findmnt blkid mountpoint zstd dd sha256sum head od cmp \
             udevadm rpi-eeprom-update rpi-eeprom-config python3 flashrom strings; do
    [[ -x $ROOT/usr/bin/$tool || -x $ROOT/usr/sbin/$tool ]] || die "$tool is missing from the image"
 done
@@ -100,6 +106,9 @@ MPI_KEEP_PART=$keep_part
 MPI_KEEP_START=$keep_start
 MPI_KEEP_SIZE=$keep_size
 MPI_RAW_SHA256_KEEP=$keep_sha
+MPI_SKIP=$skip
+MPI_RAW_SHA256_SKIP=$skip_sha
+MPI_MIN_DRIVE_BYTES=${IGconf_mpinst_min_drive_bytes:-0}
 MPI_BOOTLOADER=$bootloader
 MPI_BOOT_ORDER=${IGconf_mpinst_boot_order:?}
 MPI_PSU_MAX_CURRENT=${IGconf_mpinst_psu_max_current:-}
