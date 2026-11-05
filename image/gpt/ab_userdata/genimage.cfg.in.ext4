@@ -156,9 +156,11 @@ image private.ext4 {
 #PRIVATE_RAW_BEGIN
 # No filesystem: a file of the partition's size that is all hole, made by
 # the template hook. It stays a hole in the disk image and is "don't care"
-# in the sparse image, so nothing is written to the partition.
+# in the sparse image, so nothing is written to the partition. holes says
+# so, and gives the section the content image2json needs to tell its type.
 image private.raw {
    file {
+      holes = {"(0; <PRIVATE_SIZE>)"}
    }
 }
 
@@ -168,6 +170,7 @@ image private.raw {
 # All hole as well, see private.raw
 image reserve.raw {
    file {
+      holes = {"(0; <RESERVE_SIZE>)"}
    }
 }
 
