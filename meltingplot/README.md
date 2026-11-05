@@ -559,8 +559,9 @@ The requirements, with the reasoning behind each, are in
 numbers AL-nn and E01 to E23 below refer to it.
 
 `mp-audit.service` (layer `mp-audit`) keeps the log on the partition `audit`
-of layout gen3, which it mounts in its own namespace only: `findmnt` in a
-shell shows nothing, `lsblk` shows the partition. Entries are lines of JSON,
+(1 GiB in layout gen4, 512M in gen3), which it mounts in its own namespace
+only: `findmnt` in a shell shows nothing, `lsblk` shows the partition. gen4
+ships it without a filesystem; the service formats it on its first start. Entries are lines of JSON,
 each with the SHA-256 of the line before. Every 15 minutes of operating time,
 and at once for the class state, an epoch is sealed: signed with a key of its
 own (ECDSA P-256), which announces the key of the next epoch and is destroyed
@@ -583,10 +584,10 @@ The Connect account may read and check (group `adm`); only root records, and
 archives the old one and names it in the new one's first entries (AL-17). A
 computer still on layout gen1 or gen2 has no audit partition and no update can
 add one: the service runs there too, writes to the journal only and says so at
-every boot (E17), until the installer card moves it to gen3. From phase 2b on
+every boot (E17), until the installer card moves it to gen4. From phase 2b on
 such a computer refuses updates like one whose log cannot be written: a missing
 partition is no exception, or removing it would switch the log off (decision
-20). Every device is moved to gen3 before then. An exported log
+20). Every device is moved to gen4 before then. An exported log
 is checked off the device with the same tool and `auditlog.py` next to it:
 `mp-audit verify --start <hash> <files>`.
 

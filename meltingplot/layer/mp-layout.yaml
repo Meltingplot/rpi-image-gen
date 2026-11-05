@@ -1,0 +1,13 @@
+# METABEGIN
+# X-Env-Layer-Name: mp-layout
+# X-Env-Layer-Category: device
+# X-Env-Layer-Desc: Names the generation of the partition layout on the
+#  boot configuration partition, meltingplot/layout.txt (LY-05 in
+#  docs/meltingplot-layout.md), so that the installer card and a later change
+#  of the layout in the field read it rather than guess it from partition
+#  sizes. An update leaves that partition as it is, so the file keeps saying
+#  what the drive was written with until a change of the layout writes it
+#  anew. The generation here has to match the image settings in mp-base.yaml.
+# X-Env-Layer-Version: 1.0.0
+# METAEND
+---

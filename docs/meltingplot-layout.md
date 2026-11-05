@@ -62,7 +62,9 @@ Gegenüber gen3 neu sind `reserve`, das rohe `audit` und seine Größe von 1 GiB
 
 Die Karte schreibt das Image mit `zstd -dc | dd`. Bisher lässt sie nur `audit` aus, wenn sie gen3 übernimmt.
 
-- **LY-10** Ab gen4 lässt die Karte `audit` und `reserve` immer aus. Sie überspringt beide Bereiche im Datenstrom, statt 17 GiB Nullen zu schreiben; `mpi_write_around` nimmt dafür eine Liste von Bereichen statt eines einzelnen. Geprüft wird über die geschriebenen Bereiche. Die Lage der Bereiche kommt aus der Partitionstabelle des Images, wie heute für `audit`. So behält jede Neuinstallation das Audit-Log (AL-18).
+- **LY-10** Ab gen4 schreibt die Karte die Reserve nie. Sie überspringt sie im Datenstrom, statt 16 GiB Nullen zu schreiben, und verwirft sie danach auf der SSD (`blkdiscard`), damit nichts von einem früheren Layout darin lesbar bleibt. `audit` lässt sie auf einem gen4-Laufwerk ebenso aus, wenn es dort liegt, wo das Image es hat; so behält jede Neuinstallation das Audit-Log (AL-18). Auf gen1 bis gen3 schreibt sie `audit` neu: Das Image hat dort Nullen, und `mp-auditd` formatiert die Partition beim ersten Start. Geprüft wird über die geschriebenen Bereiche. Die Lage der Bereiche misst der Build aus der Partitionstabelle des Images (`mp-installer-measure`, Variablen `mpinst.keep_part` und `mpinst.skip_parts`).
+
+  Liegt die Reserve auf einem gen4-Laufwerk nicht dort, wo das Image sie hat, wurde das Layout im Feld nach LY-02 schon weiterentwickelt. Die Karte schreibt dann nicht: Sie würde Partitionen überschreiben, die sie nicht kennt.
 
 ### Warum nicht aus dem IDP
 
@@ -102,10 +104,12 @@ Alle Bestandsgeräte gehen nach Festlegung 20 des Audit-Logs ohnehin noch einmal
 
 LY-06 verlangt, dass das eigene Log (256 MiB nach AL-40) und die Kopie des Partners (noch einmal 256 MiB, AL-07) in das Dateisystem passen. Mit 512 MiB und 487 MiB Nutzfläche ging das nicht. Mit 1 GiB (Festlegung 5) sind 973 MiB nutzbar: Die Anteile bleiben wie entworfen, und etwa 460 MiB bleiben für Archive nach einem Löschen nach AL-17.
 
-## Offene Prüfpunkte
+## Prüfpunkte
 
-1. genimage: eine Partition nur mit Größe für `audit` und `reserve`. Im `.img` stehen dort Nullen oder Löcher, die die Karte überspringt.
-2. Was an der Nummer von `persistent` hängt (7 → 8). `mp-growfs` liest sie aus sysfs, `/dev/disk/by-slot` geht über Namen.
+Erledigt am 2026-11-05:
+
+1. genimage: Eine Partition ohne Abbild ist dort ein Loch. Die IDP-Beschreibung, die jeder Build gegen ihr Schema prüft, verlangt aber für jede Partition ein Abbild mit Typ und Sparse-Fassung. `audit` und `reserve` bekommen deshalb je eine Datei ihrer Größe, die nur aus einem Loch besteht (`truncate`), als genimage-Abbild vom Typ `file`: im `.img` ein Loch, im Sparse-Abbild „Don't care“. Das ist zugleich, was das spätere Provisionieren aus dem IDP braucht.
+2. Die Nummer von `persistent` (7 → 8): Nichts hängt an ihr. `/dev/disk/by-slot` geht über GPT-Namen, `mp-growfs` liest die Nummer aus sysfs, der statische Rückfall `rpi-slot-static` kennt nur Boot- und Systemslots und greift nur mit `/boot/slot.map`.
 
 Erledigt durch den Bench-Test vom 2026-11-05: ob `oem idpwrite` den Inhalt von `audit` stehen lässt und ob `rpi-fastbootd` im TCP-Modus auf der Karte taugt. Beides ist mit Option a hinfällig; die Befunde stehen unter „Für das spätere Provisionieren aus dem IDP“.
 
@@ -117,7 +121,8 @@ Erst beim Provisionieren aus dem IDP oder beim ersten Umzug eines Slots in die R
 
 ## Umsetzung
 
-1. Layout, allgemein für Upstream wie `private_part`: eine Variable für die Größe der Reserve (leer = keine) und eine Möglichkeit, die private Partition ohne Dateisystem auszuliefern. `mp-base.yaml` setzt 16G, `audit` roh mit 1G und `device.storage_type: nvme`.
-2. Installerkarte: `audit` und `reserve` auslassen (LY-10), gen4 erkennen, `layout.txt` schreiben (LY-05), Mindestgröße (LY-08).
-3. Build-Prüfung der Nutzfläche (LY-06).
-4. `mp-bundle-guard`: Layoutprüfung (LY-07), kann nach gen4 kommen.
+1. Layout, allgemein für Upstream wie `private_part` (`image/gpt/ab_userdata`): `image.reserve_part_size` für die Reserve (leer = keine) und `image.private_part_fs: none` für eine private Partition ohne Dateisystem. `mp-base.yaml` setzt 16G, `audit` roh mit 1G und `device.storage_type: nvme`.
+2. `layout.txt` kommt mit der Schicht `mp-layout` ins Image, auf `bootconfig` (LY-05). Ein Update lässt diese Partition, wie sie ist.
+3. Installerkarte: Reserve nie schreiben und verwerfen, `audit` auf gen4 behalten, gen4 erkennen, im Feld veränderte Layouts nicht schreiben (LY-10), Mindestgröße 120 000 000 000 Bytes (LY-08, `mpinst.min_drive_bytes`).
+4. Build-Prüfung der Nutzfläche (LY-06): Hook `customize90-audit-capacity` der Schicht `mp-audit` legt das Dateisystem so an, wie `mp-auditd` es tun wird, und vergleicht es mit `auditcore.SHARES` mal zwei.
+5. Offen: `mp-bundle-guard` mit Layoutprüfung (LY-07), kann nach gen4 kommen.
