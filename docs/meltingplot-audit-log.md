@@ -28,6 +28,9 @@ Am 2026-11-04 hat am Labor-HMI die USB-Freigaberegel (`mp-hmi-usb-guard`, noch S
 18. Ist das Log gestört, bleiben SSH- und Connect-Anmeldungen möglich (Frage 11, AL-48).
 19. Gerätebindung über den OTP-Schlüssel kommt mit der Secure-Boot-Provisionierung, nicht vorher. Die Prüfung an den Laborgeräten hat ergeben: Der Schlüssel ist dort nicht erzeugt, und ohne Secure Boot könnte root die Lesesperre umgehen (Frage 13, AL-60). Bis dahin trägt der Starthash auf Typenschild, in der Betriebsanleitung und im ERP die Verankerung allein.
 20. Ohne Audit-Partition gibt es keine Ausnahme. Ein Gerät mit gen1 oder gen2 gilt wie eines, dessen Log nicht schreibbar ist, und verweigert ab Phase 2b Updates und die übrigen Eingriffe nach AL-48. Alle Bestandsgeräte werden vorher mit der Installerkarte auf gen3 überführt. Sonst ließe sich das Log abschalten, indem man die Partition aus der Partitionstabelle entfernt: Das Gerät sähe dann aus wie gen2 (Tim, 2026-11-04; AL-36, AL-48).
+21. Einträge der Klasse Änderung werden sofort dauerhaft geschrieben, ohne eigenes Siegel; versiegelt werden sie mit ihrer Epoche (Tim, 2026-11-05). Anlass war der Bench-Test von HMI rc.12: Nach einem harten Reset fehlte ein Eintrag spurlos, und seine Nummer wurde neu vergeben, weil auch journald nur alle fünf Minuten schreibt. Versuch und Betrieb bleiben bei höchstens fünf Sekunden (AL-51).
+22. `mp-audit` liegt in `/usr/bin` (Tim, 2026-11-05). Lesen und prüfen dürfen auch die Gruppe adm und damit das Connect-Konto (AL-20); schreiben lässt der Dienst nur root.
+23. `mp-audit record` ohne root bricht mit „only root records“ und Exit 2 ab und gibt nichts ins Journal (Tim, 2026-11-05). Ins Journal stellt nur root, und nur wenn der Dienst nicht läuft (AL-35).
 
 ## Grundlagen
 
@@ -318,7 +321,8 @@ Die Gefahr ist die Flut: Schriebe jedes Ereignis einzeln mit `fsync`, kostet das
 - **AL-50** Die Schreiblast des Logs ist durch die Konstruktion begrenzt, unabhängig davon, wie viele Ereignisse ankommen. Auf den Datenträger geht nur, was das Budget erlaubt (AL-40, AL-41). Alles andere wird im Speicher gezählt.
 - **AL-51** Schreiben in festen Abständen:
   - Einträge der Klasse Stand werden sofort und einzeln dauerhaft geschrieben; sie sind selten und durch die feste Menge begrenzt.
-  - Einträge der übrigen Klassen werden gesammelt und höchstens alle fünf Sekunden geschrieben. Ein Absturz kostet höchstens diese fünf Sekunden. Die laufende Nummer zeigt die Lücke (AL-11).
+  - Einträge der Klasse Änderung werden sofort geschrieben, ohne eigenes Siegel; versiegelt werden sie mit ihrer Epoche (Festlegung 21). Ihre Menge begrenzt das Budget der Klasse; AL-52 rechnet ohnehin mit einem Schreibvorgang je Eintrag.
+  - Einträge der Klassen Versuch und Betrieb werden gesammelt und höchstens alle fünf Sekunden geschrieben. Stürzt nur der Dienst ab, zeigt die laufende Nummer die Lücke, und er holt die Einträge aus dem Journal zurück (AL-11). Bei einem Stromausfall können Versuche und Betrieb der letzten fünf Sekunden ohne Spur fehlen, weil auch das Journal sie dann noch nicht geschrieben hat; E15 zeigt nur den unsauberen Neustart.
   - Zählerstände der Zusammenfassung: höchstens einmal pro Minute.
   - Betriebszeit (AL-49): höchstens alle zehn Minuten.
   - Kopie des Partners (AL-29): Einträge der Klasse Stand innerhalb einer Minute, alle übrigen höchstens stündlich, gebündelt.
@@ -550,7 +554,7 @@ Eine Skizze für das Ganze, nicht bindend:
   - `mp-base.yaml` setzt dann `audit` und `256M`.
 - Neuer Layer `mp-audit` in `mp-base.yaml`, also für beide Geräte, wie `mp-watchdog`.
   - `mp-audit.service`: hängt die Partition privat ein (`PrivateMounts=yes`, AL-34), formatiert sie nur nach AL-37 und nimmt Einträge über einen Socket an. Er führt laufende Nummer, Boot-Zähler, Prüfkette und den letzten Eintrag je Ereignis-ID und gibt jeden Eintrag zusätzlich ins Journal.
-  - `/usr/sbin/mp-audit` mit den Unterbefehlen `record`, `show`, `verify`, `reset` und `export`, alle über den Socket des Dienstes. Läuft der Dienst nicht, gibt `record` den Eintrag gekennzeichnet ins Journal (AL-35).
+  - `/usr/bin/mp-audit` (Festlegung 22) mit den Unterbefehlen `record`, `show`, `verify`, `reset` und `export`, alle über den Socket des Dienstes. Läuft der Dienst nicht, gibt `record` den Eintrag gekennzeichnet ins Journal (AL-35).
 - Unsere Wächter rufen `mp-audit record` direkt auf: USB-Wächter, `mp-bundle-guard`, `mp-role-guard`, `mp-hmi-net-guard`, `mp-dsf-firmware`, `mp-dsf-seed`.
 - `mp-audit-boot.service`, früh im Boot:
   - zählt den Boot-Zähler hoch,
