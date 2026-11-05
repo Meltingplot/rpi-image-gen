@@ -555,15 +555,17 @@ from outside the printer network.
 Both computers keep a lasting record of every intervention in their software,
 configuration and access, as the Machinery Regulation asks (Annex III 1.1.9).
 The requirements, with the reasoning behind each, are in
-[docs/meltingplot-audit-log.md](../docs/meltingplot-audit-log.md); the
-numbers AL-nn and E01 to E23 below refer to it.
+[docs/meltingplot-audit-log.md in Meltingplot/mp-audit](https://github.com/Meltingplot/mp-audit/blob/main/docs/meltingplot-audit-log.md);
+the numbers AL-nn and E01 to E23 below refer to it.
 
-The service, the tool, their tests and the phase plan are developed in
-[Meltingplot/mp-audit](https://github.com/Meltingplot/mp-audit), pinned here as
-the submodule `meltingplot/mp-audit`. The layer's `customize.overlay` is a link
-to the submodule's `overlay/`, and a build stops if the submodule is not checked
-out. The requirements, the layer and its check of the partition's capacity stay
-in this repository.
+The service, the tool, their tests, the requirements and the phase plan are
+developed in [Meltingplot/mp-audit](https://github.com/Meltingplot/mp-audit),
+pinned here as the submodule `meltingplot/mp-audit`. The layer's
+`customize.overlay` is a link to the submodule's `overlay/`, and a build stops if
+the submodule is not checked out. The layer and its check of the partition's
+capacity stay in this repository. The file `docs/meltingplot-audit-log.md` here
+is only a pointer, because installed images and comments in this repository name
+that path.
 
 `mp-audit.service` (layer `mp-audit`) keeps the log on the partition `audit`
 (1 GiB in layout gen4, 512M in gen3), which it mounts in its own namespace
