@@ -83,6 +83,8 @@ Raspberry Pi Imager ist dafür kein Ersatz: Er schreibt ebenfalls das ganze entp
 
 ## Übergang
 
+Die Laborgeräte ziehen erst mit gen4 um, nicht vorher noch einmal auf gen3; der Labor-Duet-Pi bleibt bis dahin auf der SD-Karte (Tim, 2026-11-05).
+
 Alle Bestandsgeräte gehen nach Festlegung 20 des Audit-Logs ohnehin noch einmal über die Installerkarte. gen4 kommt in diesen Durchgang; einen weiteren gibt es dafür nicht.
 
 - gen1, gen2: werden komplett neu geschrieben.
@@ -99,15 +101,20 @@ LY-06 verlangt, dass das eigene Log (256 MiB nach AL-40) und die Kopie des Partn
 1. genimage: eine Partition ohne Abbild (nur Größe) für `audit` und `reserve`, ohne dass das Image dadurch beschrieben wird.
 2. PMAP und `rpi-sb-provisioner`: eine Partition ohne Abbild, Reihenfolge und Größen wie beschrieben.
 3. Was an der Nummer von `persistent` hängt (7 → 8). `mp-growfs` liest sie aus sysfs, `/dev/disk/by-slot` geht über Namen.
-4. Wie der Connect-Updater den Zielslot findet: über Namen oder Nummern. Wichtig, falls je ein Slot in die Reserve umzieht.
-5. Ob der Bootloader des Pi 5 Boot-Partitionen mit höheren Nummern annimmt (`autoboot.txt`). Nur nötig, falls Boot-Slots je umziehen; heute sind sie zu 38 % belegt.
-6. IDP: eine Partition ohne Abbild in der Beschreibung (`reserve`, rohes `audit`), und dass `oem idpwrite` den Inhalt von `audit` an gleicher Stelle stehen lässt. Am Bench-HMI testen.
-7. `rpi-fastbootd` im TCP-Modus auf der Karte, mit dem Image der Karte (trixie, `librpifwcrypto0` aus dem Archiv).
+4. IDP: eine Partition ohne Abbild in der Beschreibung (`reserve`, rohes `audit`), und dass `oem idpwrite` den Inhalt von `audit` an gleicher Stelle stehen lässt.
+5. `rpi-fastbootd` im TCP-Modus auf der Karte, mit dem Image der Karte (trixie, `librpifwcrypto0` aus dem Archiv).
+
+Punkte 4 und 5 werden auf einer leeren USB-SSD am Bench-HMI getestet, damit dessen NVMe unberührt bleibt (Tim, 2026-11-05).
+
+Erst beim ersten Umzug eines Slots in die Reserve zu klären, für gen4 nicht nötig (Tim, 2026-11-05):
+
+- Wie der Connect-Updater den Zielslot findet: über Namen oder Nummern.
+- Ob der Bootloader des Pi 5 Boot-Partitionen mit höheren Nummern annimmt (`autoboot.txt`). Heute sind die Boot-Slots zu 38 % belegt.
 
 ## Umsetzung
 
 1. Layout, allgemein für Upstream wie `private_part`: eine Variable für die Größe der Reserve (leer = keine) und eine Möglichkeit, die private Partition ohne Dateisystem auszuliefern. `mp-base.yaml` setzt 16G und `audit` roh.
-2. `rpi-fastbootd`: das Paket aus `pi-gen-micro` pinnen (Dateiname, sha256), im Lizenzhinweis als GPLv3 führen, Raspberry Pi auf die `copyright`-Datei hinweisen (LY-10, Festlegung 6).
+2. `rpi-fastbootd`: das Paket aus `pi-gen-micro` pinnen (Dateiname, sha256) und im Lizenzhinweis als GPLv3 führen (LY-10, Festlegung 6).
 3. Installerkarte: aus dem IDP (LY-10), gen4 erkennen, `layout.txt` schreiben (LY-05), Mindestgröße (LY-08).
 4. Build-Prüfung der Nutzfläche (LY-06).
 5. `mp-bundle-guard`: Layoutprüfung (LY-07), kann nach gen4 kommen.
