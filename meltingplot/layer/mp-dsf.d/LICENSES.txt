@@ -42,6 +42,8 @@ Meltingplot software
       https://github.com/Meltingplot/dwc-quality-assurance
     The web parts of Vigil and QualityAssurance include the libraries
     Chart.js and @kurkle/color: MIT, see section 4.
+  mp-audit, the audit log: BSD-3-Clause.
+  https://github.com/Meltingplot/mp-audit
   The image definition and build, based on rpi-image-gen by Raspberry Pi Ltd:
   BSD-3-Clause.
   https://github.com/Meltingplot/rpi-image-gen
@@ -69,12 +71,15 @@ and the Raspberry Pi boot firmware, which carry no source obligation:
   Image definition and build
     https://github.com/Meltingplot/rpi-image-gen
     Release tag duet-pi5/v@VERSION@. The file release.json in that release
-    names the exact commits of the image definition and of the printer
-    configuration that this image was built from, and the checksums of every
-    delivered file.
+    names the exact commits of the image definition, of the printer
+    configuration and of the audit log that this image was built from, and the
+    checksums of every delivered file.
 
   Printer configuration
     https://github.com/Meltingplot/chx350-config
+
+  Audit log
+    https://github.com/Meltingplot/mp-audit
 
   Duet3D software
     https://github.com/Duet3D

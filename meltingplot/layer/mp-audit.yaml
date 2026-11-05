@@ -10,7 +10,8 @@
 #  the log can be checked with nothing but its start hash. Budgets per class
 #  keep a flood from crowding out what matters. mp-audit records, shows and
 #  checks it. Without the partition it writes to the journal only and says
-#  so on every boot.
+#  so on every boot. The service and the tool come from the pinned submodule
+#  meltingplot/mp-audit; customize.overlay here is a link into it.
 # X-Env-Layer-Version: 1.0.0
 # X-Env-Layer-RequiresProvider: systemd
 # METAEND

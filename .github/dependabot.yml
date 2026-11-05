@@ -1,8 +1,9 @@
 # Dependabot keeps what it can read up to date: the actions the workflows run
-# and the commit of the printer configuration submodule. The component pins in
-# meltingplot/layer/mp-dsf.yaml are outside what Dependabot understands and stay
-# manual, see meltingplot/README.md. The alerts for the image contents come
-# from the SBOM the release workflow submits, not from any manifest here.
+# and the commits of the submodules (printer configuration, audit log). The
+# component pins in meltingplot/layer/mp-dsf.yaml are outside what Dependabot
+# understands and stay manual, see meltingplot/README.md. The alerts for the
+# image contents come from the SBOM the release workflow submits, not from any
+# manifest here.
 
 version: 2
 updates:

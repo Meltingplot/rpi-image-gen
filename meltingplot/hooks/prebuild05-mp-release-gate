@@ -97,6 +97,12 @@ if [[ -n ${IGconf_dsf_suite:-} ]]; then
          problems+=("the printer configuration is at $commit, which carries no release tag")
       fi
    fi
+
+   audit_dir=${IGTOP:?}/meltingplot/mp-audit
+   if ! git -C "$audit_dir" describe --tags --exact-match HEAD >/dev/null 2>&1; then
+      commit=$(git -C "$audit_dir" rev-parse --short HEAD 2>/dev/null || echo unknown)
+      problems+=("the audit log is at $commit, which carries no release tag")
+   fi
 fi
 
 if ((${#problems[@]})); then
