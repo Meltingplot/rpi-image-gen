@@ -20,7 +20,7 @@ Weitere Änderungen werden kommen. Daraus folgt ein Layout, das spätere Änderu
 3. Sie wird leer ausgeliefert und erst per OTA genutzt, wie die Audit-Partition in Phase 1 und 2.
 4. Zielmedium ist immer eine SSD mit mindestens 128 GB, in der Regel 256 GB. SD-Karten sind kein Zielmedium; die Karte im Labordrucker wird ersetzt.
 5. Mit gen4 wächst `audit` von 512 MiB auf 1 GiB, damit eigenes Log und Kopie des Partners sicher Platz haben.
-6. `rpi-fastbootd` wird ohne `libcryptsetup` gebaut und bleibt damit Apache 2.0. Mit `libcryptsetup` gelinkt wäre das ganze Programm GPLv3.
+6. Die Karte nutzt das `rpi-fastbootd`-Paket, das Raspberry Pi für den Provisioner baut, auch wenn es dadurch GPLv3 ist. Das Image soll ohnehin nicht geschlossen sein: Sein Quelltext liegt auf GitHub, und GPLv3-Programme wie `bash` und `coreutils` sind schon enthalten.
 
 ## Layout gen4
 
@@ -75,7 +75,9 @@ Jedes Release enthält schon das IDP-Archiv (`<image>.idp.tar.zst`, beim HMI 665
 
 `rpi-fastbootd` braucht kein Secure Boot (Quelltext und `rpi-sb-provisioner` 2.3.4, geprüft 2026-11-05): Die Gerätesperre ist fest aus (`GetDeviceLockStatus()` gibt `false` zurück). Den Geräteschlüssel im OTP verlangt `oem idpinit` nur für verschlüsselte Container, die gen4 nicht hat. Der Provisioner signiert Boot-Slots nur bei `PROVISIONING_STYLE=secure-boot`. Mit Secure Boot müssen die Boot-Slots signiert ins IDP; das kann der Build über `bootsign_cmd`.
 
-`rpi-fastbootd` gibt es nicht als eigenes Paket im apt-Archiv von Raspberry Pi (geprüft 2026-11-05: `rpi-sb-provisioner` 2.3.4 und `librpifwcrypto0` sind dort, `rpi-fastbootd` nicht). Es steckt nur in den Gadget-Images des Provisioners, die über USB von einem zweiten Rechner gestartet werden; für die Karte im Feld taugt das nicht. Vorschlag: bei Raspberry Pi anfragen, `rpi-fastbootd` ins Archiv aufzunehmen, und bis dahin das Paket mit dessen eigenem `build-package.sh` aus dem offiziellen Repository an einem festen Commit in unserer CI bauen und als Release pinnen, wie die DSF-Pakete. Gebaut wird nach Festlegung 6 ausdrücklich mit `./build-package.sh --no-cryptsetup`: Ohne die Option linkt das Skript `libcryptsetup`, und das Programm wird GPLv3. Der Build prüft das am fertigen Paket und bricht ab, wenn es von `libcryptsetup` abhängt (`dpkg-deb -f <paket> Depends`). Braucht die Karte je Verschlüsselung, ruft `rpi-fastbootd` dafür laut README das Programm `cryptsetup` aus `cryptsetup-bin` auf, statt die Bibliothek zu linken; das Programm selbst bleibt Apache 2.0.
+Woher `rpi-fastbootd` kommt (geprüft 2026-11-05): Im apt-Archiv von Raspberry Pi gibt es kein eigenes Paket; `rpi-sb-provisioner` 2.3.4 und `librpifwcrypto0` sind dort. Der Provisioner installiert auch nichts auf dem Gerät. Er startet es per `rpiboot` über USB mit einem Fastboot-Gadget aus seinem Paket (`/var/lib/rpi-sb-provisioner/fastboot-gadget-pi5-family.img`), das im RAM läuft und `fastbootd -v -i usb+tcp` startet. Das Gadget baut Raspberry Pi mit `pi-gen-micro` (Konfiguration `fastboot`); `rpi-fastbootd` liegt dort als fertiges Paket im Repository: `internal/packages/rpi-fastbootd_14.0.0~git20261026.adf29cb_arm64.deb`.
+
+Die Karte nimmt genau dieses Paket, gepinnt über Dateiname und sha256, ohne eigenen Build (Festlegung 6). Es ist mit `libcryptsetup` (GPL-2+) gelinkt; weil Apache 2.0 nur mit GPLv3 vereinbar ist, steht das Programm damit unter GPLv3. Seine `copyright`-Datei nennt trotzdem nur Apache-2.0. Im Lizenzhinweis steht es deshalb als GPLv3, und sein Quelltext (rpi-fastbootd, Commit adf29cb) kommt ins Quellarchiv des Releases. Die übrigen Abhängigkeiten kommen aus Debian (`android-libbase`, `android-libcutils`, `android-liblog`, `libcryptsetup12`) und aus dem Archiv von Raspberry Pi (`libblockdeviceid1`, `libflashrom1`, `raspi-utils-core`, `librpifwcrypto0`).
 
 Raspberry Pi Imager ist dafür kein Ersatz: Er schreibt ebenfalls das ganze entpackte Image, und auf der Karte ohne Bildschirm wäre er als Qt-Anwendung eine schwere Abhängigkeit.
 
@@ -105,7 +107,7 @@ LY-06 verlangt, dass das eigene Log (256 MiB nach AL-40) und die Kopie des Partn
 ## Umsetzung
 
 1. Layout, allgemein für Upstream wie `private_part`: eine Variable für die Größe der Reserve (leer = keine) und eine Möglichkeit, die private Partition ohne Dateisystem auszuliefern. `mp-base.yaml` setzt 16G und `audit` roh.
-2. `rpi-fastbootd` als gepinntes Paket, gebaut mit `--no-cryptsetup` und geprüft (siehe LY-10, Festlegung 6), Anfrage bei Raspberry Pi.
+2. `rpi-fastbootd`: das Paket aus `pi-gen-micro` pinnen (Dateiname, sha256), im Lizenzhinweis als GPLv3 führen, Raspberry Pi auf die `copyright`-Datei hinweisen (LY-10, Festlegung 6).
 3. Installerkarte: aus dem IDP (LY-10), gen4 erkennen, `layout.txt` schreiben (LY-05), Mindestgröße (LY-08).
 4. Build-Prüfung der Nutzfläche (LY-06).
 5. `mp-bundle-guard`: Layoutprüfung (LY-07), kann nach gen4 kommen.
