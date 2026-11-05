@@ -62,14 +62,16 @@ Die Installerkarte schreibt heute das ganze Image mit `zstd -dc | dd` und lässt
 
 Jedes Release enthält schon das IDP-Archiv (`<image>.idp.tar.zst`, beim HMI 665 MB statt 1,3 GB für `.img.zst`). Es beschreibt das Layout (PMAP) und trägt je Partition ein Abbild im Android-Sparse-Format, das nur belegte Blöcke enthält. `rpi-sb-provisioner` installiert damit; Upstream nennt das ausdrücklich schneller als `dd` bei Abbildern mit viel Leerraum (`docs/provisioning/index.adoc`).
 
-- **LY-10** Ab gen4 installiert die Karte aus dem IDP:
-  - Partitionstabelle aus der Layoutbeschreibung anlegen;
-  - je Partition nur die belegten Blöcke schreiben;
-  - `reserve` und `audit` haben kein Abbild und werden nicht beschrieben;
-  - prüfen je Partition statt über das ganze Image;
-  - gen3 und gen4 erkennen und `audit` übernehmen, wie bisher.
+- **LY-10** Ab gen4 installiert die Karte aus dem IDP, mit der Software von Raspberry Pi und ohne eigenen Nachbau (Tim, 2026-11-05: so nah wie möglich an `rpi-sb-provisioner`):
+  - Gerätseitig `rpi-fastbootd`, derselbe Dienst, den `rpi-sb-provisioner` in seinem Fastboot-Gadget auf das Gerät bringt. Auf der Karte läuft er lokal im TCP-Modus (`fastbootd -i tcp`, Port 5554, so dokumentiert).
+  - Clientseitig der `fastboot`-Client aus Debian und `bin/idp.sh` aus rpi-image-gen gegen `tcp:127.0.0.1`: Beschreibung übergeben, `oem idpinit`, `oem idpwrite` (legt die Partitionstabelle an), je Partition `fastboot flash` mit dem Sparse-Abbild, `oem idpdone`. Das sind dieselben Schritte wie in `rpi-idp-provisioner.sh`.
+  - `reserve` und `audit` haben kein Abbild und werden nicht beschrieben.
+  - Eine Abweichung vom Provisioner: kein `fastboot erase` vorab. `rpi-idp-provisioner.sh` löscht damit den ganzen Datenträger; das Audit-Log ginge bei einer Neuinstallation verloren (AL-18). `bin/idp.sh` löscht nicht, und `oem idpwrite` legt nach dem Quelltext nur die Partitionstabelle neu an und hängt die Partitionen der Reihe nach an. Liegt `audit` an derselben Stelle, bleibt sein Inhalt erhalten.
+  - Unser eigener Teil bleibt die Bedienung der Karte: LEDs, Bildschirm, `identity.conf`, Bootloader-Update, Freigabe einer belegten SSD, `installer.txt`, `layout.txt`.
 
-  Karte und späteres Secure-Boot-Provisioning nutzen damit dieselbe Layoutquelle.
+  Karte und späteres Secure-Boot-Provisioning nutzen damit dieselbe Layoutquelle und dieselbe Software auf dem Gerät.
+
+`rpi-fastbootd` gibt es nicht als eigenes Paket im apt-Archiv von Raspberry Pi (geprüft 2026-11-05: `rpi-sb-provisioner` 2.3.4 und `librpifwcrypto0` sind dort, `rpi-fastbootd` nicht). Es steckt nur in den Gadget-Images des Provisioners, die über USB von einem zweiten Rechner gestartet werden; für die Karte im Feld taugt das nicht. Vorschlag: bei Raspberry Pi anfragen, `rpi-fastbootd` ins Archiv aufzunehmen, und bis dahin das Paket mit dessen eigenem `build-package.sh` aus dem offiziellen Repository an einem festen Commit in unserer CI bauen und als Release pinnen, wie die DSF-Pakete. Ohne `libcryptsetup` gebaut bleibt es Apache 2.0; Verschlüsselung braucht die Karte heute nicht.
 
 Raspberry Pi Imager ist dafür kein Ersatz: Er schreibt ebenfalls das ganze entpackte Image, und auf der Karte ohne Bildschirm wäre er als Qt-Anwendung eine schwere Abhängigkeit.
 
@@ -95,10 +97,13 @@ Alle Bestandsgeräte gehen nach Festlegung 20 des Audit-Logs ohnehin noch einmal
 3. Was an der Nummer von `persistent` hängt (7 → 8). `mp-growfs` liest sie aus sysfs, `/dev/disk/by-slot` geht über Namen.
 4. Wie der Connect-Updater den Zielslot findet: über Namen oder Nummern. Wichtig, falls je ein Slot in die Reserve umzieht.
 5. Ob der Bootloader des Pi 5 Boot-Partitionen mit höheren Nummern annimmt (`autoboot.txt`). Nur nötig, falls Boot-Slots je umziehen; heute sind sie zu 38 % belegt.
+6. IDP: eine Partition ohne Abbild in der Beschreibung (`reserve`, rohes `audit`), und dass `oem idpwrite` den Inhalt von `audit` an gleicher Stelle stehen lässt. Am Bench-HMI testen.
+7. `rpi-fastbootd` im TCP-Modus auf der Karte, mit dem Image der Karte (trixie, `librpifwcrypto0` aus dem Archiv).
 
 ## Umsetzung
 
 1. Layout, allgemein für Upstream wie `private_part`: eine Variable für die Größe der Reserve (leer = keine) und eine Möglichkeit, die private Partition ohne Dateisystem auszuliefern. `mp-base.yaml` setzt 16G und `audit` roh.
-2. Installerkarte: aus dem IDP (LY-10), gen4 erkennen, `layout.txt` schreiben (LY-05), Mindestgröße (LY-08).
-3. Build-Prüfung der Nutzfläche (LY-06).
-4. `mp-bundle-guard`: Layoutprüfung (LY-07), kann nach gen4 kommen.
+2. `rpi-fastbootd` als gepinntes Paket (siehe LY-10), Anfrage bei Raspberry Pi.
+3. Installerkarte: aus dem IDP (LY-10), gen4 erkennen, `layout.txt` schreiben (LY-05), Mindestgröße (LY-08).
+4. Build-Prüfung der Nutzfläche (LY-06).
+5. `mp-bundle-guard`: Layoutprüfung (LY-07), kann nach gen4 kommen.
