@@ -12,7 +12,7 @@
 # (rpi-connect-ota 1.3.16), minutes before it restarts into it. So it also
 # stops the releases built before mp-role-guard.
 #
-# The bundle's file name tells the image. The release workflow names it
+# The bundle's file name tells the image. hooks/deploy20-mp-release names it
 # <image>-<version>.update.tar.zst, and device.conf holds this image's
 # <image>. A Meltingplot bundle of another image (mp-*) is stopped. A file
 # named in any other way goes ahead and is only logged, so that a change in

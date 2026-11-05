@@ -27,6 +27,18 @@ MP_BUILT=$(date -u -Iseconds)
 
 cd "$DEPLOY"
 
+# rpi-image-gen publishes the update bundle as
+# ota-<image name>-<image version>.tar.zst, and our image name already ends in
+# the version. The bundle keeps the name it always had: mp-bundle-guard tells
+# the image from it, also on devices already in the field, and lets any other
+# name through. Its checksum files follow, they hold nothing but the hash.
+if [[ ${IGconf_image_updatefmt:-none} != none ]]; then
+   ota="ota-$IGconf_image_name-$IGconf_image_version.tar.zst"
+   for f in "$ota" "$ota".*sha256sum; do
+      mv -f "$f" "$IGconf_image_name.update.tar.zst${f#"$ota"}"
+   done
+fi
+
 python3 - "$DEPLOY" <<'PY'
 import json, os, pathlib, sys
 

@@ -96,6 +96,7 @@ Artefacts land in `work/deploy-<version>/`:
 |---|---|
 | `mp-duet-pi5-<version>.img.zst` | full image, for writing to an SD card or NVMe drive |
 | `mp-duet-pi5-<version>.update.tar.zst` | update bundle, for Raspberry Pi Connect |
+| `mp-duet-pi5-<version>.update.tar.zst.sha256sum`, `.manifest.sha256sum` | the bundle's two hashes, see *Updating a fleet* |
 | `mp-duet-pi5-<version>.idp.tar.zst` | provisioning archive, for rpi-sb-provisioner |
 | `filesystem-<version>.sbom.zst` | software bill of materials |
 | `release.json`, `SHA256SUMS` | what went into this build, and its checksums |
@@ -616,7 +617,12 @@ and the export at the panel follow in the next steps of phase 2 (see the
    changelog, which the printer points its operator to after the update.
 2. Register the artefact in the Raspberry Pi Connect dashboard under *Remote
    update*: the URL of `mp-duet-pi5-<version>.update.tar.zst` from the release,
-   and its SHA-256 from `SHA256SUMS`.
+   and its SHA-256 from `SHA256SUMS`. That is the hash for a device running
+   `rpi-connect-ota` up to 1.3.18, the newest there is so far. The bundle also
+   carries a manifest for later versions, which `connectota.bfmt` in
+   `config/mp-base.yaml` keeps readable for the older ones. A device whose
+   current image brings a version that reads manifests wants the hash from
+   `<bundle>.manifest.sha256sum` instead.
 3. Deploy it to a device. Once the printer is idle, the device writes the
    bundle to the root filesystem it is not running from, restarts into it
    once, and keeps it if it comes up.
@@ -679,7 +685,9 @@ To go back, deploy the previous artefact again. It stays registered.
    connector's state goes back to idle, Connect shows the deployment as
    failed with the reason, and the connector runs again. A bundle named in
    any other way goes ahead, with a line in the journal, so that a change in
-   where the bundles are kept cannot cut the devices off from updates.
+   where the bundles are kept cannot cut the devices off from updates. That
+   is why `hooks/deploy20-mp-release` replaces the `ota-…` name rpi-image-gen
+   gives the bundle: the guard would wave it through.
 3. The bootloader starts the new slot once. If it does not come up, the next
    reset returns to the old one. If it comes up, the connector commits it
    within seconds of boot and reports the deployment as succeeded. That is the
