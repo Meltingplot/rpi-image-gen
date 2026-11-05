@@ -1,0 +1,104 @@
+# Speicherlayout der Drucker-Pis: Reserve und Regeln für Änderungen
+
+Stand 2026-11-05, Entwurf zur Abstimmung mit Tim. Gilt für beide Images (`duet-pi5.yaml`, `hmi-pi5.yaml`), die sich das Layout über `mp-base.yaml` teilen.
+
+## Anlass
+
+Jede Änderung am Layout hat bisher einen Besuch mit der Installerkarte gebraucht, weil ein Update das Partitionslayout eines Geräts nicht ändert:
+
+- gen1 → gen2: Systemslots von 1G (Duet-Pi) bzw. 2G (HMI) auf 4G (PR #111).
+- gen2 → gen3: neue Partition `audit` mit 512 MiB (PR #123). Ausgeliefert leer, genutzt erst per OTA in Phase 2 des Audit-Logs.
+
+Der Bench-Test von HMI rc.12 am 2026-11-04 hat dazu gezeigt, dass auch das Dateisystem einer Partition beim Build festgelegt wird: Upstream formatiert jede ext4-Datenpartition mit `-b <Seitengröße>`, auf dem Pi 5 also mit 16-KiB-Blöcken. Das Journal wächst damit auf 64 MiB, von den 512 MiB der Audit-Partition sind nur 440 MiB nutzbar.
+
+Weitere Änderungen werden kommen. Daraus folgt ein Layout, das spätere Änderungen ohne Kartenbesuch zulässt.
+
+## Festlegungen (Tim, 2026-11-05)
+
+1. Das Layout bekommt eine Reserve, gedacht für spätere Änderungen.
+2. Die Reserve liegt zwischen `audit` und `persistent`, ungefähr 8 bis 16 GB.
+3. Sie wird leer ausgeliefert und erst per OTA genutzt, wie die Audit-Partition in Phase 1 und 2.
+4. Zielmedium ist immer eine SSD mit mindestens 128 GB, in der Regel 256 GB. SD-Karten sind kein Zielmedium; die Karte im Labordrucker wird ersetzt.
+
+## Layout gen4
+
+Am Beispiel der 256-GB-SSD des Bench-HMI (238,5 GiB):
+
+| Nr. | Name | Größe | Inhalt bei Auslieferung | heute belegt |
+|---|---|---|---|---|
+| 1 | `bootconfig` | 32 MiB | FAT, `autoboot.txt`, `identity.conf`, `installer.txt` | – |
+| 2, 3 | `boot_a`, `boot_b` | je 128 MiB | FAT mit `boot.img` | 49 MiB (38 %) |
+| 4, 5 | `system_a`, `system_b` | je 4 GiB | erofs | 0,45 GB Duet-Pi, 0,7 GB HMI |
+| 6 | `audit` | 512 oder 640 MiB, siehe „Zu entscheiden“ | **kein Dateisystem** | – |
+| 7 | `reserve` | 16 GiB | **kein Dateisystem, nie eingehängt** | – |
+| 8 | `persistent` | Rest | ext4, wächst beim ersten Boot bis zum Plattenende | 254 MB |
+
+Gegenüber gen3 neu sind `reserve` und das rohe `audit`. `persistent` wird damit Partition 8 statt 7 und bleibt die letzte Partition: `mp-growfs` und `expand-to-fit` beim Provisionieren bleiben unverändert.
+
+16 GiB sind 12,5 % einer 128-GB-SSD und 6,7 % einer 256-GB-SSD. Begründung der Größe unter LY-03.
+
+## Regeln
+
+- **LY-01** Die Reserve ist eine Partition namens `reserve` ohne Dateisystem. Sie wird nie eingehängt; ihr Inhalt ist undefiniert. Weder Installer noch Image schreiben Daten hinein.
+- **LY-02** Nur ein Update nimmt sich Platz aus der Reserve, nie ein Mensch von Hand. Es verkleinert den GPT-Eintrag `reserve` und legt die neue Partition daneben an, oder es lässt `audit` direkt in die Reserve hineinwachsen. Das geht im laufenden Betrieb, weil die Reserve nie eingehängt ist (`sgdisk`, `partx`). Jeder solche Schritt
+  - ändert nur Partitionen, die nicht eingehängt sind,
+  - lässt sich nach einem Stromausfall an jeder Stelle wieder aufnehmen und ist wiederholbar,
+  - schreibt die neue Generation fort (LY-05) und einen Eintrag ins Audit-Log.
+- **LY-03** Wofür die Reserve reicht, mit 16 GiB:
+  - neue Partitionen, wie `audit` in gen3;
+  - `audit` vergrößern, ohne Umkopieren, weil es direkt davor liegt;
+  - beide Systemslots verdoppeln, mit 8 GiB: `system_b` neu in der Reserve, umschalten, dann `system_a` über die alte Fläche von A und B;
+  - `persistent` verschlüsseln (LUKS, Upstream-Layout `cryptdata`): Inhalt in eine neue verschlüsselte Partition in der Reserve kopieren, das alte `persistent` löschen, die neue Partition über dessen Fläche bis zum Plattenende vergrößern. Das geht, weil beide nebeneinander liegen, und ohne Verkleinern eines Dateisystems.
+- **LY-04** Partitionen, die erst später genutzt werden, werden ohne Dateisystem ausgeliefert. Der Dienst, der sie nutzt, formatiert sie selbst, mit den Vorgaben des Geräts. Für `audit` tut `mp-auditd` das schon (AL-37); auf dem Pi 5 entstehen dann 4-KiB-Blöcke und ein 16-MiB-Journal. Nutzbar sind dann 487 MiB von 512 MiB bzw. 613 MiB von 640 MiB (gemessen mit `mkfs.ext4 -b 4096`).
+- **LY-05** Die Generation steht ausdrücklich auf dem Gerät: `meltingplot/layout.txt` auf `bootconfig` mit `layout=gen4`. Der Installer schreibt sie, jede spätere Änderung nach LY-02 schreibt sie fort. Erkennen über Partitionsgrößen bleibt nur für gen1 bis gen3.
+- **LY-06** Geplant wird nach Nutzfläche, nicht nach Partitionsgröße. Der Build prüft für jede Partition mit festem Zweck, dass ihr Dateisystem fasst, was geplant ist. Für `audit`: Die Anteile des eigenen Logs und die Kopie des Partners (AL-07, AL-40) passen in ein Dateisystem, wie es das Gerät anlegt. Sonst bricht der Build ab.
+- **LY-07** Ein Update muss zum Layout passen. `mp-bundle-guard` verweigert ein Bundle, dessen Boot- oder Systemabbild nicht in die Slots des Geräts passt oder das eine neuere Generation verlangt, als das Gerät hat.
+- **LY-08** Der Installer schreibt nur auf eine SSD mit mindestens 120 000 000 000 Bytes (eine 128-GB-SSD hat etwas mehr) und bricht sonst ab.
+- **LY-09** Notweg, wenn die Reserve einmal nicht reicht: `persistent` als letzte Partition von hinten verkleinern, offline in der Boot-Ramdisk (`resize2fs`, dann `sgdisk`). Das ist riskant, weil ein Stromausfall während `resize2fs` das Dateisystem beschädigen kann. Daher nur beschrieben, nicht gebaut.
+
+## Installation aus dem IDP
+
+Die Installerkarte schreibt heute das ganze Image mit `zstd -dc | dd` und lässt nur `audit` aus, wenn sie gen3 übernimmt. Damit würde sie auch 16 GiB Nullen für die Reserve schreiben und beim Prüfen zurücklesen.
+
+Jedes Release enthält schon das IDP-Archiv (`<image>.idp.tar.zst`, beim HMI 665 MB statt 1,3 GB für `.img.zst`). Es beschreibt das Layout (PMAP) und trägt je Partition ein Abbild im Android-Sparse-Format, das nur belegte Blöcke enthält. `rpi-sb-provisioner` installiert damit; Upstream nennt das ausdrücklich schneller als `dd` bei Abbildern mit viel Leerraum (`docs/provisioning/index.adoc`).
+
+- **LY-10** Ab gen4 installiert die Karte aus dem IDP:
+  - Partitionstabelle aus der Layoutbeschreibung anlegen;
+  - je Partition nur die belegten Blöcke schreiben;
+  - `reserve` und `audit` haben kein Abbild und werden nicht beschrieben;
+  - prüfen je Partition statt über das ganze Image;
+  - gen3 und gen4 erkennen und `audit` übernehmen, wie bisher.
+
+  Karte und späteres Secure-Boot-Provisioning nutzen damit dieselbe Layoutquelle.
+
+Raspberry Pi Imager ist dafür kein Ersatz: Er schreibt ebenfalls das ganze entpackte Image, und auf der Karte ohne Bildschirm wäre er als Qt-Anwendung eine schwere Abhängigkeit.
+
+## Übergang
+
+Alle Bestandsgeräte gehen nach Festlegung 20 des Audit-Logs ohnehin noch einmal über die Installerkarte. gen4 kommt in diesen Durchgang; einen weiteren gibt es dafür nicht.
+
+- gen1, gen2: werden komplett neu geschrieben.
+- gen3 (nur das Bench-HMI): Bleibt `audit` bei 512 MiB, liegt es in gen4 an derselben Stelle und wird übernommen, mit seinem vorhandenen Dateisystem. Mit 640 MiB wird es neu angelegt; auf dem Bench-HMI liegt nur ein Testlog. `persistent` rückt in beiden Fällen nach hinten und wird neu geschrieben.
+- Für die Laborgeräte bleibt es beim Sichern und Zurückspielen von `/persistent` von Hand.
+
+## Zu entscheiden
+
+**Größe von `audit`.** LY-06 verlangt, dass das eigene Log (256 MiB nach AL-40) und die Kopie des Partners (noch einmal 256 MiB, AL-07) in das Dateisystem passen. Mit 512 MiB und 487 MiB Nutzfläche geht das nicht.
+
+- **640 MiB (Vorschlag):** 613 MiB nutzbar. Die Anteile bleiben wie entworfen; etwa 100 MiB bleiben für Archive nach einem Löschen nach AL-17. Kostet 128 MiB mehr, das gen3-Testlog des Bench-HMI wird nicht übernommen.
+- **512 MiB:** Die Anteile schrumpfen auf je 200 MiB (der Budget-Test bleibt grün, die Klasse Betrieb hat dann etwa 18 % Luft), und `audit` kann später in die Reserve wachsen (LY-03).
+
+## Offene Prüfpunkte
+
+1. genimage: eine Partition ohne Abbild (nur Größe) für `audit` und `reserve`, ohne dass das Image dadurch beschrieben wird.
+2. PMAP und `rpi-sb-provisioner`: eine Partition ohne Abbild, Reihenfolge und Größen wie beschrieben.
+3. Was an der Nummer von `persistent` hängt (7 → 8). `mp-growfs` liest sie aus sysfs, `/dev/disk/by-slot` geht über Namen.
+4. Wie der Connect-Updater den Zielslot findet: über Namen oder Nummern. Wichtig, falls je ein Slot in die Reserve umzieht.
+5. Ob der Bootloader des Pi 5 Boot-Partitionen mit höheren Nummern annimmt (`autoboot.txt`). Nur nötig, falls Boot-Slots je umziehen; heute sind sie zu 38 % belegt.
+
+## Umsetzung
+
+1. Layout, allgemein für Upstream wie `private_part`: eine Variable für die Größe der Reserve (leer = keine) und eine Möglichkeit, die private Partition ohne Dateisystem auszuliefern. `mp-base.yaml` setzt 16G und `audit` roh.
+2. Installerkarte: aus dem IDP (LY-10), gen4 erkennen, `layout.txt` schreiben (LY-05), Mindestgröße (LY-08).
+3. Build-Prüfung der Nutzfläche (LY-06).
+4. `mp-bundle-guard`: Layoutprüfung (LY-07), kann nach gen4 kommen.
