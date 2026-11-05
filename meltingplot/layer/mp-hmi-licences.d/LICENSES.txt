@@ -36,6 +36,8 @@ Operator panel
     network: GPL-2.0. polkit: LGPL-2.0-or-later.
 
 Meltingplot software
+  mp-audit, the audit log: BSD-3-Clause.
+  https://github.com/Meltingplot/mp-audit
   The image definition and build, based on rpi-image-gen by Raspberry Pi Ltd:
   BSD-3-Clause.
   https://github.com/Meltingplot/rpi-image-gen
@@ -70,8 +72,11 @@ the firmware, which carry no source obligation:
   Image definition and build
     https://github.com/Meltingplot/rpi-image-gen
     Release tag hmi-pi5/v@VERSION@. The file release.json in that release
-    names the exact commit of the image definition that this image was built
-    from, and the checksums of every delivered file.
+    names the exact commits of the image definition and of the audit log that
+    this image was built from, and the checksums of every delivered file.
+
+  Audit log
+    https://github.com/Meltingplot/mp-audit
 
   Debian packages
     https://deb.debian.org/debian (source packages, by the version named in

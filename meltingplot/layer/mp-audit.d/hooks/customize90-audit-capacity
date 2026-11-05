@@ -12,6 +12,14 @@
 set -eu
 
 root=$1
+
+# The layer's overlay is a link into the submodule. Without a checkout of it
+# the link points nowhere, and the build skips a missing overlay without a word.
+if [ ! -f "$root/usr/lib/meltingplot/mp-audit/mp-auditd" ]; then
+   echo "mp-audit: not in the image, is the submodule meltingplot/mp-audit checked out? (git submodule update --init)" >&2
+   exit 1
+fi
+
 [ -n "${IGconf_image_private_part_name:-}" ] || exit 0
 size=${IGconf_image_private_part_size:?}
 

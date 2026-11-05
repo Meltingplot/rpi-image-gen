@@ -2,3 +2,7 @@
 	path = meltingplot/chx350-config
 	url = https://github.com/Meltingplot/chx350-config.git
 	branch = 3.7
+[submodule "meltingplot/mp-audit"]
+	path = meltingplot/mp-audit
+	url = https://github.com/Meltingplot/mp-audit.git
+	branch = main

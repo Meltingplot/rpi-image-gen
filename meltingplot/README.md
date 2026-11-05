@@ -201,9 +201,9 @@ replaced firmware file and package. Everything else in the file is static: a
 new component, pin or source repository means editing it.
 
 `.github/dependabot.yml` also lets Dependabot propose updates for the actions
-the workflows use and for the commit of the printer configuration submodule.
-The component pins in `layer/mp-dsf.yaml` are not something Dependabot can
-read and stay manual.
+the workflows use and for the commits of the submodules, the printer
+configuration and the audit log. The component pins in `layer/mp-dsf.yaml` are
+not something Dependabot can read and stay manual.
 
 Both scanners run against the published SBOM, so any release can be checked
 again later:
@@ -558,6 +558,13 @@ The requirements, with the reasoning behind each, are in
 [docs/meltingplot-audit-log.md](../docs/meltingplot-audit-log.md); the
 numbers AL-nn and E01 to E23 below refer to it.
 
+The service, the tool, their tests and the phase plan are developed in
+[Meltingplot/mp-audit](https://github.com/Meltingplot/mp-audit), pinned here as
+the submodule `meltingplot/mp-audit`. The layer's `customize.overlay` is a link
+to the submodule's `overlay/`, and a build stops if the submodule is not checked
+out. The requirements, the layer and its check of the partition's capacity stay
+in this repository.
+
 `mp-audit.service` (layer `mp-audit`) keeps the log on the partition `audit`
 (1 GiB in layout gen4, 512M in gen3), which it mounts in its own namespace
 only: `findmnt` in a shell shows nothing, `lsblk` shows the partition. gen4
@@ -596,8 +603,8 @@ installer card found on the drive (E18), a new image and the outcome of its
 trial boot (E02), a boot that ended without a clean stop (E15), the system
 clock set or synchronised (E16) and faults of the log itself (E17). The guards,
 the logins, the state of the security relevant objects, the partner computer
-and the export at the panel follow in the next steps of phase 2 (see
-Umsetzung in the requirements).
+and the export at the panel follow in the next steps of phase 2 (see the
+[phase plan](https://github.com/Meltingplot/mp-audit/blob/main/docs/phase-plan.md)).
 
 ## Updating a fleet
 
