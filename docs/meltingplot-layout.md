@@ -69,6 +69,7 @@ Jedes Release enthält schon das IDP-Archiv (`<image>.idp.tar.zst`, beim HMI 665
   - Clientseitig der `fastboot`-Client aus Debian und `bin/idp.sh` aus rpi-image-gen gegen `tcp:127.0.0.1`: Beschreibung übergeben, `oem idpinit`, `oem idpwrite` (legt die Partitionstabelle an), je Partition `fastboot flash` mit dem Sparse-Abbild, `oem idpdone`. Das sind dieselben Schritte wie in `rpi-idp-provisioner.sh`.
   - `reserve` und `audit` haben kein Abbild und werden nicht beschrieben.
   - Eine Abweichung vom Provisioner: kein `fastboot erase` vorab. `rpi-idp-provisioner.sh` löscht damit den ganzen Datenträger; das Audit-Log ginge bei einer Neuinstallation verloren (AL-18). `bin/idp.sh` löscht nicht, und `oem idpwrite` legt nach dem Quelltext nur die Partitionstabelle neu an und hängt die Partitionen der Reihe nach an. Liegt `audit` an derselben Stelle, bleibt sein Inhalt erhalten.
+  - Das Ziel legt die Beschreibung fest, nicht die Karte: `rpi-fastbootd` beschreibt nur `/dev/mmcblk0` (Speichertyp `sd` oder `emmc`) oder `/dev/nvme0n1` (Typ `nvme`), gewählt über `IGconf_device_storage_type` (Quelltext, `idpstorage.h`). gen4 setzt deshalb `device.storage_type: nvme`; bisher steht dort `sd`, das im Image nur in diese Beschreibung eingeht. Die Karte selbst läuft von `/dev/mmcblk0` und kann sich so nicht selbst überschreiben. Eine SSD am USB ist kein Ziel.
   - Unser eigener Teil bleibt die Bedienung der Karte: LEDs, Bildschirm, `identity.conf`, Bootloader-Update, Freigabe einer belegten SSD, `installer.txt`, `layout.txt`.
 
   Karte und späteres Secure-Boot-Provisioning nutzen damit dieselbe Layoutquelle und dieselbe Software auf dem Gerät.
@@ -104,7 +105,7 @@ LY-06 verlangt, dass das eigene Log (256 MiB nach AL-40) und die Kopie des Partn
 4. IDP: eine Partition ohne Abbild in der Beschreibung (`reserve`, rohes `audit`), und dass `oem idpwrite` den Inhalt von `audit` an gleicher Stelle stehen lässt.
 5. `rpi-fastbootd` im TCP-Modus auf der Karte, mit dem Image der Karte (trixie, `librpifwcrypto0` aus dem Archiv).
 
-Punkte 4 und 5 werden auf einer leeren USB-SSD am Bench-HMI getestet, damit dessen NVMe unberührt bleibt (Tim, 2026-11-05).
+Punkte 4 und 5 sollten auf einer leeren USB-SSD am Bench-HMI laufen (Tim, 2026-11-05). Das geht nicht: `rpi-fastbootd` kann `/dev/sda` nicht ansprechen, und die Größe des Ziels liest es aus `/sys/block/<name>`, sodass auch ein umgelenkter Gerätename nicht hilft. Getestet wird deshalb wie im Feld: ein Pi 5, der von einer SD-Karte läuft, mit der leeren SSD im NVMe-Steckplatz.
 
 Erst beim ersten Umzug eines Slots in die Reserve zu klären, für gen4 nicht nötig (Tim, 2026-11-05):
 
@@ -113,7 +114,7 @@ Erst beim ersten Umzug eines Slots in die Reserve zu klären, für gen4 nicht n�
 
 ## Umsetzung
 
-1. Layout, allgemein für Upstream wie `private_part`: eine Variable für die Größe der Reserve (leer = keine) und eine Möglichkeit, die private Partition ohne Dateisystem auszuliefern. `mp-base.yaml` setzt 16G und `audit` roh.
+1. Layout, allgemein für Upstream wie `private_part`: eine Variable für die Größe der Reserve (leer = keine) und eine Möglichkeit, die private Partition ohne Dateisystem auszuliefern. `mp-base.yaml` setzt 16G, `audit` roh mit 1G und `device.storage_type: nvme`.
 2. `rpi-fastbootd`: das Paket aus `pi-gen-micro` pinnen (Dateiname, sha256) und im Lizenzhinweis als GPLv3 führen (LY-10, Festlegung 6).
 3. Installerkarte: aus dem IDP (LY-10), gen4 erkennen, `layout.txt` schreiben (LY-05), Mindestgröße (LY-08).
 4. Build-Prüfung der Nutzfläche (LY-06).
