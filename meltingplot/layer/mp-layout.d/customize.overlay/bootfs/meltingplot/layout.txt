@@ -1,0 +1,4 @@
+# Written by rpi-image-gen layer mp-layout. The generation of the partition
+# layout on this drive (docs/meltingplot-layout.md, LY-05). An installation
+# writes it; a change of the layout in the field writes it anew. Do not edit.
+layout=gen4

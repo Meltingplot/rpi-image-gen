@@ -80,6 +80,24 @@
 # X-Env-Var-keep_part-Valid: regex:^([a-z][a-z0-9_]{0,15})?$
 # X-Env-Var-keep_part-Set: y
 #
+# X-Env-Var-skip_parts: reserve
+# X-Env-Var-skip_parts-Desc: GPT names, separated by spaces, of partitions the
+#  card never writes, whatever the drive held: the reserve of layout gen4
+#  (docs/meltingplot-layout.md, LY-01, LY-10), 16 GiB of hole in the image.
+#  The card skips them in the stream and discards them on the drive, so
+#  nothing of an earlier layout stays readable there. A name the image does
+#  not have is ignored.
+# X-Env-Var-skip_parts-Required: n
+# X-Env-Var-skip_parts-Valid: regex:^([a-z][a-z0-9_]{0,15}( [a-z][a-z0-9_]{0,15})*)?$
+# X-Env-Var-skip_parts-Set: y
+#
+# X-Env-Var-min_drive_bytes: 120000000000
+# X-Env-Var-min_drive_bytes-Desc: Smallest drive the card writes to, in bytes
+#  (LY-08): the target is an SSD of at least 128 GB, which has a little more.
+# X-Env-Var-min_drive_bytes-Required: n
+# X-Env-Var-min_drive_bytes-Valid: int
+# X-Env-Var-min_drive_bytes-Set: y
+#
 # X-Env-Var-identity: ${DIRECTORY}/mp-identity.d/customize.overlay
 # X-Env-Var-identity-Desc: Overlay of mp-identity, for the commissioning file
 #  the card hands on and the helpers that check it the way the first boot

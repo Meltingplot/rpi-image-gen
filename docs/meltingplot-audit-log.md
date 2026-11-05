@@ -27,7 +27,7 @@ Am 2026-11-04 hat am Labor-HMI die USB-Freigaberegel (`mp-hmi-usb-guard`, noch S
 17. Die USB-Kamera ist nicht sicherheitsrelevant. Das HMI hält fest, wenn sich Gerät oder Softwareversion der Kamera ändern (Frage 9, E23).
 18. Ist das Log gestört, bleiben SSH- und Connect-Anmeldungen möglich (Frage 11, AL-48).
 19. Gerätebindung über den OTP-Schlüssel kommt mit der Secure-Boot-Provisionierung, nicht vorher. Die Prüfung an den Laborgeräten hat ergeben: Der Schlüssel ist dort nicht erzeugt, und ohne Secure Boot könnte root die Lesesperre umgehen (Frage 13, AL-60). Bis dahin trägt der Starthash auf Typenschild, in der Betriebsanleitung und im ERP die Verankerung allein.
-20. Ohne Audit-Partition gibt es keine Ausnahme. Ein Gerät mit gen1 oder gen2 gilt wie eines, dessen Log nicht schreibbar ist, und verweigert ab Phase 2b Updates und die übrigen Eingriffe nach AL-48. Alle Bestandsgeräte werden vorher mit der Installerkarte auf gen3 überführt. Sonst ließe sich das Log abschalten, indem man die Partition aus der Partitionstabelle entfernt: Das Gerät sähe dann aus wie gen2 (Tim, 2026-11-04; AL-36, AL-48).
+20. Ohne Audit-Partition gibt es keine Ausnahme. Ein Gerät mit gen1 oder gen2 gilt wie eines, dessen Log nicht schreibbar ist, und verweigert ab Phase 2b Updates und die übrigen Eingriffe nach AL-48. Alle Bestandsgeräte werden vorher mit der Installerkarte auf gen4 überführt (vorher gen3, `docs/meltingplot-layout.md`). Sonst ließe sich das Log abschalten, indem man die Partition aus der Partitionstabelle entfernt: Das Gerät sähe dann aus wie gen2 (Tim, 2026-11-04; AL-36, AL-48).
 21. Einträge der Klasse Änderung werden sofort dauerhaft geschrieben, ohne eigenes Siegel; versiegelt werden sie mit ihrer Epoche (Tim, 2026-11-05). Anlass war der Bench-Test von HMI rc.12: Nach einem harten Reset fehlte ein Eintrag spurlos, und seine Nummer wurde neu vergeben, weil auch journald nur alle fünf Minuten schreibt. Versuch und Betrieb bleiben bei höchstens fünf Sekunden (AL-51).
 22. `mp-audit` liegt in `/usr/bin` (Tim, 2026-11-05). Lesen und prüfen dürfen auch die Gruppe adm und damit das Connect-Konto (AL-20); schreiben lässt der Dienst nur root.
 23. `mp-audit record` ohne root bricht mit „only root records“ und Exit 2 ab und gibt nichts ins Journal (Tim, 2026-11-05). Ins Journal stellt nur root, und nur wenn der Dienst nicht läuft (AL-35).
@@ -163,7 +163,8 @@ Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal übe
 - **AL-17** Gelöscht wird nur über ein Verfahren, das in der Betriebsanleitung beschrieben ist. Vorschlag: ein Befehl, nur als root, mit Pflichtangabe eines Grundes. Er archiviert das alte Log und beginnt das neue mit einem E18-Eintrag. Dieser enthält Grund, Konto, letzte laufende Nummer und letzten Hash des alten Logs (T44).
 - **AL-18** Die Installerkarte (`mp-installer`) erkennt, welche Generation des Layouts sie auf einer belegten NVMe vorfindet (AL-33), und handelt danach:
   - **gen1 und gen2:** Sie überschreibt die NVMe wie bisher mit `overwrite_nvme=yes` und `identity.conf` von der Karte. Diese Geräte haben kein Audit-Log, zu übernehmen ist nichts.
-  - **gen3:** Sie lässt den Bereich der Audit-Partition beim Schreiben aus, statt ihn zu kopieren. Der Inhalt bleibt, wo er ist. Das setzt voraus, dass die Partition auf der NVMe genau dort liegt, wo das neue Image sie hat; sonst bricht die Karte ab, ohne zu schreiben. Ein Stromausfall während des Schreibens gefährdet das Log so nicht.
+  - **gen3:** Mit dem Layout gen4 bekommt `audit` 1 GiB statt 512 MiB und wird neu angelegt; ein gen3-Log wird nicht übernommen. gen3 hatte nur das Bench-HMI, mit einem Testlog (`docs/meltingplot-layout.md`).
+  - **gen4:** Sie lässt den Bereich der Audit-Partition beim Schreiben aus, statt ihn zu kopieren. Der Inhalt bleibt, wo er ist. Das setzt voraus, dass die Partition auf der NVMe genau dort liegt, wo das neue Image sie hat; sonst bricht die Karte ab, ohne zu schreiben. Ein Stromausfall während des Schreibens gefährdet das Log so nicht. Die Reserve dahinter schreibt sie nie (LY-10).
   - **In jedem Fall** gibt sie dem ersten Start über die BOOTCONFIG-Partition mit, was sie vorgefunden hat: Generation, Datum, Image der Karte, übernommen oder nicht. Der erste Start schreibt das als E18 ins Log: „Neuinstallation, Log übernommen“, „Neuinstallation, altes Log nicht lesbar“ oder „Überführung von gen1/gen2, kein früheres Log“. So steht am Anfang jedes Logs, warum es dort beginnt.
 - **AL-19** Pi-Tausch: Das neue Gerät übernimmt das Log aus der Kopie beim anderen System und schreibt es weiter (Festlegung 9, AL-64). Der Starthash bleibt. Nur wenn beide Pis zugleich getauscht werden oder keine gültige Kopie da ist, beginnt ein neues Log mit E01 und neuem Starthash (AL-58). Das Verfahren steht in der Betriebsanleitung.
 
@@ -207,9 +208,10 @@ Zu E05: Was das Image unter `0:/sys` mitbringt, schreibt der Boot jedes Mal übe
   - Generationen des Layouts:
     - **gen1:** Systemslots 1G (Duet-Pi) bzw. 2G (HMI), ohne Audit-Partition.
     - **gen2:** Systemslots 4G (PR #111, seit Duet rc.69 und HMI rc.8), ohne Audit-Partition.
-    - **gen3:** gen2 mit der Partition `audit`.
+    - **gen3:** gen2 mit der Partition `audit` (512 MiB).
+    - **gen4:** `audit` mit 1 GiB ohne Dateisystem und dahinter die Partition `reserve` mit 16 GiB (`docs/meltingplot-layout.md`).
 
-    Die Installerkarte erkennt die Generation an den GPT-Namen und den Slotgrößen (AL-18).
+    Die Installerkarte erkennt die Generation an den GPT-Namen und den Slotgrößen (AL-18); ab gen4 steht sie außerdem in `meltingplot/layout.txt` auf `bootconfig` (LY-05).
 - **AL-34** Zugriff nur über den Log-Dienst:
   - Der Dienst hängt die Partition in seinem eigenen Mount-Namespace ein (`PrivateMounts=`) und ist ihr einziger Schreiber.
   - Einträge nimmt er über einen Socket nur von root an, Lesen erlaubt er der Gruppe `adm`.

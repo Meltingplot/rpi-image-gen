@@ -50,6 +50,26 @@
 # X-Env-Var-private_part_size-Valid: size
 # X-Env-Var-private_part_size-Set: y
 #
+# X-Env-Var-private_part_fs: ext4
+# X-Env-Var-private_part_fs-Desc: What the private partition ships with: an
+#  empty ext4 filesystem, or none, so that the service using it formats it
+#  itself with the defaults of the device rather than those of the build.
+#  Ignored without private_part_name.
+# X-Env-Var-private_part_fs-Required: n
+# X-Env-Var-private_part_fs-Valid: ext4,none
+# X-Env-Var-private_part_fs-Set: y
+#
+# X-Env-Var-reserve_part_size:
+# X-Env-Var-reserve_part_size-Desc: Size of a partition named reserve in
+#  front of the data partition, after the private one: no filesystem, never
+#  mounted, its content undefined. An update can take space from it to change
+#  the layout of a device in the field, which otherwise only a new
+#  installation can, and the private partition can grow into it. Empty for
+#  none. Supported with pmap clear only.
+# X-Env-Var-reserve_part_size-Required: n
+# X-Env-Var-reserve_part_size-Valid: regex:^([1-9][0-9]*[KMG])?$
+# X-Env-Var-reserve_part_size-Set: y
+#
 # X-Env-Var-rootfs_type: erofs
 # X-Env-Var-rootfs_type-Desc: Root filesystem type for each system partition.
 # X-Env-Var-rootfs_type-Required: n

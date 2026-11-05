@@ -1,0 +1,45 @@
+#!/bin/bash
+# LY-06 (docs/meltingplot-layout.md): plan by usable space, not by partition
+# size. The audit partition (image.private_part_name) has to hold the device's
+# own log, its shares in auditcore.SHARES (AL-40), and the copy of the other
+# computer's log of the same size (AL-07, AL-29), in the filesystem it will
+# have on the device. With image.private_part_fs none that is the one
+# mp-auditd makes on its first start, with the image's /etc/mke2fs.conf;
+# otherwise the empty ext4 the build makes. The build stops if it is short:
+# 512M with 16 KiB blocks gave 440 MiB, less than the 512 MiB planned
+# (bench test of hmi rc.12).
+
+set -eu
+
+root=$1
+[ -n "${IGconf_image_private_part_name:-}" ] || exit 0
+size=${IGconf_image_private_part_size:?}
+
+need=$(python3 -I -B - "$root/usr/lib/meltingplot/mp-audit" <<'PYEOF'
+import sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv[1])
+import auditcore
+print(2 * sum(auditcore.SHARES.values()))
+PYEOF
+)
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+truncate -s "$size" "$tmp/audit.img"
+case ${IGconf_image_private_part_fs:-ext4} in
+   none)
+      # as mp-auditd formats it: mkfs.ext4 -q -L AUDIT
+      MKE2FS_CONFIG="$root/etc/mke2fs.conf" mkfs.ext4 -q -F -L AUDIT "$tmp/audit.img" ;;
+   *)
+      # shellcheck disable=SC2086 # the configured arguments, split as genimage does
+      mkfs.ext4 -q ${IGconf_fs_ext4_mkfs_args:-} -L AUDIT "$tmp/audit.img" ;;
+esac
+have=$(dumpe2fs -h "$tmp/audit.img" 2>/dev/null |
+   awk -F: '/^Free blocks/ { f = $2 } /^Block size/ { b = $2 } END { printf "%d", f * b }')
+
+if [ "${have:-0}" -lt "$need" ]; then
+   echo "mp-audit: the audit partition of $size gives $have usable bytes, the log needs $need (LY-06)" >&2
+   exit 1
+fi
+echo "mp-audit: the audit partition of $size gives $have usable bytes, the log needs $need" >&2

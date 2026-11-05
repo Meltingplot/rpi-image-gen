@@ -24,9 +24,19 @@ device:
   # is read-only, so the password sudo asks for can never be given; the
   # post-build assert of mp-admin checks that it is locked.
   user1sudo: passwd
-  # Only recorded in the provisioning descriptor. The image itself finds its
-  # root by GPT label and runs from an SD card or an NVMe drive unchanged.
-  storage_type: sd
+  # Only recorded in the provisioning descriptor (IDP), where it decides the
+  # drive rpi-fastbootd writes: nvme is /dev/nvme0n1, sd /dev/mmcblk0. The
+  # image itself finds its root by GPT label and runs from either unchanged.
+  # The target medium is always an NVMe SSD of at least 128 GB
+  # (docs/meltingplot-layout.md, decision 4).
+  storage_type: nvme
+
+# Both computers run from an NVMe SSD on an M.2 HAT, declared the way
+# config/device/pi5.yaml of rpi-image-gen does it. It is what allows
+# device.storage_type nvme.
+trait:
+  hw:storage:nvme: true
+  hw:pcie:m2: true
 
 image:
   layer: image-rota
@@ -41,21 +51,30 @@ image:
   # not the slot's, and fits any slot it is not larger than. Today the system
   # takes about 0.45 GB on the printer SBC and 0.7 GB on the operator panel.
   # Devices written before had 1G (printer SBC) and 2G (operator panel) slots
-  # and keep them until they are written anew. The same on both computers; the
-  # whole image, about 12.8 GiB with the audit partition below, still fits a
-  # 16 GB card.
+  # and keep them until they are written anew. The same on both computers.
   system_part_size: 4G
   # Starting size only. mp-growfs expands it to the medium on first boot, and
   # rpi-sb-provisioner does the same while provisioning.
   data_part_size: 4G
+  # Layout gen4 (docs/meltingplot-layout.md). gen1 (1G/2G slots), gen2 (4G
+  # slots) and gen3 (audit 512M) move over with the installer card; an update
+  # cannot change a partition table.
+  #
   # The partition of the audit log (docs/meltingplot-audit-log.md, AL-33):
-  # nothing mounts it but the log service, in its own namespace. Layout gen3;
-  # gen1 (1G/2G slots) and gen2 (4G slots) have none, and an update cannot
-  # add one, so those devices move over with the installer card (decision 7).
-  # The size cannot change on a device once written: half for the device's
-  # own log over five years, half for the copy of the other computer's log.
+  # nothing mounts it but the log service, in its own namespace. Half for the
+  # device's own log over five years, half for the copy of the other
+  # computer's log: 2 x 256 MiB, which an ext4 of 1 GiB with 4 KiB blocks
+  # holds with room to spare (973 MiB usable; 512M with 16 KiB blocks gave
+  # only 440, layout decision 5). Shipped without a filesystem, so that
+  # mp-auditd formats it with the device's defaults (LY-04); the build checks
+  # that the shares fit (LY-06, mp-audit).
   private_part_name: audit
-  private_part_size: 512M
+  private_part_size: 1G
+  private_part_fs: none
+  # Space a later update takes to change the layout in the field (LY-01 to
+  # LY-03): new partitions, the audit partition growing into it, the system
+  # slots doubled. Never mounted, no filesystem, never written.
+  reserve_part_size: 16G
 
 ssh:
   pubkey_user1: ${@SRCROOT}/keys/authorized_keys
@@ -92,3 +111,4 @@ layer:
   admin: mp-admin
   watchdog: mp-watchdog
   audit: mp-audit
+  layout: mp-layout

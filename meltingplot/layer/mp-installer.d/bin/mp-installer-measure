@@ -1,17 +1,30 @@
 #!/usr/bin/env python3
 """Measure the raw A/B image an installer card carries.
 
-   zstd -dc image.img.zst | mp-installer-measure [<keep partition>]
+   zstd -dc image.img.zst | mp-installer-measure [<keep partition> [<skip partition>...]]
 
-Prints one line: the size of the raw image, its SHA-256, and, for the
-partition whose content the card keeps on a drive of the same layout
-(mpinst.keep_part, the audit log), its start and size in bytes and the
-SHA-256 of the image without that range. That is what the drive reads back
-when the card wrote around it. "-" for those three when the image has no
-such partition or none was named.
+Prints one line of seven fields:
 
-The range is taken from the primary GPT at the start of the image. The card
-skips it with dd in blocks of 4 MiB, so it has to be aligned to that.
+  size sha256 keep_start keep_size sha256_keep skip sha256_skip
+
+- size, sha256: the raw image as it is.
+- keep_start, keep_size: where the partition lies whose content the card keeps
+  on a drive of the same layout (mpinst.keep_part, the audit log).
+- skip: the partitions the card never writes (mpinst.skip_parts, the reserve
+  of layout gen4, docs/meltingplot-layout.md, LY-10), as name:start:size,
+  separated by commas, in the order they lie in the image.
+- sha256_skip: the image without the skipped ranges, which is what the drive
+  reads back there after the card wrote it.
+- sha256_keep: the image without the skipped ranges and the kept one, which
+  is what it reads back when the card kept the partition as well.
+
+"-" for a field that does not apply: no such partition, or none named. A
+named partition the image does not have is left out, so an image of an
+older layout still measures.
+
+The ranges are taken from the primary GPT at the start of the image. The
+card skips them with dd in blocks of 4 MiB, so they have to be aligned to
+that.
 """
 
 import hashlib
@@ -27,11 +40,12 @@ def die(msg):
     sys.exit(f"mp-installer-measure: {msg}")
 
 
-def gpt_range(head, name):
+def gpt_ranges(head):
     hdr = head[SECTOR:2 * SECTOR]
     if hdr[:8] != b"EFI PART":
         die("the image has no GPT")
     entries_lba, count, size = struct.unpack_from("<QII", hdr, 72)
+    ranges = {}
     for i in range(count):
         off = entries_lba * SECTOR + i * size
         entry = head[off:off + size]
@@ -40,42 +54,71 @@ def gpt_range(head, name):
         first, last = struct.unpack_from("<QQ", entry, 32)
         if not first:
             continue
-        if entry[56:128].decode("utf-16-le").rstrip("\0") == name:
-            return first * SECTOR, (last + 1 - first) * SECTOR
-    return None
+        name = entry[56:128].decode("utf-16-le").rstrip("\0")
+        ranges[name] = (first * SECTOR, (last + 1 - first) * SECTOR)
+    return ranges
+
+
+class Hasher:
+    """SHA-256 of the stream without the given byte ranges."""
+
+    def __init__(self, ranges):
+        self.ranges = sorted(ranges)
+        self.h = hashlib.sha256()
+
+    def update(self, chunk, pos):
+        end = pos + len(chunk)
+        cur = pos
+        for lo, size in self.ranges:
+            hi = lo + size
+            if hi <= cur or lo >= end:
+                continue
+            if lo > cur:
+                self.h.update(chunk[cur - pos:lo - pos])
+            cur = max(cur, min(hi, end))
+        if cur < end:
+            self.h.update(chunk[cur - pos:])
+
+    def hexdigest(self):
+        return self.h.hexdigest()
 
 
 def main():
-    name = sys.argv[1] if len(sys.argv) > 1 else ""
+    names = sys.argv[1:]
+    keep_name = names[0] if names else ""
+    skip_names = [n for n in names[1:] if n]
     src = sys.stdin.buffer
-    h_all, h_keep, n = hashlib.sha256(), hashlib.sha256(), 0
 
     head = src.read(HEAD)
     if len(head) < HEAD:
         die("the image is smaller than its partition table")
-    rng = gpt_range(head, name) if name else None
-    if rng and (rng[0] % BLOCK or rng[1] % BLOCK):
-        die(f"{name} is not aligned to {BLOCK} bytes")
+    parts = gpt_ranges(head) if (keep_name or skip_names) else {}
+    keep = parts.get(keep_name) if keep_name else None
+    named = sorted(((parts[n], n) for n in skip_names if n in parts))
+    skips = [r for r, _ in named]
+    for name, rng in [(keep_name, keep)] + [(n, parts.get(n)) for n in skip_names]:
+        if rng and (rng[0] % BLOCK or rng[1] % BLOCK):
+            die(f"{name} is not aligned to {BLOCK} bytes")
 
+    h_all = Hasher([])
+    h_skip = Hasher(skips)
+    h_keep = Hasher(skips + ([keep] if keep else []))
+    n = 0
     chunk = head
     while chunk:
-        h_all.update(chunk)
-        if rng:
-            lo, hi = rng[0], rng[0] + rng[1]
-            a, b = n, n + len(chunk)
-            if a < lo:
-                h_keep.update(chunk[:min(b, lo) - a])
-            if b > hi:
-                h_keep.update(chunk[max(0, hi - a):])
+        for h in (h_all, h_skip, h_keep):
+            h.update(chunk, n)
         n += len(chunk)
         chunk = src.read(BLOCK)
 
-    if rng and rng[0] + rng[1] > n:
-        die(f"{name} reaches beyond the end of the image")
-    if rng:
-        print(n, h_all.hexdigest(), rng[0], rng[1], h_keep.hexdigest())
+    for rng in skips + ([keep] if keep else []):
+        if rng[0] + rng[1] > n:
+            die("a partition to keep or skip reaches beyond the end of the image")
+    skip_field = ",".join("%s:%d:%d" % (name, r[0], r[1]) for r, name in named) or "-"
+    if keep:
+        print(n, h_all.hexdigest(), keep[0], keep[1], h_keep.hexdigest(), skip_field, h_skip.hexdigest())
     else:
-        print(n, h_all.hexdigest(), "-", "-", "-")
+        print(n, h_all.hexdigest(), "-", "-", "-", skip_field, h_skip.hexdigest())
 
 
 if __name__ == "__main__":

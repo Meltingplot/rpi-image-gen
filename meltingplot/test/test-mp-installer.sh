@@ -87,7 +87,7 @@ part() { # name number start size, in MiB
    echo $(($3 * 2048)) > "$_d/start"
    echo $(($4 * 2048)) > "$_d/size"
 }
-ab_layout() { # system slot size in MiB, "audit" for gen3
+ab_layout() { # system slot size in MiB, "audit" for gen3, "reserve" for gen4
    rm -rf "$MPI_SYS_BLOCK"/nvme0n1/nvme0n1p*
    part bootconfig 1 8 32
    part boot_a 2 40 128
@@ -95,14 +95,19 @@ ab_layout() { # system slot size in MiB, "audit" for gen3
    part system_a 4 296 "$1"
    part system_b 5 $((296 + $1)) "$1"
    _s=$((296 + 2 * $1))
-   if [ "${2:-}" = audit ]; then
-      part audit 6 "$_s" 512
-      part persistent 7 $((_s + 512)) 4096
-   else
-      part persistent 6 "$_s" 4096
-   fi
+   case ${2:-} in
+      audit)
+         part audit 6 "$_s" 512
+         part persistent 7 $((_s + 512)) 4096 ;;
+      reserve)
+         part audit 6 "$_s" 1024
+         part reserve 7 $((_s + 1024)) "${3:-16384}"
+         part persistent 8 $((_s + 1024 + ${3:-16384})) 4096 ;;
+      *)
+         part persistent 6 "$_s" 4096 ;;
+   esac
 }
-gen() { mpi_partitions /dev/nvme0n1 | mpi_layout_generation audit; }
+gen() { mpi_partitions /dev/nvme0n1 | mpi_layout_generation audit reserve; }
 mib=1048576
 audit_start=$(((296 + 2 * 4096) * mib))
 audit_size=$((512 * mib))
@@ -124,6 +129,24 @@ check "audit where the image has it"  keep    "$(mpi_partitions /dev/nvme0n1 | m
 check "audit elsewhere"               moved   "$(mpi_partitions /dev/nvme0n1 | mpi_keep_decision audit $((audit_start + 8 * mib)) "$audit_size")"
 check "audit of another size"         moved   "$(mpi_partitions /dev/nvme0n1 | mpi_keep_decision audit "$audit_start" $((256 * mib)))"
 check "image without audit"           none    "$(mpi_partitions /dev/nvme0n1 | mpi_keep_decision audit '' '')"
+# gen4 (docs/meltingplot-layout.md): audit 1G and a reserve of 16G after it
+r_start=$(((296 + 2 * 4096 + 1024) * mib))
+r_size=$((16384 * mib))
+skip="reserve:$r_start:$r_size"
+ab_layout 4096 reserve
+check "gen4 (reserve partition)"      gen4    "$(gen)"
+check "gen4 without a name to skip"   gen3    "$(mpi_partitions /dev/nvme0n1 | mpi_layout_generation audit '')"
+check "gen4: reserve where the image has it" "" "$(mpi_partitions /dev/nvme0n1 | mpi_skip_moved "$skip")"
+check "gen4: audit kept where the image has it" keep \
+   "$(mpi_partitions /dev/nvme0n1 | mpi_keep_decision audit "$audit_start" $((1024 * mib)))"
+ab_layout 4096 reserve 8192
+check "gen4: reserve changed in the field" reserve "$(mpi_partitions /dev/nvme0n1 | mpi_skip_moved "$skip")"
+ab_layout 4096 audit
+check "gen3 has no reserve to check"  ""      "$(mpi_partitions /dev/nvme0n1 | mpi_skip_moved "$skip")"
+check "ranges: skip only"             "$r_start:$r_size " "$(mpi_ranges "$skip")"
+check "ranges: skip and kept audit, in order" "$audit_start:$((1024 * mib)) $r_start:$r_size " \
+   "$(mpi_ranges "$skip" "$audit_start" $((1024 * mib)))"
+check "ranges: nothing"               ""      "$(mpi_ranges "")"
 rm -rf "$MPI_SYS_BLOCK"/nvme0n1/nvme0n1p*
 part rootfs 1 4 1024
 check "someone else's layout"         foreign "$(gen)"
@@ -131,17 +154,17 @@ part bootconfig 2 1028 32
 check "half an A/B layout"            foreign "$(gen)"
 rm -rf "$MPI_SYS_BLOCK"/nvme0n1/nvme0n1p*
 
-# --- writing around the audit partition --------------------------------------------
-# A small image with a GPT naming an audit partition at 64 MiB, measured the
-# way the build does, written over a "drive" (a file) that already holds
-# other data. The drive has to keep its own bytes in the audit range and read
-# back what the build measured for the rest.
+# --- writing around the audit partition and the reserve -----------------------------
+# A small image with a GPT naming an audit partition at 64 MiB and a reserve
+# at 80 MiB, measured the way the build does, written over a "drive" (a file)
+# that already holds other data. The drive keeps its own bytes in the ranges
+# left alone and reads back what the build measured for the rest.
 
 measure="$here/../layer/mp-installer.d/bin/mp-installer-measure"
 python3 - "$tmp/img" "$tmp/drive" <<'EOF'
 import os, struct, sys
 MiB = 1 << 20
-img = bytearray(os.urandom(96 * MiB))
+img = bytearray(os.urandom(112 * MiB))
 img[:MiB] = bytes(MiB)
 hdr = bytearray(92)
 hdr[:8] = b"EFI PART"
@@ -154,23 +177,46 @@ def entry(i, name, first_mib, size_mib):
     img[1024 + 128 * i:1024 + 128 * (i + 1)] = e
 entry(0, "system_a", 8, 32)
 entry(1, "audit", 64, 16)
-entry(2, "persistent", 80, 16)
+entry(2, "reserve", 80, 16)
+entry(3, "persistent", 96, 16)
 open(sys.argv[1], "wb").write(img)
 open(sys.argv[2], "wb").write(os.urandom(128 * MiB))
 EOF
-set -- $(python3 "$measure" audit < "$tmp/img")
-raw_size=$1 raw_sha=$2 k_start=$3 k_size=$4 k_sha=$5
-check "measured: image size"          $((96 * mib))   "$raw_size"
+set -- $(python3 "$measure" audit reserve < "$tmp/img")
+raw_size=$1 raw_sha=$2 k_start=$3 k_size=$4 k_sha=$5 m_skip=$6 s_sha=$7
+check "measured: image size"          $((112 * mib))  "$raw_size"
 check "measured: whole image"         "$(sha256sum < "$tmp/img" | cut -d' ' -f1)" "$raw_sha"
 check "measured: audit start"         $((64 * mib))   "$k_start"
 check "measured: audit size"          $((16 * mib))   "$k_size"
-check "measured: unnamed, nothing"    "- - -"         "$(python3 "$measure" < "$tmp/img" | cut -d' ' -f3-5)"
-old_audit=$(dd if="$tmp/drive" bs=4M skip=16 count=4 status=none | sha256sum | cut -d' ' -f1)
-mpi_write_around "$tmp/drive" "$k_start" "$k_size" < "$tmp/img"
-check "drive keeps its audit range"   "$old_audit"    "$(dd if="$tmp/drive" bs=4M skip=16 count=4 status=none | sha256sum | cut -d' ' -f1)"
-check "drive reads back the rest"     "$k_sha"        "$(mpi_read_back_around "$tmp/drive" "$raw_size" "$k_start" "$k_size")"
-check "drive size untouched"          $((128 * mib))  "$(stat -c %s "$tmp/drive")"
-rm -f "$tmp/img" "$tmp/drive"
+check "measured: reserve"             "reserve:$((80 * mib)):$((16 * mib))" "$m_skip"
+check "measured: unnamed, nothing"    "- - - -"       "$(python3 "$measure" < "$tmp/img" | cut -d' ' -f3-6)"
+check "measured: without a skip, its sum is the whole" "$raw_sha" "$(python3 "$measure" audit < "$tmp/img" | cut -d' ' -f7)"
+range_sha() { dd if="$tmp/drive" bs=4M skip="$1" count=4 status=none | sha256sum | cut -d' ' -f1; }
+cp "$tmp/drive" "$tmp/drive0"
+
+# audit kept, reserve skipped
+old_audit=$(range_sha 16) old_reserve=$(range_sha 20)
+ranges=$(mpi_ranges "$m_skip" "$k_start" "$k_size")
+mpi_write_skipping "$tmp/drive" "$ranges" < "$tmp/img"
+check "kept: drive keeps its audit range"   "$old_audit"   "$(range_sha 16)"
+check "kept: drive keeps its reserve range" "$old_reserve" "$(range_sha 20)"
+check "kept: drive reads back the rest"     "$k_sha"       "$(mpi_read_back_skipping "$tmp/drive" "$raw_size" "$ranges")"
+check "kept: drive size untouched"          $((128 * mib)) "$(stat -c %s "$tmp/drive")"
+
+# audit written anew, reserve skipped
+cp "$tmp/drive0" "$tmp/drive"
+ranges=$(mpi_ranges "$m_skip")
+mpi_write_skipping "$tmp/drive" "$ranges" < "$tmp/img"
+check "anew: audit range from the image"    "$(dd if="$tmp/img" bs=4M skip=16 count=4 status=none | sha256sum | cut -d' ' -f1)" "$(range_sha 16)"
+check "anew: drive keeps its reserve range" "$old_reserve" "$(range_sha 20)"
+check "anew: drive reads back the rest"     "$s_sha"       "$(mpi_read_back_skipping "$tmp/drive" "$raw_size" "$ranges")"
+
+# no reserve in the image: written as a whole, as before
+cp "$tmp/drive0" "$tmp/drive"
+mpi_write_skipping "$tmp/drive" "" < "$tmp/img"
+check "whole: drive reads back the image"   "$raw_sha"     "$(mpi_read_back_skipping "$tmp/drive" "$raw_size" "")"
+check "discard on a file is reported, not fatal" reserve "$(mpi_discard_skipped "$tmp/drive" "$m_skip")"
+rm -f "$tmp/img" "$tmp/drive" "$tmp/drive0"
 
 # --- installer.conf -------------------------------------------------------------
 

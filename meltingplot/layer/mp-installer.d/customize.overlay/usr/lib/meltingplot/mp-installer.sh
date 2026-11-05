@@ -112,20 +112,25 @@ mpi_partitions() {
 }
 
 # Which generation of the A/B layout the partitions on stdin (mpi_partitions)
-# make, given the name of the partition to keep ($1):
-#   gen3     the A/B layout with that partition (the audit log)
+# make, given the name of the partition to keep ($1) and the names of the
+# partitions the card never writes ($2, separated by spaces;
+# docs/meltingplot-layout.md):
+#   gen4     the A/B layout with one of those, the reserve
+#   gen3     the A/B layout with the partition to keep (the audit log)
 #   gen2     the A/B layout with 4G system slots (since PR #111)
 #   gen1     the A/B layout with smaller system slots (1G printer SBC, 2G panel)
 #   blank    no partition at all
 #   foreign  anything else
 mpi_layout_generation() {
-   awk -v keep="${1:-}" '
+   awk -v keep="${1:-}" -v skip="${2:-}" '
       NF == 0 { next }
       { n++; size[$1] = $3 }
       END {
          if (!n) { print "blank"; exit }
          split("bootconfig boot_a boot_b system_a system_b persistent", ab, " ")
          for (i in ab) if (!(ab[i] in size)) { print "foreign"; exit }
+         ns = split(skip, sk, " ")
+         for (i = 1; i <= ns; i++) if (sk[i] in size) { print "gen4"; exit }
          if (keep != "" && (keep in size)) { print "gen3"; exit }
          # 3 GiB lies between the 2G slots of gen1 and the 4G slots of gen2
          if (size["system_a"] > 3221225472) print "gen2"; else print "gen1"
@@ -149,23 +154,71 @@ mpi_keep_decision() {
       }'
 }
 
-# Write the raw image on stdin to $1 but leave the range of $3 bytes from
-# byte $2 as the drive has it: the partition to keep. The image's own bytes
-# for that range are read and dropped. In blocks of 4 MiB, to which the build
-# checked the range is aligned (mp-installer-measure); notrunc so a file
-# stands in for the drive in the tests.
-mpi_write_around() {
-   dd of="$1" bs=4M iflag=fullblock count=$(($2 / 4194304)) conv=fsync,notrunc status=none &&
-      dd of=/dev/null bs=4M iflag=fullblock count=$(($3 / 4194304)) status=none &&
-      dd of="$1" bs=4M iflag=fullblock seek=$((($2 + $3) / 4194304)) conv=fsync,notrunc status=none
+# The partitions the card never writes, as the build measured them
+# (MPI_SKIP: name:start:size, separated by commas), one per line:
+# name start size.
+mpi_skip_list() {
+   printf '%s\n' "${1:-}" | tr ',' '\n' | awk -F: 'NF == 3 { print $1, $2, $3 }'
 }
 
-# SHA-256 of the first $2 bytes of $1 without the range of $4 bytes from
-# byte $3: what a drive written by mpi_write_around reads back.
-mpi_read_back_around() {
-   { head -c "$3" "$1"
-     dd if="$1" bs=4M skip=$((($3 + $4) / 4194304)) iflag=count_bytes \
-        count=$(($2 - $3 - $4)) status=none; } | sha256sum | cut -d' ' -f1
+# The first of the partitions to skip ($1, MPI_SKIP) that the drive (partitions
+# on stdin, mpi_partitions) has somewhere else or at another size than the
+# image: its layout was changed in the field after this card. Nothing when
+# all lie where the image puts them, or the drive has none of them.
+mpi_skip_moved() {
+   _parts=$(cat)
+   mpi_skip_list "${1:-}" | while read -r _n _s _z; do
+      _d=$(printf '%s\n' "$_parts" | mpi_keep_decision "$_n" "$_s" "$_z")
+      if [ "$_d" = moved ]; then echo "$_n"; break; fi
+   done
+}
+
+# The byte ranges the card leaves on the drive, as start:size separated by
+# spaces and in order: the partitions to skip ($1, MPI_SKIP) and the one to
+# keep, if it is kept ($2 start, $3 size, both empty otherwise).
+mpi_ranges() {
+   { mpi_skip_list "${1:-}" | awk '{ print $2 ":" $3 }'
+     [ -z "${2:-}" ] || echo "$2:$3"; } | sort -t: -k1,1n | tr '\n' ' '
+}
+
+# Write the raw image on stdin to $1 but leave the byte ranges $2
+# (mpi_ranges) as the drive has them: the image's own bytes for them are read
+# and dropped. In blocks of 4 MiB, to which the build checked the ranges are
+# aligned (mp-installer-measure); notrunc so a file stands in for the drive in
+# the tests.
+mpi_write_skipping() {
+   _pos=0
+   for _r in ${2:-}; do
+      _s=${_r%%:*} _z=${_r#*:}
+      dd of="$1" bs=4M iflag=fullblock seek=$((_pos / 4194304)) count=$(((_s - _pos) / 4194304)) \
+         conv=fsync,notrunc status=none || return 1
+      dd of=/dev/null bs=4M iflag=fullblock count=$((_z / 4194304)) status=none || return 1
+      _pos=$((_s + _z))
+   done
+   dd of="$1" bs=4M iflag=fullblock seek=$((_pos / 4194304)) conv=fsync,notrunc status=none
+}
+
+# SHA-256 of the first $2 bytes of $1 without the byte ranges $3
+# (mpi_ranges): what a drive written by mpi_write_skipping reads back.
+mpi_read_back_skipping() {
+   { _pos=0
+     for _r in ${3:-}; do
+        _s=${_r%%:*} _z=${_r#*:}
+        dd if="$1" bs=4M iflag=fullblock skip=$((_pos / 4194304)) count=$(((_s - _pos) / 4194304)) status=none
+        _pos=$((_s + _z))
+     done
+     dd if="$1" bs=4M skip=$((_pos / 4194304)) iflag=count_bytes count=$(($2 - _pos)) status=none
+   } | sha256sum | cut -d' ' -f1
+}
+
+# Discard the partitions to skip ($2, MPI_SKIP) on the drive $1, so nothing of
+# an earlier layout stays readable in the reserve. Best effort: a drive that
+# cannot discard keeps what it had there, which nothing reads. Prints what
+# could not be discarded.
+mpi_discard_skipped() {
+   mpi_skip_list "${2:-}" | while read -r _n _s _z; do
+      blkdiscard --offset "$_s" --length "$_z" "$1" >/dev/null 2>&1 || echo "$_n"
+   done
 }
 
 # --- the card -------------------------------------------------------------
