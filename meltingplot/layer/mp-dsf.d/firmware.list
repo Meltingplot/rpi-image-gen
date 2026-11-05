@@ -14,10 +14,10 @@
 #
 # Example:
 #   Duet3Firmware_TOOL1LC.bin sha256:0123...cdef https://github.com/Meltingplot/RepRapFirmware/releases/download/v3.7.0-rc.1+mp1/Duet3Firmware_TOOL1LC.bin
-Duet3Firmware_TOOL1LC.bin sha256:e12f6eb556477e8f8be23d0d7505d5665ac4daae11930e09322c4862c2751bc3 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.3/Duet3Firmware_TOOL1LC.bin
-Duet3Firmware_EXP1HCL.bin sha256:823f59e5a8a1cc521ee9088e7bcf7d1ec82cdac27080fff8f7286d842d864bbe https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.3/Duet3Firmware_EXP1HCL.bin
-Duet3Firmware_SZP.bin sha256:86f3fcc75bff8ff1f8ad50bf296d4b952df8303fa76d43b6087bee17fee2cf44 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.3/Duet3Firmware_SZP.bin
-# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0+1 (f2e44bcc9), built by
+Duet3Firmware_TOOL1LC.bin sha256:c69ea5bf0fb9d3bedbf3841f406cbdaee503857bd11087dea3cf7b728c1c44c5 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.4/Duet3Firmware_TOOL1LC.bin
+Duet3Firmware_EXP1HCL.bin sha256:312b5e0605156fb0562f57521f2585544e2e3158960b9a816288447029f5b3a8 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.4/Duet3Firmware_EXP1HCL.bin
+Duet3Firmware_SZP.bin sha256:330af2c9530601d03074921600b8a82075acebccf0641637e878ad7db817eee3 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.4/Duet3Firmware_SZP.bin
+# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0+1 (d03ff1e7b), built by
 # us against the Meltingplot library forks with a version string of its own,
 # so DuetControlServer flashes it on an image update. The firmware reports its
 # accelerometers under sensors.accelerometers, where DuetSoftwareFramework
@@ -57,4 +57,4 @@ Duet3Firmware_SZP.bin sha256:86f3fcc75bff8ff1f8ad50bf296d4b952df8303fa76d43b6087
 # link runs as before, and a connection reset ends it. After a restart it
 # arms the first transfer 10 ms later, so that an exchange DuetControlServer
 # started on the falling TfrRdy edge of the restart cannot stall the link.
-Duet3Firmware_MB6HC.bin sha256:f924a02c3bd1224e8ccaf66aefe6e1b3ac49b44e5df080d6ab6b29d197b9df2a https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.6/Duet3Firmware_MB6HC.bin
+Duet3Firmware_MB6HC.bin sha256:21c167c8f89bc27d9d0bf612b5c21b83ace2ad2150900ee7ee7b9da2b9561b52 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.7/Duet3Firmware_MB6HC.bin
