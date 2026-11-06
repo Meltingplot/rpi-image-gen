@@ -707,7 +707,9 @@ To go back, deploy the previous artefact again. It stays registered.
 4. `mp-dsf-firmware` runs on every boot, waits for the printer to report
    idle, which RepRapFirmware does only once `config.g` is through (it reports
    *starting* until then, and `config.g` waits for every board), then for the
-   slot to be committed, and then runs `DuetControlServer -u`, which
+   slot to be committed, and then for the printer to stay idle for 10 s without
+   a break, for up to 3 minutes, since a macro the printer configuration starts
+   by itself makes it read *busy*. It then runs `DuetControlServer -u`, which
    flashes every Duet board whose firmware differs from the files under
    `/opt/dsf/sd/firmware`. Those files belong to the slot, so a rollback
    flashes the previous firmware back the same way. A mainboard it finds

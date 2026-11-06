@@ -18,8 +18,9 @@ ConditionPathExists=/opt/dsf/bin/DuetControlServer
 Type=exec
 ExecStart=/usr/sbin/mp-dsf-firmware
 # Two waits of up to five minutes, then up to three passes over every board
-# on the CAN bus, each followed by a wait of up to five minutes for the
-# mainboard to come back.
+# on the CAN bus, each after a wait of up to three minutes for the printer to
+# settle and followed by a wait of up to five minutes for the mainboard to
+# come back.
 RuntimeMaxSec=60min
 
 [Install]

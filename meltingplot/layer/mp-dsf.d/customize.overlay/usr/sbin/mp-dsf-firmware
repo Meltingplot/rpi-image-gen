@@ -19,7 +19,11 @@
 #     falls back to the other slot on the next reset, and that slot expects
 #     its own firmware. The update connector commits within seconds of a
 #     successful boot, so after an update this is a short wait.
-#   * The printer must be idle. Flashing resets the mainboard.
+#   * The printer must be idle, and stay so for 10 s without a break. Flashing
+#     resets the mainboard, and idle can be a passing state: a macro the
+#     printer configuration starts by itself, such as the self-test of
+#     chx350-config, makes it read busy while it runs. A printer that has not
+#     settled after 3 min is not flashed.
 #
 # A mainboard found halted on the way to idle is reset once. Our
 # RepRapFirmware (since 3.7.0-mp.2) does an emergency stop when it loses an
@@ -49,9 +53,9 @@
 # triggers, while the files on the virtual SD card are already the new ones.
 # An image built with MP_MAINBOARD_RESET=y therefore resets the mainboard on
 # the first boot after an update when every board was up to date at once, as
-# Duet Web Control does with M999, and waits for it to come back idle. A pass
-# that flashed has reset the mainboard already, and so has the reset of a
-# halted mainboard.
+# Duet Web Control does with M999, once the printer has stayed idle for those
+# 10 s again, and waits for it to come back idle. A pass that flashed has reset
+# the mainboard already, and so has the reset of a halted mainboard.
 #
 # A boot the bootloader started as a tryboot follows an update (or a rollback
 # by hand). The update notice the gate put up before the restart does not
@@ -75,6 +79,8 @@ DCS=${MP_DCS:-/opt/dsf/bin/DuetControlServer}
 WAIT=${MP_FIRMWARE_WAIT:-300}
 POLL=${MP_FIRMWARE_POLL:-5}
 PASSES=${MP_FIRMWARE_PASSES:-3}
+SETTLE=${MP_FIRMWARE_SETTLE:-10}
+SETTLE_WAIT=${MP_FIRMWARE_SETTLE_WAIT:-180}
 
 updated=no
 if mp_boot_trybooted; then
@@ -82,11 +88,12 @@ if mp_boot_trybooted; then
    mp_log "this boot follows an update; the printer shows the update notice until the firmware is up to date"
 fi
 
-# Poll a condition until it holds or the wait is used up. After an update the
-# notice is put back whenever the control server answers without it, which
-# covers the first connection and every reset of the mainboard.
-wait_for() {
-   _left=$WAIT
+# Poll a condition until it holds or the given seconds are used up. After an
+# update the notice is put back whenever the control server answers without
+# it, which covers the first connection and every reset of the mainboard.
+wait_up_to() {
+   _left=$1
+   shift
    until "$@"; do
       [ "$_left" -gt 0 ] || return 1
       if [ "$updated" = yes ] && [ -n "$(mp_dcs_status)" ]; then
@@ -97,7 +104,27 @@ wait_for() {
    done
 }
 
+wait_for() { wait_up_to "$WAIT" "$@"; }
+
 printer_idle() { [ "$(mp_dcs_status)" = idle ]; }
+
+# printer_idle, held for $SETTLE seconds without a break. The time is counted
+# in polls like every wait here, so the queries themselves only add to it.
+idle_for=0
+printer_settled() {
+   if ! printer_idle; then
+      idle_for=0
+      return 1
+   fi
+   [ "$idle_for" -lt "$SETTLE" ] || return 0
+   idle_for=$((idle_for + POLL))
+   return 1
+}
+
+wait_settled() {
+   idle_for=0
+   wait_up_to "$SETTLE_WAIT" printer_settled
+}
 
 # printer_idle, except that a halted mainboard is reset the first time it is
 # seen. The reset is not waited for here: the mainboard reports starting and
@@ -125,7 +152,7 @@ printer_restarted() {
 # it to come back idle. DuetControlServer stops itself after the reset and
 # systemd starts it again, so M999 may go without an answer.
 reset_mainboard() {
-   if ! printer_idle; then
+   if ! wait_settled; then
       mp_log "the printer is '$(mp_dcs_status)', not idle; the mainboard is not reset"
       return 1
    fi
@@ -167,7 +194,7 @@ out=$(mktemp)
 trap 'rm -f "$out"' EXIT
 pass=1
 while :; do
-   if ! printer_idle; then
+   if ! wait_settled; then
       mp_log "the printer is '$(mp_dcs_status)', not idle; the firmware stays as it is"
       finish 1
    fi
