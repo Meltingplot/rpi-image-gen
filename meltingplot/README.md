@@ -675,7 +675,15 @@ To go back, deploy the previous artefact again. It stays registered.
    (`M291 S0`, no buttons) asking not to shut the machine down until the
    message is gone. The gate learns of the install on its next check, so the
    message can appear up to a minute after the download has started, and it
-   takes it down again when an install ends without a restart.
+   takes it down again when an install ends without a restart. An operator can
+   close the message, so it only tells. What keeps the self-test of the printer
+   configuration from starting during the install, which would make the printer
+   busy and stop the connector, is the global `ota_pending_until`, a deadline in
+   the mainboard's uptime that the gate renews on every check and clears with
+   the message. The gate first looks one minute after boot, because the
+   connector asks for a pending deployment within seconds of its start. For the
+   first five minutes, a control server that is not up yet does not stop the
+   connector.
    While the bundle downloads, `mp-bundle-guard` compares its file name, which
    the connector writes to its state file, with the image the device runs.
    A release names its bundle `<image>-<version>.update.tar.zst`, and a
@@ -731,9 +739,17 @@ To go back, deploy the previous artefact again. It stays registered.
    boot the bootloader started as a tryboot, which is every boot that follows
    an update, `mp-dsf-firmware` puts the *OTA Update* notice up again as soon
    as the control server answers, and again after every reset of the
-   mainboard during the firmware update. Once every board is up to date it
-   replaces the notice with a message box saying the update to this version
-   is complete, with a link to the release
+   mainboard during the firmware update, whenever no other message box is on
+   display. On that boot it also holds the self-test back with
+   `ota_pending_until`, renewed on every poll and before every flash because
+   a reset clears it, and clears it when the firmware is settled or the script
+   ends in any other way. A deadline nobody clears runs out after an hour. The
+   short self-test, which only reads, then starts at the printer's next look,
+   and the script waits up to five minutes for its result
+   (`self_test_quick_outcome`), unless the printer starts a job or halts.
+   Only then does it
+   replace the notice with a message box saying the update to this version
+   is complete and what the self-test found, with a link to the release
    page as the changelog (Duet Web Control renders the message as HTML), a
    Close button and no timeout (`M291 S1 T0`), so whoever next stands at the
    printer sees what happened. The

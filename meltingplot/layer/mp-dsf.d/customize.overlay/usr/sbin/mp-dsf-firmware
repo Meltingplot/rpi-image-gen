@@ -65,6 +65,16 @@
 # complete, which stays until someone closes it; when the firmware could not
 # be brought up to date it gives way to a message saying so. On any other
 # boot the message boxes are left alone.
+#
+# Such a boot also keeps the printer configuration from starting its self-test
+# by itself, with a deadline it renews on every poll and before every flash,
+# because every reset of the mainboard clears it and nothing polls while
+# DuetControlServer -u runs. The notice cannot do that, an operator can close
+# it. Once the firmware is settled the deadline is cleared on every way out, and
+# the last message waits for the short self-test, which only reads, and says
+# what it found: a message without a timeout at the head of the queue would
+# otherwise keep the self-test from starting until someone closes it. A deadline
+# nobody clears runs out by itself.
 
 set -eu
 
@@ -81,12 +91,39 @@ POLL=${MP_FIRMWARE_POLL:-5}
 PASSES=${MP_FIRMWARE_PASSES:-3}
 SETTLE=${MP_FIRMWARE_SETTLE:-10}
 SETTLE_WAIT=${MP_FIRMWARE_SETTLE_WAIT:-180}
+HOLD=${MP_FIRMWARE_HOLD:-3600}
+SELF_TEST_WAIT=${MP_FIRMWARE_SELF_TEST_WAIT:-300}
 
 updated=no
+holding=no
+out=
 if mp_boot_trybooted; then
    updated=yes
+   holding=yes
    mp_log "this boot follows an update; the printer shows the update notice until the firmware is up to date"
 fi
+
+# Renew the deadline that holds the self-test back. Fails while the mainboard
+# does not know the deadline yet.
+hold() {
+   [ "$holding" = yes ] || return 0
+   mp_ota_hold "$HOLD"
+}
+
+# Clear it, once.
+release_hold() {
+   [ "$holding" = yes ] || return 0
+   holding=no
+   mp_ota_hold_release || mp_log "the printer cannot be told that the firmware update is over"
+}
+
+cleanup() {
+   [ -z "$out" ] || rm -f "$out"
+   release_hold
+}
+trap cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
 
 # Poll a condition until it holds or the given seconds are used up. After an
 # update the notice is put back whenever the control server answers without
@@ -98,6 +135,7 @@ wait_up_to() {
       [ "$_left" -gt 0 ] || return 1
       if [ "$updated" = yes ] && [ -n "$(mp_dcs_status)" ]; then
          mp_ota_notice_ensure || true
+         hold || true
       fi
       sleep "$POLL"
       _left=$((_left - POLL))
@@ -166,13 +204,30 @@ reset_mainboard() {
    fi
 }
 
+# True once the short self-test has come to a result and the printer is idle
+# again, and once there is nothing left to wait for: a job, a halted mainboard,
+# no control server, or a configuration without that result.
+self_test_over() {
+   case $(mp_dcs_status) in
+      busy) return 1 ;;
+      idle) ;;
+      *) return 0 ;;
+   esac
+   [ "$(mp_self_test_outcome)" != 0 ]
+}
+
 # Leave the printer with a message that says how the update ended, then exit.
+# The self-test starts only now, at the printer's next look, once a minute.
 finish() {
    if [ "$updated" = yes ]; then
+      release_hold
+      mp_log "waiting for the self-test of the printer"
+      wait_up_to "$SELF_TEST_WAIT" self_test_over || mp_log "the self-test of the printer did not come to a result"
+      _note=$(mp_self_test_note)
       if [ "$1" -eq 0 ]; then
-         mp_ota_done_show || mp_log "the printer cannot be told that the update is complete"
+         mp_ota_done_show "$_note" || mp_log "the printer cannot be told that the update is complete"
       else
-         mp_ota_failed_show || mp_log "the printer cannot be told that the firmware update did not complete"
+         mp_ota_failed_show "$_note" || mp_log "the printer cannot be told that the firmware update did not complete"
       fi
    fi
    exit "$1"
@@ -191,7 +246,6 @@ if ! wait_for mp_slot_committed; then
 fi
 
 out=$(mktemp)
-trap 'rm -f "$out"' EXIT
 pass=1
 while :; do
    if ! wait_settled; then
@@ -202,6 +256,7 @@ while :; do
    boot=${boot:-0}
 
    mp_log "comparing the Duet firmware with this image (pass $pass of $PASSES)"
+   hold || mp_log "the printer configuration cannot be told about the update; its self-test may run during it"
    rc=0
    "$DCS" -u < /dev/null > "$out" 2>&1 || rc=$?
    cat "$out" >&2
