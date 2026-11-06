@@ -2,10 +2,13 @@
 Description=Check every minute whether the update connector may run
 
 [Timer]
-# The connector gets the first minutes after boot to itself: committing a
-# trybooted slot and reporting the deployment to Connect must not wait for a
-# control server that is still starting.
-OnBootSec=5min
+# The connector asks for a pending deployment within seconds of its start and
+# installs it at once, so the gate looks as soon as a job can have started:
+# config.g takes the mainboard most of a minute, and an install takes minutes.
+# Committing a trybooted slot and reporting the deployment to Connect must not
+# wait for a control server that is still starting, which is why the gate does
+# not stop the connector for one during the first five minutes.
+OnBootSec=1min
 OnUnitActiveSec=1min
 AccuracySec=15s
 

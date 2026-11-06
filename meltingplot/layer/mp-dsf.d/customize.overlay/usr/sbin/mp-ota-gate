@@ -23,7 +23,11 @@
 # boot regardless and commits a freshly trybooted slot before this timer
 # fires for the first time; until that commit is through it is left alone
 # whatever the printer does, since the restart this guards against has
-# already happened.
+# already happened. The connector also asks for a pending deployment within
+# seconds of its start, so this timer fires after a minute: a job cannot start
+# before config.g is through, and installing takes longer than that. For the
+# first five minutes a control server that is not up yet does not stop the
+# connector, so that reporting a deployment does not wait for it.
 #
 # Stopping the connector in the middle of an install is fine: nothing it has
 # written is a slot the bootloader would start, and it picks the deployment
@@ -32,12 +36,16 @@
 # restarts the machine.
 #
 # While the connector reports an install in progress, the printer shows the
-# update notice, refreshed on every run so its timeout never expires ahead of
-# the restart. The restart takes the notice down with the control server;
-# mp-dsf-firmware puts it back, keeps it up through the firmware update and
+# update notice, put back on every run if no message box is on display, and
+# the self-test of the printer configuration is held back with a deadline that
+# every run renews, so that it does not make the printer busy, which would stop
+# the install. The restart takes the notice down with the control server, and
+# the reset of the mainboard that follows clears the deadline; mp-dsf-firmware
+# puts both back, keeps them up through the firmware update and
 # then tells the printer that the update is complete. An
 # install that ends without a restart (it failed, or the connector was
-# stopped) closes the notice on the next run. The flag under /run remembers
+# stopped) closes the notice and clears the deadline on the next run. The flag
+# under /run remembers
 # that this gate put the notice up, so it never closes a message box that a
 # later boot put up.
 #
@@ -64,6 +72,8 @@ UNIT=rpi-connect-ota.service
 NOTICE_FLAG=${MP_NOTICE_FLAG:-/run/mp-ota-gate.notice}
 DOWN_FLAG=${MP_DOWN_FLAG:-/run/mp-ota-gate.down}
 DOWN_GRACE=${MP_DOWN_GRACE:-600}
+BOOT_GRACE=${MP_BOOT_GRACE:-300}
+HOLD=${MP_OTA_GATE_HOLD:-180}
 UPTIME=${MP_UPTIME:-/proc/uptime}
 
 status=$(mp_dcs_status)
@@ -93,6 +103,11 @@ elif [ "$down" -ge "$DOWN_GRACE" ]; then
    want=running
 else
    want=stopped
+   if [ "$now" -lt "$BOOT_GRACE" ]; then
+      case $status in
+         '' | disconnected | starting) want=running ;;
+      esac
+   fi
 fi
 
 case $want:$active in
@@ -126,7 +141,8 @@ case $want:$active in
 esac
 if mp_ota_installing "$ota"; then
    [ -e "$NOTICE_FLAG" ] || mp_log "the update connector is in state $ota; the printer shows the update notice"
-   if mp_ota_notice_show; then
+   mp_ota_hold "$HOLD" || mp_log "the printer configuration cannot be told about the update in progress"
+   if mp_ota_notice_ensure; then
       : > "$NOTICE_FLAG"
    else
       mp_log "the printer cannot be told about the update in progress"
@@ -134,5 +150,6 @@ if mp_ota_installing "$ota"; then
 elif [ -e "$NOTICE_FLAG" ]; then
    mp_log "the update connector is ${ota:-not running}; the update notice comes down"
    mp_ota_notice_close || mp_log "the printer cannot be told that the update is over"
+   mp_ota_hold_release || mp_log "the printer configuration cannot be told that the update is over"
    rm -f "$NOTICE_FLAG"
 fi

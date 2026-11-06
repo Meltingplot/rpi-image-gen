@@ -145,6 +145,38 @@ check "notice close: none open" 'M409 K"state.messageBox.title"' "$(paste -sd, "
 echo '{"key":"state.messageBox.title","flags":"","result":"OTA Update"}' > "$tmp/query.state.messageBox.title"
 mp_ota_done_show
 check "done: replaces the notice" 'M409 K"state.messageBox.title",M292,M291 S1 T0 R"OTA Update" P"OTA update completed successfully. The machine is ready for use."' "$(paste -sd, "$tmp/codes.log")"
+# Put up only while no message box is on display: the firmware reports only the
+# head of its queue, and every further box would fill it.
+: > "$tmp/codes.log"
+mp_ota_notice_ensure
+check "notice ensure: nothing on display" 'M409 K"state.messageBox",M291 S0 T1800 R"OTA Update" P"OTA update in progress - do not shut down the machine! You can use the machine again when this message disappears."' "$(paste -sd, "$tmp/codes.log")"
+: > "$tmp/codes.log"
+echo '{"key":"state.messageBox","flags":"","result":{"mode":1,"title":"Kühlkreis"}}' > "$tmp/query.state.messageBox"
+mp_ota_notice_ensure
+check "notice ensure: another box" 'M409 K"state.messageBox"' "$(paste -sd, "$tmp/codes.log")"
+echo '{"key":"state.messageBox","flags":"","result":null}' > "$tmp/query.state.messageBox"
+
+# The deadline for the self-test: set only once the mainboard knows it.
+: > "$tmp/codes.log"
+echo '{"key":"global.ota_pending_until","flags":"","result":null}' > "$tmp/query.global.ota_pending_until"
+mp_ota_hold 180 && r=yes || r=no
+check "hold: global not declared yet" no "$r"
+check "hold: global not declared yet, codes" 'M409 K"global.ota_pending_until"' "$(paste -sd, "$tmp/codes.log")"
+: > "$tmp/codes.log"
+echo '{"key":"global.ota_pending_until","flags":"","result":0}' > "$tmp/query.global.ota_pending_until"
+mp_ota_hold 180 && r=yes || r=no
+check "hold: declared" yes "$r"
+check "hold: declared, codes" 'M409 K"global.ota_pending_until",set global.ota_pending_until = state.upTime + 180' "$(paste -sd, "$tmp/codes.log")"
+: > "$tmp/codes.log"
+mp_ota_hold_release
+check "hold: release" 'set global.ota_pending_until = 0' "$(paste -sd, "$tmp/codes.log")"
+
+# What the last message says about the self-test.
+for _o in '1:The self-test passed.' '2:The self-test found a problem, see the event log.' '3:The self-test has not run yet.' '0:The self-test has not run yet.' 'null:The self-test has not run yet.'; do
+   echo "{\"key\":\"global.self_test_quick_outcome\",\"flags\":\"\",\"result\":${_o%%:*}}" > "$tmp/query.global.self_test_quick_outcome"
+   check "self-test note: ${_o%%:*}" "${_o#*:}" "$(mp_self_test_note)"
+done
+
 MP_VERSION=0.1.0-rc.23
 MP_RELEASE_URL=https://github.com/Meltingplot/rpi-image-gen/releases/tag/duet-pi5%2Fv0.1.0-rc.23
 check "done text: release" 'OTA update to 0.1.0-rc.23 completed successfully. Read the <a href="https://github.com/Meltingplot/rpi-image-gen/releases/tag/duet-pi5%2Fv0.1.0-rc.23" target="_blank">changelog</a>.' "$(mp_ota_done_text)"
@@ -153,6 +185,12 @@ echo '{"key":"state.messageBox.title","flags":"","result":null}' > "$tmp/query.s
 mp_ota_done_show
 check "done: quotes doubled for G-code" 'M291 S1 T0 R"OTA Update" P"OTA update to 0.1.0-rc.23 completed successfully. Read the <a href=""https://github.com/Meltingplot/rpi-image-gen/releases/tag/duet-pi5%2Fv0.1.0-rc.23"" target=""_blank"">changelog</a>."' "$(grep '^M291' "$tmp/codes.log")"
 check "failed text" "OTA update to 0.1.0-rc.23 installed, but the Duet firmware update did not complete. Please contact Meltingplot support." "$(mp_ota_failed_text)"
+check "failed text, self-test" "OTA update to 0.1.0-rc.23 installed, but the Duet firmware update did not complete. The self-test passed. Please contact Meltingplot support." "$(mp_ota_failed_text 'The self-test passed.')"
+check "done text, self-test" 'OTA update to 0.1.0-rc.23 completed successfully. The self-test passed. Read the <a href="https://github.com/Meltingplot/rpi-image-gen/releases/tag/duet-pi5%2Fv0.1.0-rc.23" target="_blank">changelog</a>.' "$(mp_ota_done_text 'The self-test passed.')"
+# The longest sentence must leave the link whole: the firmware cuts at 256.
+t=$(mp_ota_done_text 'The self-test found a problem, see the event log.')
+check "done text: the link is not cut" yes "$(case $t in *'</a>.') echo yes ;; *) echo no ;; esac)"
+check "done text: below the limit" yes "$([ "${#t}" -lt 240 ] && echo yes || echo no)"
 MP_RELEASE_URL=
 check "done text: local build" "OTA update to 0.1.0-rc.23 completed successfully. The machine is ready for use." "$(mp_ota_done_text)"
 MP_RELEASE_URL=https://example.invalid/$(python3 -c 'print("x" * 300)')
@@ -207,9 +245,10 @@ check "committed: no autoboot.txt" no "$r"
 # is-active from a file and records every other call. The connector runs
 # while the printer is idle or halted, and while the slot is not yet
 # committed; it is stopped for anything else, including a control server that
-# cannot be asked. While the connector installs, the printer shows the notice; when an
+# cannot be asked. While the connector installs, the printer shows the notice
+# and the deadline for the self-test runs; when an
 # install the gate announced is over without a restart, the notice comes
-# down, and only then.
+# down and the deadline is cleared, and only then.
 
 export MP_LIB="$tmp/lib"
 mkdir -p "$MP_LIB"
@@ -220,7 +259,7 @@ export MP_SYSTEMCTL="$tmp/systemctl"
 export MP_NOTICE_FLAG="$tmp/notice.flag"
 export MP_DOWN_FLAG="$tmp/down.flag"
 export MP_UPTIME="$tmp/uptime"
-echo "100.00 90.00" > "$MP_UPTIME"
+echo "400.00 390.00" > "$MP_UPTIME"
 cat > "$MP_SYSTEMCTL" <<'EOF'
 #!/bin/sh
 case $1 in
@@ -258,9 +297,11 @@ chmod +x "$MP_CODECONSOLE"
 echo 0 > "$tmp/status.rc"
 printf '[all]\ntryboot_a_b=1\nboot_partition=2\n[tryboot]\nboot_partition=3\n' > "$MP_AUTOBOOT"
 echo '{"key":"state.messageBox.title","flags":"","result":null}' > "$tmp/query.state.messageBox.title"
+echo '{"key":"state.messageBox","flags":"","result":null}' > "$tmp/query.state.messageBox"
+echo '{"key":"global.ota_pending_until","flags":"","result":0}' > "$tmp/query.global.ota_pending_until"
 rm -f "$MP_NOTICE_FLAG"
 
-gate_case "idle, connector running"        '"idle"'       active     committed   IDLE ""                             ""
+gate_case "idle, connector running"       '"idle"'       active     committed   IDLE ""                             ""
 gate_case "idle, connector stopped"        '"idle"'       inactive   committed   ""   "start rpi-connect-ota.service" ""
 gate_case "idle, connector failed"         '"idle"'       failed     committed   ""   "start rpi-connect-ota.service" ""
 gate_case "printing, connector running"    '"processing"' active     committed   IDLE "stop rpi-connect-ota.service"  ""
@@ -273,31 +314,62 @@ gate_case "unreachable, connector running" 'null'         active     committed  
 gate_case "printing, slot not committed"   '"processing"' active     uncommitted IDLE ""                             ""
 gate_case "unreachable, not committed"     'null'         inactive   uncommitted ""   "start rpi-connect-ota.service" ""
 
+# For the first five minutes after boot a control server that is not up yet
+# does not stop the connector, a job or a macro does.
+echo "100.00 90.00" > "$MP_UPTIME"
+gate_case "boot: starting"                 '"starting"'   active     committed   IDLE ""                             ""
+gate_case "boot: unreachable"              'null'         active     committed   IDLE ""                             ""
+gate_case "boot: disconnected"             '"disconnected"' active   committed   IDLE ""                             ""
+gate_case "boot: printing"                 '"processing"' active     committed   IDLE "stop rpi-connect-ota.service"  ""
+gate_case "boot: a macro running"          '"busy"'       active     committed   IDLE "stop rpi-connect-ota.service"  ""
+echo "300.00 90.00" > "$MP_UPTIME"
+gate_case "after 5 min: starting"          '"starting"'   active     committed   IDLE "stop rpi-connect-ota.service"  ""
+echo "400.00 390.00" > "$MP_UPTIME"
+
 notice='M291 S0 T1800 R"OTA Update" P"OTA update in progress - do not shut down the machine! You can use the machine again when this message disappears."'
-gate_case "idle, downloading"              '"idle"'       active     committed   DOWNLOAD "" "$notice"
+hold_codes='M409 K"global.ota_pending_until",set global.ota_pending_until = state.upTime + 180'
+announce="$hold_codes,M409 K\"state.messageBox\",$notice"
+release='set global.ota_pending_until = 0'
+gate_case "idle, downloading"              '"idle"'       active     committed   DOWNLOAD "" "$announce"
 [ -e "$MP_NOTICE_FLAG" ] && r=yes || r=no
 check "gate: notice flag after showing" yes "$r"
-gate_case "idle, installing"               '"idle"'       active     committed   INSTALL  "" "$notice"
-gate_case "idle, about to restart"         '"idle"'       active     committed   TRYBOOT  "" "$notice"
+gate_case "idle, installing"               '"idle"'       active     committed   INSTALL  "" "$announce"
+gate_case "idle, about to restart"         '"idle"'       active     committed   TRYBOOT  "" "$announce"
 echo '{"key":"state.messageBox.title","flags":"","result":"OTA Update"}' > "$tmp/query.state.messageBox.title"
-gate_case "idle, install failed"           '"idle"'       active     committed   FAILDEPLOYMENT "" 'M409 K"state.messageBox.title",M292'
+gate_case "idle, install failed"           '"idle"'       active     committed   FAILDEPLOYMENT "" "M409 K\"state.messageBox.title\",M292,$release"
 [ -e "$MP_NOTICE_FLAG" ] && r=yes || r=no
 check "gate: notice flag after closing" no "$r"
 gate_case "idle, install over, nothing shown" '"idle"'    active     committed   IDLE "" ""
 gate_case "idle, stale file, connector off" '"idle"'      inactive   committed   INSTALL "start rpi-connect-ota.service" ""
-gate_case "idle, installing again"         '"idle"'       active     committed   INSTALL  "" "$notice"
+gate_case "idle, installing again"         '"idle"'       active     committed   INSTALL  "" "$announce"
 # The print that starts during an install stops the connector. Its file is
 # left saying INSTALL, which counts for nothing once the connector is gone,
 # and the notice comes down.
-gate_case "printing, install interrupted"  '"processing"' inactive   committed   INSTALL "" 'M409 K"state.messageBox.title",M292'
+gate_case "printing, install interrupted"  '"processing"' inactive   committed   INSTALL "" "M409 K\"state.messageBox.title\",M292,$release"
 # The notice of a message box that is not ours is left alone.
-gate_case "idle, installing, flag reset"   '"idle"'       active     committed   INSTALL  "" "$notice"
+gate_case "idle, installing, flag reset"   '"idle"'       active     committed   INSTALL  "" "$announce"
 echo '{"key":"state.messageBox.title","flags":"","result":"Nozzle diameter"}' > "$tmp/query.state.messageBox.title"
-gate_case "idle, install over, dialog open" '"idle"'      active     committed   IDLE "" 'M409 K"state.messageBox.title"'
+gate_case "idle, install over, dialog open" '"idle"'      active     committed   IDLE "" "M409 K\"state.messageBox.title\",$release"
 # A boot puts up its own notice; a gate that has not announced one leaves it.
 echo '{"key":"state.messageBox.title","flags":"","result":"OTA Update"}' > "$tmp/query.state.messageBox.title"
 gate_case "idle, notice of the boot"       '"idle"'       active     committed   IDLE "" ""
 echo '{"key":"state.messageBox.title","flags":"","result":null}' > "$tmp/query.state.messageBox.title"
+# Another box on display gets no notice on top, the deadline still runs.
+echo '{"key":"state.messageBox","flags":"","result":{"mode":1,"title":"Kühlkreis"}}' > "$tmp/query.state.messageBox"
+gate_case "idle, installing, a box open"   '"idle"'       active     committed   INSTALL "" "$hold_codes,M409 K\"state.messageBox\""
+[ -e "$MP_NOTICE_FLAG" ] && r=yes || r=no
+check "gate: flag with a box open" yes "$r"
+gate_case "idle, install over, box open"   '"idle"'       active     committed   IDLE "" "M409 K\"state.messageBox.title\",$release"
+echo '{"key":"state.messageBox","flags":"","result":null}' > "$tmp/query.state.messageBox"
+# A mainboard that does not know the deadline yet gets no set, and the journal
+# says so.
+echo '{"key":"global.ota_pending_until","flags":"","result":null}' > "$tmp/query.global.ota_pending_until"
+: > "$tmp/gate.log"
+gate_case "idle, installing, no deadline yet" '"idle"'    active     committed   INSTALL "" "M409 K\"global.ota_pending_until\",M409 K\"state.messageBox\",$notice"
+check "gate: no deadline yet, log" yes \
+   "$(grep -q 'printer configuration cannot be told about the update' "$tmp/gate.log" && echo yes || echo no)"
+echo '{"key":"global.ota_pending_until","flags":"","result":0}' > "$tmp/query.global.ota_pending_until"
+gate_case "idle, install over, no deadline" '"idle"'      active     committed   IDLE "" "M409 K\"state.messageBox.title\",$release"
 
 # A mainboard that stays disconnected lets the connector run after ten
 # minutes without a break, counted from the uptime; any other answer in
@@ -338,10 +410,16 @@ gate_case "no control server, 10 min"      '"idle"'       inactive   committed  
 # and with fw.stuck on file the printer never becomes idle after it, with
 # fw.halts on file it halts again. fw.queries counts the status queries. The
 # settling time is 0 here unless a case sets it, so one idle reading is enough.
+# fw.trace records the codes in their order, together with every renewal of the
+# deadline (hold), its clearing (release) and every read of the self-test's
+# result (outcome). That result comes from a list like the status. With
+# fw.noglobal on file the mainboard does not know the deadline, with fw.dialog on
+# file another message box stays on display.
 
 cat > "$MP_CODECONSOLE" <<'EOF'
 #!/bin/sh
 d=$(dirname "$0")
+trace() { echo "$1" >> "$d/fw.trace"; }
 case $2 in
    'M409 K"state.status"')
       echo x >> "$d/fw.queries"
@@ -355,16 +433,36 @@ case $2 in
       echo "{\"key\":\"state.upTime\",\"flags\":\"\",\"result\":$(($(date +%s) - $(cat "$d/fw.boot")))}" ;;
    'M409 K"state.messageBox.title"')
       t=$(cat "$d/fw.title" 2>/dev/null) || t=
+      [ ! -e "$d/fw.dialog" ] || t=Dialog
       if [ -n "$t" ]; then t="\"$t\""; else t=null; fi
       echo "{\"key\":\"state.messageBox.title\",\"flags\":\"\",\"result\":$t}" ;;
+   'M409 K"state.messageBox"')
+      if [ -e "$d/fw.dialog" ] || [ -s "$d/fw.title" ]; then r='{"mode":0}'; else r=null; fi
+      echo "{\"key\":\"state.messageBox\",\"flags\":\"\",\"result\":$r}" ;;
+   'M409 K"global.ota_pending_until"')
+      if [ -e "$d/fw.noglobal" ]; then r=null; else r=0; fi
+      echo "{\"key\":\"global.ota_pending_until\",\"flags\":\"\",\"result\":$r}" ;;
+   'M409 K"global.self_test_quick_outcome"')
+      trace outcome
+      r=$(head -n1 "$d/fw.outcome")
+      [ "$(wc -l < "$d/fw.outcome")" -le 1 ] || sed -i 1d "$d/fw.outcome"
+      echo "{\"key\":\"global.self_test_quick_outcome\",\"flags\":\"\",\"result\":${r:-null}}" ;;
+   'set global.ota_pending_until = state.upTime + '*)
+      trace hold ;;
+   'set global.ota_pending_until = 0')
+      trace release ;;
    M291*)
       echo "$2" | cut -c1-9 >> "$d/codes.log"
+      trace "$(echo "$2" | cut -c1-9)"
+      echo "$2" > "$d/fw.lastbox"
       echo "OTA Update" > "$d/fw.title" ;;
    M292)
       echo M292 >> "$d/codes.log"
+      trace M292
       rm -f "$d/fw.title" ;;
    M999)
       echo M999 >> "$d/codes.log"
+      trace M999
       echo $(($(cat "$d/fw.boot") + 1000)) > "$d/fw.boot"
       rm -f "$d/fw.title"
       if [ -e "$d/fw.stuck" ]; then echo starting
@@ -379,6 +477,7 @@ d=$(dirname "$0")
 n=$(($(cat "$d/fw.pass") + 1))
 echo "$n" > "$d/fw.pass"
 echo "DCS -u" >> "$d/codes.log"
+echo "DCS -u" >> "$d/fw.trace"
 cat "$d/fw.out.$n"
 if ! grep -q up-to-date "$d/fw.out.$n"; then
    echo $(($(cat "$d/fw.boot") + 1000)) > "$d/fw.boot"
@@ -389,7 +488,7 @@ exit "$(cat "$d/fw.rc.$n" 2>/dev/null || echo 0)"
 EOF
 chmod +x "$tmp/DuetControlServer"
 export MP_DCS="$tmp/DuetControlServer" MP_FIRMWARE_POLL=1 MP_FIRMWARE_WAIT=20 \
-   MP_FIRMWARE_SETTLE=0 MP_FIRMWARE_SETTLE_WAIT=20
+   MP_FIRMWARE_SETTLE=0 MP_FIRMWARE_SETTLE_WAIT=20 MP_FIRMWARE_SELF_TEST_WAIT=3
 fwscript="$here/../layer/mp-dsf.d/customize.overlay/usr/sbin/mp-dsf-firmware"
 printf '[all]\ntryboot_a_b=1\nboot_partition=2\n[tryboot]\nboot_partition=3\n' > "$MP_AUTOBOOT"
 echo 2 > "$tmp/active"
@@ -399,15 +498,18 @@ Updating firmware on mainboard... Done!'
 uptodate='All boards are up-to-date!'
 
 # name, trybooted, status list, answers of each pass -> exit status, codes.
-# The image setting MP_MAINBOARD_RESET comes from $fw_reset.
+# The image setting MP_MAINBOARD_RESET comes from $fw_reset, the results of the
+# self-test from $fw_outcome.
 fw_reset=n
+fw_outcome=1
 fw_case() {
    echo "MP_MAINBOARD_RESET=$fw_reset" > "$MP_DSF_CONF"
    if [ "$2" = yes ]; then printf '\0\0\0\1'; else printf '\0\0\0\0'; fi > "$MP_TRYBOOT_FLAG"
    printf '%s\n' $3 > "$tmp/fw.status"
    echo $(($(date +%s) - 5000)) > "$tmp/fw.boot"
    echo 0 > "$tmp/fw.pass"
-   rm -f "$tmp/fw.title" "$tmp/fw.queries" "$tmp"/fw.out.* "$tmp"/fw.rc.*
+   rm -f "$tmp/fw.title" "$tmp/fw.queries" "$tmp/fw.trace" "$tmp/fw.lastbox" "$tmp"/fw.out.* "$tmp"/fw.rc.*
+   printf '%s\n' $fw_outcome > "$tmp/fw.outcome"
    _i=0
    for _a in $4; do
       _i=$((_i + 1))
@@ -514,7 +616,94 @@ MP_FIRMWARE_WAIT=3 fw_case "reset, update, not idle again" yes "idle" "ok" \
 rm -f "$tmp/fw.stuck"
 check "reset, update, not idle again, log" yes \
    "$(grep -q 'did not come back idle after the reset' "$tmp/fw.log" && echo yes || echo no)"
+# The reset clears the deadline, so it is set again afterwards.
+fw_case "reset, update, deadline again"    yes "idle" "ok" \
+   0 "DCS -u,M999,M291 S0 T,M292,M291 S1 T"
+check "reset, update, deadline again, order" "hold,DCS -u,M999,M291 S0 T,hold,release,outcome,M292,M291 S1 T" \
+   "$(uniq "$tmp/fw.trace" | paste -sd, -)"
 fw_reset=n
+
+# --- deadline for the self-test --------------------------------------------
+# A boot after an update holds the self-test back with a deadline, renewed on
+# every poll and before every flash, cleared before the last message, whose
+# self-test result is read only after that. A normal boot does none of it.
+fw_trace() { uniq "$tmp/fw.trace" | paste -sd, -; }
+fw_box() { grep -q "$1" "$tmp/fw.lastbox" && echo yes || echo no; }
+fw_case "deadline, firmware current" yes "starting idle" "ok" \
+   0 "M291 S0 T,DCS -u,M292,M291 S1 T"
+check "deadline, firmware current, order" "M291 S0 T,hold,DCS -u,release,outcome,M292,M291 S1 T" "$(fw_trace)"
+fw_case "deadline, one flash"        yes "starting idle" "flash ok" \
+   0 "M291 S0 T,DCS -u,M291 S0 T,DCS -u,M292,M291 S1 T"
+check "deadline, one flash, order" "M291 S0 T,hold,DCS -u,M291 S0 T,hold,DCS -u,release,outcome,M292,M291 S1 T" "$(fw_trace)"
+fw_case "deadline, flash fails"      yes "idle" "fail" \
+   1 "DCS -u,M291 S1 T"
+check "deadline, flash fails, order" "hold,DCS -u,release,outcome,M291 S1 T" "$(fw_trace)"
+check "deadline, flash fails, says so" yes "$(fw_box 'did not complete. The self-test passed.')"
+fw_case "deadline, normal boot"      no  "idle" "ok" \
+   0 "DCS -u"
+check "deadline, normal boot, order" "DCS -u" "$(fw_trace)"
+
+# A mainboard that does not know the deadline flashes anyway, and the journal
+# says so.
+touch "$tmp/fw.noglobal"
+fw_case "deadline not declared"      yes "idle" "ok" \
+   0 "DCS -u,M291 S1 T"
+check "deadline not declared, order" "DCS -u,release,outcome,M291 S1 T" "$(fw_trace)"
+check "deadline not declared, log" yes \
+   "$(grep -q 'cannot be told about the update' "$tmp/fw.log" && echo yes || echo no)"
+rm -f "$tmp/fw.noglobal"
+
+# Stopped from outside, the script still clears it.
+printf '\0\0\0\1' > "$MP_TRYBOOT_FLAG"
+echo starting > "$tmp/fw.status"
+rm -f "$tmp/fw.trace" "$tmp/fw.title"
+MP_FIRMWARE_WAIT=30 sh "$fwscript" 2>"$tmp/fw.log" &
+fw_pid=$!
+sleep 3
+kill -TERM "$fw_pid"
+_rc=0
+wait "$fw_pid" || _rc=$?
+check "deadline, stopped, exit status" 143 "$_rc"
+check "deadline, stopped, cleared" release "$(tail -n1 "$tmp/fw.trace")"
+
+# --- the last message and the self-test ------------------------------------
+# It waits for the result, says what it was, and does not wait for what cannot
+# come.
+fw_case "self-test passed"           yes "idle" "ok" \
+   0 "DCS -u,M291 S1 T"
+check "self-test passed, box" yes "$(fw_box 'completed successfully. The self-test passed.')"
+fw_outcome="0 0 2"
+fw_case "self-test found something"  yes "idle" "ok" \
+   0 "DCS -u,M291 S0 T,M292,M291 S1 T"
+check "self-test found something, box" yes "$(fw_box 'The self-test found a problem')"
+fw_outcome=3
+fw_case "self-test cannot come"      yes "idle" "ok" \
+   0 "DCS -u,M291 S1 T"
+check "self-test cannot come, box" yes "$(fw_box 'The self-test has not run yet.')"
+fw_outcome=0
+MP_FIRMWARE_SELF_TEST_WAIT=2 fw_case "self-test never comes" yes "idle" "ok" \
+   0 "DCS -u,M291 S0 T,M292,M291 S1 T"
+check "self-test never comes, box" yes "$(fw_box 'The self-test has not run yet.')"
+check "self-test never comes, log" yes \
+   "$(grep -q 'did not come to a result' "$tmp/fw.log" && echo yes || echo no)"
+# A job, a halted mainboard: no use waiting, also with no result yet.
+fw_case "self-test, a job started"   yes "idle idle processing" "ok" \
+   0 "DCS -u,M291 S1 T"
+fw_outcome=
+fw_case "self-test, config without it" yes "idle" "ok" \
+   0 "DCS -u,M291 S1 T"
+check "self-test, config without it, box" yes "$(fw_box 'The self-test has not run yet.')"
+# The result is there, but the flow still runs.
+fw_outcome=1
+fw_case "self-test, flow still running" yes "idle idle busy busy idle" "ok" \
+   0 "DCS -u,M291 S0 T,M292,M291 S1 T"
+
+# --- another message box on display ----------------------------------------
+# No notice goes on top of it, and it is not closed.
+touch "$tmp/fw.dialog"
+fw_case "another box on display"     yes "starting idle" "ok" \
+   0 "DCS -u,M291 S1 T"
+rm -f "$tmp/fw.dialog"
 
 # --- group of the persistent DSF files ------------------------------------
 # Two groups of the account running the tests stand in for kvm (wrong) and dsf

@@ -82,6 +82,13 @@ done < <(find "$DSF/conf" -maxdepth 1 -type f)
 
 [[ -f $SD/sys/config.g ]] || bad "no config.g: the printer configuration was not baked in"
 [[ -f $SD/www/index.html ]] || bad "no index.html below sd/www: Duet Web Control is not where DuetWebServer looks"
+# mp-ota-gate and mp-dsf-firmware hold the self-test back through this global
+# and read its result from that one, and a failed set goes unnoticed on the
+# device. Lines may carry a line number and a CRC by now.
+for global in ota_pending_until self_test_quick_outcome; do
+   grep -rqE "^[[:space:]]*(N[0-9]+[[:space:]]+)?global $global([[:space:]=]|\$)" "$SD/sys" ||
+      bad "the printer configuration does not declare global.$global, which the update scripts rely on"
+done
 # The web interface served is the one of the installed duetwebcontrol
 # package, and not a copy left over from somewhere else; the bundle names its
 # version as a string literal, with a hyphen where the package has a tilde.

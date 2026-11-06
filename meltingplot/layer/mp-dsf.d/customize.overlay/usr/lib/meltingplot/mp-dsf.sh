@@ -75,10 +75,12 @@ mp_dcs_code() {
 # PanelDue and in Duet Web Control; it goes away when it is closed, when the
 # control server restarts (it does not survive the restart into an update),
 # when the mainboard resets (a firmware flash does that), or after the
-# timeout, which is generous so that a refresh once a minute never lets it
-# lapse while an install runs. Only a
+# timeout, after which the next check puts it up again if the install still
+# runs. Only a
 # message box with this title is ever closed, so a dialog of a macro or of
-# the operator is left alone.
+# the operator is left alone. The notice only tells: an operator can close it,
+# so nothing may depend on it being there. What holds the self-test back is
+# the deadline further down.
 MP_OTA_NOTICE_TITLE="OTA Update"
 MP_OTA_NOTICE_TEXT="OTA update in progress - do not shut down the machine! You can use the machine again when this message disappears."
 MP_OTA_NOTICE_TIMEOUT=1800
@@ -91,10 +93,49 @@ mp_ota_notice_open() {
    [ "$(mp_dcs_query state.messageBox.title)" = "$MP_OTA_NOTICE_TITLE" ]
 }
 
-# Show the notice unless a message box of ours is already on display, so a
-# queue of identical boxes never builds up.
+# Show the notice only while no message box is on display. RepRapFirmware
+# reports only the head of its queue, so a notice sent behind someone else's box
+# could not be told from a missing one, and sending it every few seconds would
+# fill the queue, at which the firmware drops older boxes unread. An operator
+# who closes the notice gets it back at the next check.
 mp_ota_notice_ensure() {
-   mp_ota_notice_open || mp_ota_notice_show
+   [ -n "$(mp_dcs_query state.messageBox)" ] || mp_ota_notice_show
+}
+
+# The deadline that keeps the printer configuration from starting its self-test
+# while an update is under way, as the mainboard's uptime in seconds. Its name
+# and those of the other globals here are an interface with chx350-config.
+# config.g declares it with the value 0, so every reset of the mainboard clears
+# it, also after a flash that failed, and a deadline that nobody renews runs
+# out by itself, so that a script that dies cannot switch the self-test off.
+#
+# A global the mainboard does not know yet, because config.g has not come that
+# far, reads as null, and setting it only earns an error that CodeConsole does
+# not report in its exit status. So this asks first, and fails if there is
+# nothing to set yet.
+mp_ota_hold() {
+   [ -n "$(mp_dcs_query global.ota_pending_until)" ] || return 1
+   mp_dcs_code "set global.ota_pending_until = state.upTime + $1"
+}
+
+mp_ota_hold_release() {
+   mp_dcs_code 'set global.ota_pending_until = 0'
+}
+
+# What the self-test made of the machine, from the printer configuration: 0 not
+# known yet, 1 passed, 2 found something, 3 cannot come right now. Null when the
+# configuration does not have it.
+mp_self_test_outcome() {
+   mp_dcs_query global.self_test_quick_outcome
+}
+
+# The sentence the last message box of an update says about the self-test.
+mp_self_test_note() {
+   case $(mp_self_test_outcome) in
+      1) echo "The self-test passed." ;;
+      2) echo "The self-test found a problem, see the event log." ;;
+      *) echo "The self-test has not run yet." ;;
+   esac
 }
 
 # Close the notice if it is the message box on display. Succeeds when there is
@@ -117,24 +158,26 @@ mp_ota_notice_close() {
 # shows at most 256 characters of a message, and DuetControlServer refuses a
 # code over 384 bytes in its binary form, which this title and these
 # parameters reach at about 330 characters. The text is cut at what the
-# firmware shows; with a version and a GitHub release page it stays below
-# 200 characters. A double quote inside a G-code string is written twice;
-# that is how the quotes of the link survive the trip, a single quote does
-# not (RepRapFirmware reads it as a lower-case escape and drops it).
+# firmware shows; with a version, a GitHub release page and the sentence about
+# the self-test it stays below 240 characters. A double quote inside a G-code
+# string is written twice; that is how the quotes of the link survive the trip,
+# a single quote does not (RepRapFirmware reads it as a lower-case escape and
+# drops it). The sentence about the self-test comes as an argument.
 MP_OTA_DONE_MAX=256
 
 mp_ota_done_text() {
+   _note=${1:+$1 }
    if [ -n "$MP_RELEASE_URL" ]; then
-      _text="OTA update${MP_VERSION:+ to $MP_VERSION} completed successfully. Read the <a href=\"$MP_RELEASE_URL\" target=\"_blank\">changelog</a>."
+      _text="OTA update${MP_VERSION:+ to $MP_VERSION} completed successfully. ${_note}Read the <a href=\"$MP_RELEASE_URL\" target=\"_blank\">changelog</a>."
    else
-      _text="OTA update${MP_VERSION:+ to $MP_VERSION} completed successfully. The machine is ready for use."
+      _text="OTA update${MP_VERSION:+ to $MP_VERSION} completed successfully. ${_note}The machine is ready for use."
    fi
    printf '%.*s\n' "$MP_OTA_DONE_MAX" "$_text"
 }
 
 mp_ota_done_show() {
    mp_ota_notice_close || return 1
-   _p=$(mp_ota_done_text | sed 's/"/""/g')
+   _p=$(mp_ota_done_text "${1:-}" | sed 's/"/""/g')
    mp_dcs_code "M291 S1 T0 R\"$MP_OTA_NOTICE_TITLE\" P\"$_p\""
 }
 
@@ -143,12 +186,13 @@ mp_ota_done_show() {
 # machine runs the new software with the old firmware then, which Duet Web
 # Control also warns about.
 mp_ota_failed_text() {
-   printf '%.*s\n' "$MP_OTA_DONE_MAX" "OTA update${MP_VERSION:+ to $MP_VERSION} installed, but the Duet firmware update did not complete. Please contact Meltingplot support."
+   _note=${1:+$1 }
+   printf '%.*s\n' "$MP_OTA_DONE_MAX" "OTA update${MP_VERSION:+ to $MP_VERSION} installed, but the Duet firmware update did not complete. ${_note}Please contact Meltingplot support."
 }
 
 mp_ota_failed_show() {
    mp_ota_notice_close || return 1
-   _p=$(mp_ota_failed_text | sed 's/"/""/g')
+   _p=$(mp_ota_failed_text "${1:-}" | sed 's/"/""/g')
    mp_dcs_code "M291 S1 T0 R\"$MP_OTA_NOTICE_TITLE\" P\"$_p\""
 }
 
