@@ -21,7 +21,7 @@
 # A board firmware file is not a package of the build; it goes through
 # firmware.list.
 
-# 3.7.0+mp.10: upstream v3.7-dev at 3.7.0, which no longer rejects the skip
+# 3.7.0+mp.12: upstream v3.7-dev at 3.7.0, which no longer rejects the skip
 # keyword outside G-code files and reads the layer count, the filament used,
 # the generator and the print time from the headers of more slicers (the
 # filters are in config.json, which the image puts over the printer's copy on
@@ -54,14 +54,21 @@
 # test of 2026-11-03 four of five link events were such a bit error.
 # M112 completes only once the emergency stop has reached the firmware, and
 # our fixes for M20, M30, M36, M39, M111, M260/M261 with V, M472, M505,
-# M581.1, M606 and M929 are in. The packages are built with root as owner of
+# M581.1, M606 and M929 are in. M98.n starts a macro on another code channel
+# (n as in M118 P: 2 PanelDue, 3 HTTP, 4 Telnet, 5 second UART) and returns
+# once it is queued, or with result 1 when that channel is busy, so that a
+# trigger macro need not hold the other triggers back during a blocking macro;
+# only DCS knows it, so it works from macro files and DSF clients, not from
+# M581.1 U actions or PanelDue. The packages are built with root as owner of
 # every file.
-# Duet Web Control comes from our fork, 3.7.0+mp.6, the tag pkg/dwc-version
+# Duet Web Control comes from our fork, 3.7.0+mp.7, the tag pkg/dwc-version
 # in the fork pins: upstream 3.7.0 with the CHX 350 operator interface, which
 # leaves machine actions such as preheating, homing and filament change to the
 # flow macros of the printer configuration, reports a flow as completed only
 # when it reaches its `echo ";; Completed"` line, which it keeps out of the
-# notifications, forgets a flow answer once its box closes, locks the
+# notifications, forgets a flow answer once its box closes, finds the step of
+# a message box by its title and mode, lets the operator close an S1 box, ticks
+# only the steps that were shown, locks the
 # interface while the machine is starting, moves the axes while a job is
 # paused, sets the bed, chamber and nozzle temperatures from their readings in
 # the header, shows and sets the fans, warns of a stalled fan on every page and
@@ -75,7 +82,9 @@
 # fork), which dsf.rrf_version installs. The boards of the CHX 350 run the
 # builds in firmware.list either way; from the package the image only uses the
 # IAP binary of the mainboard update, which is the same in 3.7.0-rc.1 and
-# 3.7.0-rc.2. Earlier builds: mp.9 of 3.7.0 restarted the full transfer when only
+# 3.7.0-rc.2. Earlier builds: mp.11 of 3.7.0 carried Duet Web Control
+# 3.7.0+mp.6, which mp.10 did too, mp.10 did not know M98.n, mp.9 of 3.7.0
+# restarted the full transfer when only
 # DCS got bad data and carried Duet Web Control 3.7.0+mp.5, mp.8 of 3.7.0
 # carried our own fix of that
 # deadlock, which also held a code back behind unbuffered codes on deeper
@@ -94,10 +103,10 @@
 # boards, mp.8 checked N line numbers in job and macro files, mp.7 RRF-style
 # checksums on numbered lines, mp.6 kept the object model in step after an SPI
 # transfer timeout.
-duetsoftwareframework sha256:835ed92c929c4b2a91f92ddebd373f5da09cd49530ee50523db1d95031d468b6 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duetsoftwareframework_3.7.0%2Bmp.10_arm64.deb
-duetcontrolserver sha256:e0df149087747a9b88bbab4f0e024222ac7674168f73048a09f7cd6099fd91e6 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duetcontrolserver_3.7.0%2Bmp.10_arm64.deb
-duetwebserver sha256:9a00d8128478c420f1160a1d4ca8c57a98fa7fb354218b0d24110edf2f98f673 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duetwebserver_3.7.0%2Bmp.10_arm64.deb
-duetpluginservice sha256:b83b304b953bd8b8c435fcc9e7ff9481185b80686811562ddf2dcf35e5519465 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duetpluginservice_3.7.0%2Bmp.10_arm64.deb
-duettools sha256:80ee610f13151e64e9a7589f04db12d16b101adf414757931412905bd18192db https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duettools_3.7.0%2Bmp.10_arm64.deb
-duetruntime sha256:093ef4eab6f8fafe4ea32439c86ac1e1c28510d2ba6d7948d85023a83c5a7359 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duetruntime_3.7.0%2Bmp.10_arm64.deb
-duetwebcontrol sha256:729b5e6a4e355552023657db6dd8f5889f86f11f79cccabc9c4674ce05892a9e https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.10/duetwebcontrol_3.7.0%2Bmp.6_all.deb
+duetsoftwareframework sha256:1237f27af5c1ec3e13ac8077cb380eda664c24e94cb13b7e77e6d87e375e2f10 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duetsoftwareframework_3.7.0%2Bmp.12_arm64.deb
+duetcontrolserver sha256:5d27e300aa68d271ad0f4dbc4b51966bbaa8cb08f9492d1fd706fc7a98b8dcf3 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duetcontrolserver_3.7.0%2Bmp.12_arm64.deb
+duetwebserver sha256:9fa10d3484d6c019b62ede7c70f3cc08ac6c7453d6e2a1434ae15518c9d1782b https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duetwebserver_3.7.0%2Bmp.12_arm64.deb
+duetpluginservice sha256:a8d445727d297c955cb20ed733fe5ca970ef4da49fb7258be4645a6ba9f47c1c https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duetpluginservice_3.7.0%2Bmp.12_arm64.deb
+duettools sha256:61cb820e1dd6ef4cbaffc675f6807aeb89f779e0c6161733c8bc3aa3db55833a https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duettools_3.7.0%2Bmp.12_arm64.deb
+duetruntime sha256:6e0f2775f2b0eea038551272840a234d449720ec8c030089e7ec790a6076bc5c https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duetruntime_3.7.0%2Bmp.12_arm64.deb
+duetwebcontrol sha256:7725fb067f06bb065168230d79283538d1956aa2561d9e5464a080e8e73b3022 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duetwebcontrol_3.7.0%2Bmp.7_all.deb
