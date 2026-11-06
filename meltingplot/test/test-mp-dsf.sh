@@ -336,13 +336,15 @@ gate_case "no control server, 10 min"      '"idle"'       inactive   committed  
 # the boot time moves on (by a fixed step, so that passes in quick succession
 # still read as restarts) and the printer starts again. M999 does the same,
 # and with fw.stuck on file the printer never becomes idle after it, with
-# fw.halts on file it halts again.
+# fw.halts on file it halts again. fw.queries counts the status queries. The
+# settling time is 0 here unless a case sets it, so one idle reading is enough.
 
 cat > "$MP_CODECONSOLE" <<'EOF'
 #!/bin/sh
 d=$(dirname "$0")
 case $2 in
    'M409 K"state.status"')
+      echo x >> "$d/fw.queries"
       if [ -s "$d/fw.status" ]; then
          s=$(head -n1 "$d/fw.status")
          [ "$(wc -l < "$d/fw.status")" -gt 1 ] && sed -i 1d "$d/fw.status"
@@ -386,7 +388,8 @@ fi
 exit "$(cat "$d/fw.rc.$n" 2>/dev/null || echo 0)"
 EOF
 chmod +x "$tmp/DuetControlServer"
-export MP_DCS="$tmp/DuetControlServer" MP_FIRMWARE_POLL=1 MP_FIRMWARE_WAIT=20
+export MP_DCS="$tmp/DuetControlServer" MP_FIRMWARE_POLL=1 MP_FIRMWARE_WAIT=20 \
+   MP_FIRMWARE_SETTLE=0 MP_FIRMWARE_SETTLE_WAIT=20
 fwscript="$here/../layer/mp-dsf.d/customize.overlay/usr/sbin/mp-dsf-firmware"
 printf '[all]\ntryboot_a_b=1\nboot_partition=2\n[tryboot]\nboot_partition=3\n' > "$MP_AUTOBOOT"
 echo 2 > "$tmp/active"
@@ -404,7 +407,7 @@ fw_case() {
    printf '%s\n' $3 > "$tmp/fw.status"
    echo $(($(date +%s) - 5000)) > "$tmp/fw.boot"
    echo 0 > "$tmp/fw.pass"
-   rm -f "$tmp/fw.title" "$tmp"/fw.out.* "$tmp"/fw.rc.*
+   rm -f "$tmp/fw.title" "$tmp/fw.queries" "$tmp"/fw.out.* "$tmp"/fw.rc.*
    _i=0
    for _a in $4; do
       _i=$((_i + 1))
@@ -459,6 +462,31 @@ MP_FIRMWARE_WAIT=3 fw_case "update, slot not committed" yes "idle" "" \
    1 "M291 S0 T,M292,M291 S1 T"
 echo 2 > "$tmp/active"
 
+# A macro the printer configuration starts by itself makes the printer read
+# busy for a while. That is waited for, within its own limit, and not reported
+# as a failed update.
+fw_queries() { wc -l < "$tmp/fw.queries"; }
+fw_case "update, busy before the flash"      yes "idle busy busy idle" "ok" \
+   0 "M291 S0 T,DCS -u,M292,M291 S1 T"
+fw_case "normal boot, busy before the flash" no  "idle busy busy idle" "ok" \
+   0 "DCS -u"
+MP_FIRMWARE_SETTLE_WAIT=2 fw_case "update, busy for good" yes "idle busy" "" \
+   1 "M291 S0 T,M292,M291 S1 T"
+check "update, busy for good, log" yes \
+   "$(grep -q 'not idle; the firmware stays as it is' "$tmp/fw.log" && echo yes || echo no)"
+# Idle after the first wait, three readings of the settling wait, and the log.
+MP_FIRMWARE_SETTLE_WAIT=2 fw_case "normal boot, busy for good" no "idle busy" "" \
+   1 ""
+check "normal boot, busy for good, gives up at its limit" 5 "$(fw_queries)"
+# Idle after the first wait, then 0, 1 and 2 seconds idle.
+MP_FIRMWARE_SETTLE=2 fw_case "normal boot, settles" no "idle" "ok" \
+   0 "DCS -u"
+check "normal boot, settles, stays idle for the time" 4 "$(fw_queries)"
+# A busy reading in between starts the count again: 0 s, busy, then 0, 1 and 2 s.
+MP_FIRMWARE_SETTLE=2 fw_case "normal boot, idle broken" no "idle idle busy idle" "ok" \
+   0 "DCS -u"
+check "normal boot, idle broken, counts anew" 6 "$(fw_queries)"
+
 # Mainboard reset on the first boot after an update: only when nothing was
 # flashed, since a flash resets the mainboard already, and never on a normal
 # boot.
@@ -471,8 +499,12 @@ fw_case "reset, normal boot"               no  "idle" "ok" \
    0 "DCS -u"
 fw_case "reset, update, flash fails"       yes "idle" "fail" \
    1 "DCS -u,M291 S1 T"
-fw_case "reset, update, busy at the reset" yes "idle idle processing" "ok" \
-   1 "DCS -u,M291 S1 T"
+fw_case "reset, update, busy at the reset" yes "idle idle busy busy idle" "ok" \
+   0 "DCS -u,M291 S0 T,M999,M291 S0 T,M292,M291 S1 T"
+MP_FIRMWARE_SETTLE_WAIT=2 fw_case "reset, update, busy for good" yes "idle idle processing" "ok" \
+   1 "DCS -u,M291 S0 T,M292,M291 S1 T"
+check "reset, update, busy for good, log" yes \
+   "$(grep -q 'the mainboard is not reset' "$tmp/fw.log" && echo yes || echo no)"
 # The reset of a halted mainboard is the reset the setting asks for.
 fw_case "reset, update, halted"            yes "halted" "ok" \
    0 "M999,M291 S0 T,DCS -u,M292,M291 S1 T"
