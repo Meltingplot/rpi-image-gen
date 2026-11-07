@@ -21,7 +21,7 @@
 # A board firmware file is not a package of the build; it goes through
 # firmware.list.
 
-# 3.7.0+mp.12: upstream v3.7-dev at 3.7.0, which no longer rejects the skip
+# 3.7.0+mp.13: upstream v3.7-dev at 3.7.0, which no longer rejects the skip
 # keyword outside G-code files and reads the layer count, the filament used,
 # the generator and the print time from the headers of more slicers (the
 # filters are in config.json, which the image puts over the printer's copy on
@@ -59,8 +59,13 @@
 # once it is queued, or with result 1 when that channel is busy, so that a
 # trigger macro need not hold the other triggers back during a blocking macro;
 # only DCS knows it, so it works from macro files and DSF clients, not from
-# M581.1 U actions or PanelDue. The packages are built with root as owner of
-# every file.
+# M581.1 U actions or PanelDue. After the firmware resets, DCS reads the
+# firmware and IAP file names of the mainboard again, which M997 and
+# `DuetControlServer -u` need to update it. Every journal line of DCS and DPS
+# carries the syslog priority of its entry, so that a flood of retry warnings
+# no longer pushes errors out of the journal, and a lost connection to the
+# firmware is reported as an error. The packages are built with root as owner
+# of every file.
 # Duet Web Control comes from our fork, 3.7.0+mp.7, the tag pkg/dwc-version
 # in the fork pins: upstream 3.7.0 with the CHX 350 operator interface, which
 # leaves machine actions such as preheating, homing and filament change to the
@@ -82,8 +87,10 @@
 # fork), which dsf.rrf_version installs. The boards of the CHX 350 run the
 # builds in firmware.list either way; from the package the image only uses the
 # IAP binary of the mainboard update, which is the same in 3.7.0-rc.1 and
-# 3.7.0-rc.2. Earlier builds: mp.11 of 3.7.0 carried Duet Web Control
-# 3.7.0+mp.6, which mp.10 did too, mp.10 did not know M98.n, mp.9 of 3.7.0
+# 3.7.0-rc.2. Earlier builds: mp.12 of 3.7.0 lost those file names after most
+# resets of the firmware and wrote every journal line at priority info, mp.11
+# carried Duet Web Control 3.7.0+mp.6, which mp.10 did too, mp.10 did not know
+# M98.n, mp.9 of 3.7.0
 # restarted the full transfer when only
 # DCS got bad data and carried Duet Web Control 3.7.0+mp.5, mp.8 of 3.7.0
 # carried our own fix of that
@@ -103,10 +110,10 @@
 # boards, mp.8 checked N line numbers in job and macro files, mp.7 RRF-style
 # checksums on numbered lines, mp.6 kept the object model in step after an SPI
 # transfer timeout.
-duetsoftwareframework sha256:1237f27af5c1ec3e13ac8077cb380eda664c24e94cb13b7e77e6d87e375e2f10 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duetsoftwareframework_3.7.0%2Bmp.12_arm64.deb
-duetcontrolserver sha256:5d27e300aa68d271ad0f4dbc4b51966bbaa8cb08f9492d1fd706fc7a98b8dcf3 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duetcontrolserver_3.7.0%2Bmp.12_arm64.deb
-duetwebserver sha256:9fa10d3484d6c019b62ede7c70f3cc08ac6c7453d6e2a1434ae15518c9d1782b https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duetwebserver_3.7.0%2Bmp.12_arm64.deb
-duetpluginservice sha256:a8d445727d297c955cb20ed733fe5ca970ef4da49fb7258be4645a6ba9f47c1c https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duetpluginservice_3.7.0%2Bmp.12_arm64.deb
-duettools sha256:61cb820e1dd6ef4cbaffc675f6807aeb89f779e0c6161733c8bc3aa3db55833a https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duettools_3.7.0%2Bmp.12_arm64.deb
-duetruntime sha256:6e0f2775f2b0eea038551272840a234d449720ec8c030089e7ec790a6076bc5c https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duetruntime_3.7.0%2Bmp.12_arm64.deb
-duetwebcontrol sha256:7725fb067f06bb065168230d79283538d1956aa2561d9e5464a080e8e73b3022 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.12/duetwebcontrol_3.7.0%2Bmp.7_all.deb
+duetsoftwareframework sha256:780aa1bce9765aff365464e2910c30694ec3496c754fc86588f94f827bcb3c80 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duetsoftwareframework_3.7.0%2Bmp.13_arm64.deb
+duetcontrolserver sha256:5ebc0b4d49c5da829d8f97401f37ebcd8c877321dc9a9de54c1276f16d4c6114 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duetcontrolserver_3.7.0%2Bmp.13_arm64.deb
+duetwebserver sha256:b90ed3c12f9be86895c43014b9b0f38d890bde564627942c993f3194f256b912 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duetwebserver_3.7.0%2Bmp.13_arm64.deb
+duetpluginservice sha256:bb29dbc319c8c9f54b71fd3a9cbe6c709256d91a1c7ed86c2bb9b8a50a0bec37 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duetpluginservice_3.7.0%2Bmp.13_arm64.deb
+duettools sha256:ae6ea26016b46e943c27d8eeba491b53a5edef0f30c4564fffb884692004d8da https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duettools_3.7.0%2Bmp.13_arm64.deb
+duetruntime sha256:009b952f0f94a34903cf5cbc3e8ed37b2d7738a89c5a1d241cc2d621a2e5f331 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duetruntime_3.7.0%2Bmp.13_arm64.deb
+duetwebcontrol sha256:6efd0701360e2aea76b814a364a45c1c703e2eea9b8dceb8d2017597648fda39 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duetwebcontrol_3.7.0%2Bmp.7_all.deb
