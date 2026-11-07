@@ -57,4 +57,9 @@ Duet3Firmware_SZP.bin sha256:330af2c9530601d03074921600b8a82075acebccf0641637e87
 # link runs as before, and a connection reset ends it. After a restart it
 # arms the first transfer 10 ms later, so that an exchange DuetControlServer
 # started on the falling TfrRdy edge of the restart cannot stall the link.
-Duet3Firmware_MB6HC.bin sha256:21c167c8f89bc27d9d0bf612b5c21b83ace2ad2150900ee7ee7b9da2b9561b52 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.7/Duet3Firmware_MB6HC.bin
+# Since 3.7.0+1.mp.8 it also decodes the extended response codes while it is
+# not connected, as after a restart, when DuetControlServer may still send
+# those of its previous connection; a restart between two exchanges used to
+# leave both sides one exchange apart until DuetControlServer ran out of
+# retries and connected again.
+Duet3Firmware_MB6HC.bin sha256:583e23b3551c549ea485aaa22ca5915d33654aca3eefd71948362c7deb96e760 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.8/Duet3Firmware_MB6HC.bin
