@@ -48,7 +48,6 @@ case $arch in
    arm64)
       mirrors="http://ports.ubuntu.com/ubuntu-ports/
 https://ftp.fau.de/ubuntu-ports/
-https://mirror.csclub.uwaterloo.ca/ubuntu-ports/
 https://mirrors.dotsrc.org/ubuntu-ports/
 https://mirrors.ocf.berkeley.edu/ubuntu-ports/" ;;
    amd64)

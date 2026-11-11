@@ -80,11 +80,11 @@ check "arm64: both Ubuntu stanzas use the list" "$ours $ours" \
 check "arm64: ESM is left alone" "" "$(diff "$tmp/esm" "$tmp/apt/sources.list.d/ubuntu-esm-apps.sources")"
 check "arm64: another repository is left alone" "" "$(diff "$tmp/ms" "$tmp/apt/sources.list.d/microsoft-prod.list")"
 check "arm64: ports mirrors, Ubuntu first" \
-   "ports.ubuntu.com ftp.fau.de mirror.csclub.uwaterloo.ca mirrors.dotsrc.org mirrors.ocf.berkeley.edu" \
+   "ports.ubuntu.com ftp.fau.de mirrors.dotsrc.org mirrors.ocf.berkeley.edu" \
    "$(mirrors)"
 check "arm64: every mirror carries a priority of its own" \
-   "priority:1 priority:2 priority:3 priority:4 priority:5" "$(priorities)"
-check "arm64: all ports paths" "5" "$(grep -c '/ubuntu-ports/' "$tmp/apt/mp-ubuntu-mirrors.list")"
+   "priority:1 priority:2 priority:3 priority:4" "$(priorities)"
+check "arm64: all ports paths" "4" "$(grep -c '/ubuntu-ports/' "$tmp/apt/mp-ubuntu-mirrors.list")"
 check "arm64: apt retries and timeouts" 'Acquire::Retries "3";' \
    "$(grep Retries "$tmp/apt/apt.conf.d/80mp-ci-mirrors")"
 
@@ -98,7 +98,7 @@ printf 'Types: deb\nURIs: http://ports.ubuntu.com/ubuntu-ports/\nSuites: noble\n
    > "$tmp/apt/sources.list.d/ubuntu.sources"
 DOWN=ubuntu.com run
 check "ubuntu.com down: Ubuntu last" \
-   "ftp.fau.de mirror.csclub.uwaterloo.ca mirrors.dotsrc.org mirrors.ocf.berkeley.edu ports.ubuntu.com" \
+   "ftp.fau.de mirrors.dotsrc.org mirrors.ocf.berkeley.edu ports.ubuntu.com" \
    "$(mirrors)"
 check "ubuntu.com down: said in the log" "1" "$(grep -c 'ports.ubuntu.com/ubuntu-ports/ does not answer' "$tmp/out")"
 
@@ -108,7 +108,7 @@ printf 'Types: deb\nURIs: http://ports.ubuntu.com/ubuntu-ports/\nSuites: noble\n
    > "$tmp/apt/sources.list.d/ubuntu.sources"
 DOWN=http run
 check "nothing answers: all stay in order" \
-   "ports.ubuntu.com ftp.fau.de mirror.csclub.uwaterloo.ca mirrors.dotsrc.org mirrors.ocf.berkeley.edu" \
+   "ports.ubuntu.com ftp.fau.de mirrors.dotsrc.org mirrors.ocf.berkeley.edu" \
    "$(mirrors)"
 check "nothing answers: warning" "1" "$(grep -c '^::warning::apt-mirrors: no Ubuntu mirror answers' "$tmp/out")"
 
