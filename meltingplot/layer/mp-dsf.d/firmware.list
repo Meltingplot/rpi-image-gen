@@ -61,5 +61,17 @@ Duet3Firmware_SZP.bin sha256:330af2c9530601d03074921600b8a82075acebccf0641637e87
 # not connected, as after a restart, when DuetControlServer may still send
 # those of its previous connection; a restart between two exchanges used to
 # leave both sides one exchange apart until DuetControlServer ran out of
-# retries and connected again.
-Duet3Firmware_MB6HC.bin sha256:583e23b3551c549ea485aaa22ca5915d33654aca3eefd71948362c7deb96e760 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.8/Duet3Firmware_MB6HC.bin
+# retries and connected again. Since 3.7.0+1.mp.9 the firmware tags every
+# packet that belongs to a code channel with the epoch of that channel, which
+# DuetSoftwareFramework 3.7.0+mp.14 and later starts anew whenever it aborts
+# the channel, and drops the packets of another epoch, so that the reply or
+# request of aborted work no longer reaches the code that comes after it. The
+# tag sits in a header field that a peer without it ignores, so with an older
+# DuetSoftwareFramework the firmware writes no tag and drops nothing. It no
+# longer refuses InvalidateChannel, applies a channel abort in the main task,
+# ends a code it passed on to the SBC when the channel is aborted or the
+# connection is lost, writes no reply of a code of an ended connection to the
+# next one, and holds the packets of a channel at the start of a connection
+# until it has read the first packet of the SBC. M122 names the last packet
+# the epoch dropped.
+Duet3Firmware_MB6HC.bin sha256:efa6b1601eba0b781cfa34cc7e27a43427ea946be55f360c7e491cbd1abd56e2 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.9/Duet3Firmware_MB6HC.bin

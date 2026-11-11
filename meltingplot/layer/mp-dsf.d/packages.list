@@ -21,7 +21,7 @@
 # A board firmware file is not a package of the build; it goes through
 # firmware.list.
 
-# 3.7.0+mp.13: upstream v3.7-dev at 3.7.0, which no longer rejects the skip
+# 3.7.0+mp.14: upstream v3.7-dev at 3.7.0, which no longer rejects the skip
 # keyword outside G-code files and reads the layer count, the filament used,
 # the generator and the print time from the headers of more slicers (the
 # filters are in config.json, which the image puts over the printer's copy on
@@ -64,8 +64,27 @@
 # `DuetControlServer -u` need to update it. Every journal line of DCS and DPS
 # carries the syslog priority of its entry, so that a flood of retry warnings
 # no longer pushes errors out of the journal, and a lost connection to the
-# firmware is reported as an error. The packages are built with root as owner
-# of every file.
+# firmware is reported as an error. DCS tags every packet of a code channel
+# with the epoch of that channel and starts a new one whenever it aborts the
+# channel, as the mainboard build in firmware.list does since 3.7.0+1.mp.9, so
+# that the reply of a code that ran into an abort no longer completes the next
+# code of the channel but is shown as a message of its own, and it drops what
+# the firmware wrote for an earlier connection. An emergency stop reaches the
+# firmware also while the closal of a macro is pending, an abort that crosses
+# a macro request or closal no longer blocks the channel or stops DCS, the
+# codes of a trigger macro are no longer held back behind other channels, a
+# delete request that names the root of the virtual SD card no longer deletes
+# all of it, and a stop of DCS waits for a running firmware update. Plugins
+# get only the commands and connection modes their manifest allows. A Python
+# plugin is started as `bash -c 'exec "$0" "$@"'` with the interpreter, its
+# script and its arguments as positional parameters, so bash no longer
+# interprets them and the plugin policy still sees bash start Python;
+# DuetPluginService refuses an executable outside the plugin's directory and
+# stops, for systemd to start it again, when DCS closes its connection. From
+# upstream come feed hold, whose status held the mainboard build does not
+# report, and the end of a job, which clears its file name from the object
+# model and is no longer reported as finished when the firmware aborted it.
+# The packages are built with root as owner of every file.
 # Duet Web Control comes from our fork, 3.7.0+mp.7, the tag pkg/dwc-version
 # in the fork pins: upstream 3.7.0 with the CHX 350 operator interface, which
 # leaves machine actions such as preheating, homing and filament change to the
@@ -87,7 +106,9 @@
 # fork), which dsf.rrf_version installs. The boards of the CHX 350 run the
 # builds in firmware.list either way; from the package the image only uses the
 # IAP binary of the mainboard update, which is the same in 3.7.0-rc.1 and
-# 3.7.0-rc.2. Earlier builds: mp.12 of 3.7.0 lost those file names after most
+# 3.7.0-rc.2. Earlier builds: mp.13 of 3.7.0 had no channel epoch and gave
+# plugins every command whatever their manifest said, mp.12 of 3.7.0 lost
+# those file names after most
 # resets of the firmware and wrote every journal line at priority info, mp.11
 # carried Duet Web Control 3.7.0+mp.6, which mp.10 did too, mp.10 did not know
 # M98.n, mp.9 of 3.7.0
@@ -110,10 +131,10 @@
 # boards, mp.8 checked N line numbers in job and macro files, mp.7 RRF-style
 # checksums on numbered lines, mp.6 kept the object model in step after an SPI
 # transfer timeout.
-duetsoftwareframework sha256:780aa1bce9765aff365464e2910c30694ec3496c754fc86588f94f827bcb3c80 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duetsoftwareframework_3.7.0%2Bmp.13_arm64.deb
-duetcontrolserver sha256:5ebc0b4d49c5da829d8f97401f37ebcd8c877321dc9a9de54c1276f16d4c6114 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duetcontrolserver_3.7.0%2Bmp.13_arm64.deb
-duetwebserver sha256:b90ed3c12f9be86895c43014b9b0f38d890bde564627942c993f3194f256b912 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duetwebserver_3.7.0%2Bmp.13_arm64.deb
-duetpluginservice sha256:bb29dbc319c8c9f54b71fd3a9cbe6c709256d91a1c7ed86c2bb9b8a50a0bec37 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duetpluginservice_3.7.0%2Bmp.13_arm64.deb
-duettools sha256:ae6ea26016b46e943c27d8eeba491b53a5edef0f30c4564fffb884692004d8da https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duettools_3.7.0%2Bmp.13_arm64.deb
-duetruntime sha256:009b952f0f94a34903cf5cbc3e8ed37b2d7738a89c5a1d241cc2d621a2e5f331 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duetruntime_3.7.0%2Bmp.13_arm64.deb
-duetwebcontrol sha256:6efd0701360e2aea76b814a364a45c1c703e2eea9b8dceb8d2017597648fda39 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.13/duetwebcontrol_3.7.0%2Bmp.7_all.deb
+duetsoftwareframework sha256:906fd9af89e6723324398266cec2f53cf8d4872c1aef88d5a9db4f9f41730ea1 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.14/duetsoftwareframework_3.7.0%2Bmp.14_arm64.deb
+duetcontrolserver sha256:af87d2f49aef0ec0f36649c47c40c49b5bb73deca720245a305ed897fb9e82d3 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.14/duetcontrolserver_3.7.0%2Bmp.14_arm64.deb
+duetwebserver sha256:b79ac4ba83af5671fd86aae65e4ccea0316ed58e69920b10d5554a5c07af2dc8 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.14/duetwebserver_3.7.0%2Bmp.14_arm64.deb
+duetpluginservice sha256:4e4764887929e2545cbdaf6f10f28e87bea5cc3dc42337f65a0c1cb0211d4772 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.14/duetpluginservice_3.7.0%2Bmp.14_arm64.deb
+duettools sha256:c694f67d80376587012b97adf830b8225c3204f86c490a8c31d6be17e132a22f https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.14/duettools_3.7.0%2Bmp.14_arm64.deb
+duetruntime sha256:269b8ac356cd73d87417de1bf195b4c9d17d4f41acf7128455cb61d235aedf06 https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.14/duetruntime_3.7.0%2Bmp.14_arm64.deb
+duetwebcontrol sha256:2cb690a06b1f323c16d3526c12da411d24a92d7aa458fcf2128ba6bdbe67541b https://github.com/Meltingplot/DuetSoftwareFramework/releases/download/v3.7.0%2Bmp.14/duetwebcontrol_3.7.0%2Bmp.7_all.deb
