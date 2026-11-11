@@ -71,6 +71,12 @@ jobs:
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           echo "Building $version (release=$release prerelease=$prerelease)"
 
+      # The runner's Ubuntu sources name ubuntu.com hosts only, and on
+      # 2026-11-11 none of them resolved. From here on apt goes through a list
+      # of mirrors and falls back to the next when one fails; see the script.
+      - name: Ubuntu mirrors
+        run: sudo meltingplot/ci/apt-mirrors.sh
+
       - name: Install dependencies
         run: |
           sudo apt-get update
