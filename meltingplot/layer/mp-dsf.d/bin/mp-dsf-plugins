@@ -190,14 +190,22 @@ PY
    # the scanners know. The build installs with a current pip and then takes
    # it out again: nothing on the device installs packages, the root is
    # read-only, and a pip that never ships needs no tracking in the SBOM.
-   chroot "$ROOT" "$plugin_dir/venv/bin/pip" install \
+   #
+   # Everything comes from PyPI alone. Raspberry Pi OS adds piwheels as an
+   # extra index in /etc/pip.conf, and pip asks every index for every
+   # package, so a piwheels outage failed the build (2026-11-11, TLS broken
+   # off on every request) although pip, dsf-python and its dependencies are
+   # pure-Python wheels on PyPI. PIP_CONFIG_FILE=/dev/null makes pip skip
+   # every configuration file.
+   local -a pip=(chroot "$ROOT" env PIP_CONFIG_FILE=/dev/null "$plugin_dir/venv/bin/pip")
+   "${pip[@]}" install --index-url https://pypi.org/simple \
       --no-cache-dir --disable-pip-version-check --upgrade pip ||
       die "pip could not be updated from PyPI"
-   chroot "$ROOT" "$plugin_dir/venv/bin/pip" install \
+   "${pip[@]}" install --index-url https://pypi.org/simple \
       --no-cache-dir --disable-pip-version-check \
       "dsf-python==${DSF_PYTHON_VERSION}" ||
       die "dsf-python ${DSF_PYTHON_VERSION} could not be installed from PyPI"
-   chroot "$ROOT" "$plugin_dir/venv/bin/pip" uninstall -y --disable-pip-version-check pip ||
+   "${pip[@]}" uninstall -y --disable-pip-version-check pip ||
       die "pip could not be removed from the virtual environment"
 
    [[ -x $ROOT$plugin_dir/venv/bin/python ]] || die "the $id virtual environment has no python"
