@@ -10,8 +10,9 @@
 # distinction is drawn here instead. An SBC plugin is started by
 # DuetPluginService either directly, or, for Python, as
 #
-#     /bin/bash -c "<plugin>/venv/bin/python <script>"
+#     /bin/bash -c 'exec "$0" "$@"' <plugin>/venv/bin/python <script> <args>
 #
+# (DSF 3.7.0+mp.14 on; before, the whole command line was the -c string),
 # so both paths lead through this profile:
 #
 #   DuetPluginService  may execute nothing that lives on writable storage, and
