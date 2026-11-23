@@ -44,7 +44,7 @@ if "@VERSION@" not in text:
 text = text.replace("@VERSION@", version)
 
 status = next((p for p in (root / "var/lib/dpkg/status",
-                           root / "usr/lib/rpi-image-gen/slot-var/lib/dpkg/status")
+                           root / "usr/share/factory/var/lib/dpkg/status")
                if p.exists()), None)
 if status is None:
     sys.exit("mp-hmi-licences: no dpkg status in the image")

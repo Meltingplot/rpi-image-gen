@@ -6,7 +6,7 @@ After=persistent.mount
 RequiresMountsFor=/bootfs /persistent
 # Before anything writes to the persistent partition or the boot partition
 # for this image, and long before the update connector could commit it.
-Before=persistent-shared-init.service slot-var-init.service mp-identity.service sysinit.target
+Before=persistent-shared-init.service slot-var-reset.service mp-identity.service sysinit.target
 ConditionPathExists=/persistent/common/etc/mp-identity
 
 [Service]

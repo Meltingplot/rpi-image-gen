@@ -2,7 +2,9 @@
 Description=Apply Meltingplot device commissioning from the boot partition
 Documentation=file:///etc/meltingplot/device.conf
 DefaultDependencies=no
-After=persistent.mount machine-id-sync.service
+# /persistent/common/etc is laid down at boot by persistent-shared-init
+# (slot-state), no longer in the image
+After=persistent.mount persistent-shared-init.service
 RequiresMountsFor=/bootfs /persistent /home
 Before=mp-hostname.service sysinit.target
 ConditionPathExists=/persistent/common/etc

@@ -10,7 +10,7 @@
 #  edits it. On every boot, before anything else, it refuses an image built
 #  for the other computer of the printer (mp-role-guard): Connect deploys any
 #  bundle to any device.
-# X-Env-Layer-Version: 1.4.0
+# X-Env-Layer-Version: 1.4.1
 # X-Env-Layer-Requires: device-user-admin
 # X-Env-Layer-RequiresProvider: systemd
 #

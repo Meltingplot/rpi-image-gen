@@ -9,7 +9,7 @@
 #  every installed package, and an index the printer's interface reads. It
 #  is written once the root filesystem is complete, so it lists exactly what
 #  the image carries and is replaced with every update.
-# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Version: 1.0.1
 # X-Env-Layer-Requires: mp-hmi-proxy
 # X-Env-Layer-RequiresProvider: systemd
 #

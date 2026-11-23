@@ -1,8 +1,10 @@
 #!/bin/sh
 # Set the hostname from the printer's display name.
 #
-# /etc/hostname sits on the read-only root, so the hostname is established on
-# every boot instead of being stored. It has to agree with the M550 machine
+# /etc/hostname comes from the read-only root on every boot (slot-state puts
+# /etc under an overlay in RAM, which keeps nothing that is not declared), so
+# the hostname is established on every boot instead of being stored. It has
+# to agree with the M550 machine
 # name: DuetControlServer compares the letters and digits of both and refuses
 # the name otherwise. The display name therefore wins, and the hostname is
 # derived from it.
