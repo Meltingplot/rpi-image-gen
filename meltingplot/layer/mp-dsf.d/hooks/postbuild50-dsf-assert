@@ -45,7 +45,7 @@ seed_unit="$ROOT/usr/lib/systemd/system/mp-dsf-seed.service"
 for d in "$SKEL"/sd/*; do
    [[ -e $d ]] || continue
    at=/opt/dsf/sd/$(basename "$d")
-   if [[ ! -d $d ]] || ! grep -qx "Path=$at" "$shared" 2>/dev/null; then
+   if [[ ! -d $d ]] || ! grep -Eqx "(Shared)?Path=$at" "$shared" 2>/dev/null; then
       bad "the seed skeleton has sd/$(basename "$d"), but $at is not a slot-shared directory, so it would be seeded into the read-only root"
    elif ! grep -Eq "^RequiresMountsFor=(.* )?$at( |$)" "$seed_unit" 2>/dev/null; then
       bad "mp-dsf-seed.service does not wait for the mount of $at, so it could seed the read-only root underneath"
