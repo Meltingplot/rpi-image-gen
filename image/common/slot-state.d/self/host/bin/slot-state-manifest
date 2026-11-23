@@ -57,7 +57,9 @@ RULES_DOC = (
     "Each key may appear any number of times. Paths are absolute: a missing leading `/`, a "
     "trailing `/` and repeated `/` are corrected. A path must not contain whitespace, `%`, "
     "`.` or `..`, must not pass through a symlink in the image, and must not overlap the persistent "
-    "directory. A path declared more than once with the same vfsop, by any files, is one entry. "
+    "directory. A `StaticPath=` may contain spaces, as it names a file the image ships, whose "
+    "name the image does not always choose; the manifest and the tmpfiles file carry them as "
+    "`\\x20`. A path declared more than once with the same vfsop, by any files, is one entry. "
     "Declaring it with different vfsops, or using an unknown key, fails the build.")
 
 # The account files, which are only consistent with each other
@@ -116,12 +118,20 @@ def inside(path, parent):
 
 
 # Leading, trailing and repeated slashes are corrected. Anything else that is
-# not a plain absolute path is rejected.
-def normalise(value):
+# not a plain absolute path is rejected. Spaces pass where allowed.
+def normalise(value, spaces=False):
     parts = [p for p in value.split("/") if p]
-    if not parts or any(p in (".", "..") or re.search(r"\s", p) for p in parts):
+    blank = r"[^\S ]" if spaces else r"\s"
+    if not parts or any(p in (".", "..") or re.search(blank, p) for p in parts):
         return None
     return "/" + "/".join(parts)
+
+
+# A path as a field of the manifest or of the tmpfiles file, which are split at
+# whitespace. systemd-tmpfiles reads C escapes in a path, so the backslash is
+# escaped as well.
+def escape(path):
+    return path.replace("\\", "\\\\").replace(" ", "\\x20")
 
 
 # Version=1 declarations, as [(key, op, path)]
@@ -133,7 +143,9 @@ def parse_v1(conf, pairs):
         op = ALIASES_V1.get(key, key)
         if op not in KEYS_V1:
             fail(f"{conf}: unknown key {key}")
-        path = normalise(value)
+        # A StaticPath= names a file the image ships, such as a profile named
+        # "PLA 1.2mm" by whoever made it, so it may contain spaces
+        path = normalise(value, spaces=op == "StaticPath")
         if not path:
             fail(f"{conf}: {key}={value}: not an absolute path")
         if "%" in path:
@@ -228,7 +240,10 @@ with manifest.open("w") as f:
     for path, (op, _, _) in entries:
         seed = "-" if op == "EarlyPersistFile" else factory(path)
         bind = "optional" if op == "SharedPath" else "-"
-        f.write(f"{op} {path} {store(path, op)} {seed} {bind}\n")
+        # Only a StaticPath= may contain spaces; the device reads no
+        # StaticPath= from the manifest
+        esc = escape if op == "StaticPath" else str
+        f.write(f"{op} {esc(path)} {esc(store(path, op))} {esc(seed)} {bind}\n")
 manifest.chmod(0o644)
 
 # Applied with systemd-tmpfiles --remove --create, which removes every R before
@@ -242,7 +257,7 @@ with tmpfiles.open("w") as f:
     f.write(f"C {perst}/home - - - - /usr/share/factory/home\n")
     for path, (op, _, _) in entries:
         if op == "StaticPath":
-            f.write(f"# {op} {path}\nR {store(path, op)}\n")
+            f.write(f"# {op} {escape(path)}\nR {escape(store(path, op))}\n")
         if op == "SharedPath":
             f.write(f"# {op} {path}\nC+ {store(path, op)} - - - - {factory(path)}\n")
 tmpfiles.chmod(0o644)
