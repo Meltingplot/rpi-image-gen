@@ -14,12 +14,17 @@
 #
 # Example:
 #   Duet3Firmware_TOOL1LC.bin sha256:0123...cdef https://github.com/Meltingplot/RepRapFirmware/releases/download/v3.7.0-rc.1+mp1/Duet3Firmware_TOOL1LC.bin
-Duet3Firmware_TOOL1LC.bin sha256:c69ea5bf0fb9d3bedbf3841f406cbdaee503857bd11087dea3cf7b728c1c44c5 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.4/Duet3Firmware_TOOL1LC.bin
-Duet3Firmware_EXP1HCL.bin sha256:312b5e0605156fb0562f57521f2585544e2e3158960b9a816288447029f5b3a8 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.4/Duet3Firmware_EXP1HCL.bin
-Duet3Firmware_SZP.bin sha256:330af2c9530601d03074921600b8a82075acebccf0641637e878ad7db817eee3 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.4/Duet3Firmware_SZP.bin
-# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0+1 (d03ff1e7b), built by
-# us against the Meltingplot library forks with a version string of its own,
-# so DuetControlServer flashes it on an image update. The firmware reports its
+# Expansion boards: Duet3Expansion 3.7-dev at upstream 3.7.0+1 (02000a7c),
+# built by us against the same library forks as the mainboard build below.
+# Since 3.7.0+1.mp.5 both sides use CANlib 608ac48, whose receivers check the
+# length of every CAN message; the message formats stay the same.
+Duet3Firmware_TOOL1LC.bin sha256:bc0f1319a782fd7f72216cd5dce9d9c77260475fdea6e78dd0bd203617bc0e50 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.5/Duet3Firmware_TOOL1LC.bin
+Duet3Firmware_EXP1HCL.bin sha256:5d0f48c888f1217ac09c1f10e37cfa76305caf05783599cb5af2e676b573099d https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.5/Duet3Firmware_EXP1HCL.bin
+Duet3Firmware_SZP.bin sha256:e06bb7b5669351940e394fa4d0320cc6b503f68f3c330c68def7d383264baae4 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.5/Duet3Firmware_SZP.bin
+# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0+1 (a507cb8f0, with
+# Duet3D's 3.7-ch at eed7cf1fc), built by us against the Meltingplot library
+# forks with a version string of its own, so DuetControlServer flashes it on
+# an image update. The firmware reports its
 # accelerometers under sensors.accelerometers, where DuetSoftwareFramework
 # 3.7.0-rc.2 and later look for them; 3.7.0-rc.1 does not. Since 3.7.0 it
 # loads the MB6HC's IAP image at 0x20458000 again, where the packaged
@@ -73,5 +78,14 @@ Duet3Firmware_SZP.bin sha256:330af2c9530601d03074921600b8a82075acebccf0641637e87
 # connection is lost, writes no reply of a code of an ended connection to the
 # next one, and holds the packets of a channel at the start of a connection
 # until it has read the first packet of the SBC. M122 names the last packet
-# the epoch dropped.
-Duet3Firmware_MB6HC.bin sha256:efa6b1601eba0b781cfa34cc7e27a43427ea946be55f360c7e491cbd1abd56e2 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.9/Duet3Firmware_MB6HC.bin
+# the epoch dropped. Since 3.7.0+1.mp.11 it carries upstream's feed hold
+# (M25.1, status held, which DuetSoftwareFramework 3.7.0+mp.14 and later
+# know; the printer configuration does not use it). G30 stops with an error
+# when the probe does not trigger, as G29 does, instead of tapping again from
+# where the axis stalled. Expansion boards on CAN0 are gone again, and the
+# current loop temperature sensor is switched off. Our fixes since mp.9 keep
+# other tasks from using freed object model data, heap memory in use by
+# another task or interrupts unmasked inside protected regions; FreeRTOS ends
+# a critical section with the interrupt mask of its caller, and a task that
+# blocks while it holds one stops in vAssertCalled, a software reset.
+Duet3Firmware_MB6HC.bin sha256:c8920953385c470cc66140d59c405ebfb746f8c9d6f67af67cd6866fced858b4 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.11/Duet3Firmware_MB6HC.bin

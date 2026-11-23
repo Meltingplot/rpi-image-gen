@@ -82,9 +82,10 @@
 # interprets them and the plugin policy still sees bash start Python;
 # DuetPluginService refuses an executable outside the plugin's directory and
 # stops, for systemd to start it again, when DCS closes its connection. From
-# upstream come feed hold, whose status held the mainboard build does not
-# report, and the end of a job, which clears its file name from the object
-# model and is no longer reported as finished when the firmware aborted it.
+# upstream come feed hold with the status held, which the mainboard build in
+# firmware.list reports since 3.7.0+1.mp.11, and the end of a job, which
+# clears its file name from the object model and is no longer reported as
+# finished when the firmware aborted it.
 # A code that fails in a macro aborts the macro before its next code runs, as
 # in RRF; before, the codes the macro had read ahead still ran. A firmware
 # reset requested together with an emergency stop completes the stop, a stop
