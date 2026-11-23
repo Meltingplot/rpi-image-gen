@@ -2,7 +2,7 @@
 # X-Env-Layer-Name: rpi-splash-screen
 # X-Env-Layer-Category: device
 # X-Env-Layer-Desc: Raspberry Pi fullscreen splash screen support with custom image configuration.
-# X-Env-Layer-Version: 2.0.0
+# X-Env-Layer-Version: 2.1.0
 # X-Env-Layer-Requires: linux-base
 #
 # X-Env-VarPrefix: splash
@@ -37,8 +37,9 @@
 ---
 mmdebstrap:
   packages:
+    # No initramfs generator of its own: the kernel brings one, and an image
+    # layout may choose dracut, which conflicts with initramfs-tools
     - rpi-splash-screen-support
-    - initramfs-tools
     - file
   customize-hooks:
     - |-
@@ -61,12 +62,34 @@ mmdebstrap:
       TEMP_IMAGE="/tmp/splash-screen-source.tga"
       cp "$SPLASH_IMAGE" "$1$TEMP_IMAGE"
       
-      # Run the configure-splash script inside the chroot
       echo "Configuring splash screen from $SPLASH_IMAGE" >&2
       
       # The kernel command line is contributed as a cmdline.d fragment by
       # this layer's own hook, so configure-splash must not edit cmdline.txt
-      if [ "$IGconf_splash_skip_image_checks" = "y" ]; then
+      if [ -d "$1/usr/lib/dracut" ]; then
+        # configure-splash only knows initramfs-tools (rpi-splash-screen-support
+        # #10). With dracut, do what it does: check the image as it does, put
+        # it where the kernel loads it from and have the initramfs carry it.
+        # customize60-dracut builds the initramfs once every layer is in place.
+        info=$(chroot "$1" file -b "$TEMP_IMAGE")
+        case $info in
+          *Targa*) ;;
+          *) echo "Error: Splash image is not a valid TGA file" >&2; exit 1 ;;
+        esac
+        if [ "$IGconf_splash_skip_image_checks" != "y" ]; then
+          printf '%s\n' "$info" | awk '
+            match($0, /[0-9]+ x [0-9]+ x [0-9]+/) {
+              found = 1
+              split(substr($0, RSTART, RLENGTH), d, " x ")
+              if (d[3] != 24) { print "Error: Splash image must be 24-bit, provided image is " d[3] " bit"; exit 1 }
+              if (d[1] > 1920 || d[2] > 1080) { print "Error: Splash image must be less than 1920 x 1080 px, provided image is " d[1] " x " d[2]; exit 1 }
+            }
+            END { if (!found) print "Warning: Could not determine image properties, please check it is a 24-bit TGA smaller than 1920x1080px" }' >&2
+        fi
+        install -D -m 0644 "$1$TEMP_IMAGE" "$1/lib/firmware/logo.tga"
+        install -d "$1/etc/dracut.conf.d"
+        echo 'install_items+=" /lib/firmware/logo.tga "' > "$1/etc/dracut.conf.d/50-splash.conf"
+      elif [ "$IGconf_splash_skip_image_checks" = "y" ]; then
         chroot $1 /usr/bin/configure-splash $TEMP_IMAGE --skip-image-checks --no-cmdline
       else
         chroot $1 /usr/bin/configure-splash $TEMP_IMAGE --no-cmdline

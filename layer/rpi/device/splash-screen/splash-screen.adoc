@@ -24,6 +24,8 @@ The splash screen layer:
 5. Updates the kernel command line with required parameters
 6. Rebuilds the initramfs with the new configuration
 
+With initramfs-tools, `configure-splash` from the package does steps 2 to 4 and 6. It does not know dracut (rpi-splash-screen-support #10), so on an image that uses dracut, such as image-rota, the layer checks the image the same way, copies it, and adds `/etc/dracut.conf.d/50-splash.conf` with `install_items+=" /lib/firmware/logo.tga "`. The initramfs is then built by `customize60-dracut` once every layer is in place.
+
 The splash screen uses the kernel's built-in `fullscreen_logo` functionality, which requires specific image formats and dimensions.
 
 == Technical Requirements
@@ -170,14 +172,15 @@ The layer requires:
 
 * `rpi-essential-base`: Provides basic system utilities
 * `rpi-splash-screen-support`: Raspberry Pi splash screen configuration tool
-* `initramfs-tools`: For initramfs generation and hooks
+* An initramfs generator, `initramfs-tools` or `dracut`. The layer installs neither: the kernel brings one, and an image layout may choose dracut, which conflicts with `initramfs-tools`.
 
 == Files Modified
 
 The layer modifies the following files in the target system:
 
 * `/lib/firmware/logo.tga`: The splash screen image
-* `/etc/initramfs-tools/hooks/splash-screen-hook.sh`: Initramfs hook
+* `/etc/initramfs-tools/hooks/splash-screen-hook.sh`: Initramfs hook (initramfs-tools)
+* `/etc/dracut.conf.d/50-splash.conf`: Puts the image in the initramfs (dracut)
 * Kernel command line (if `update_cmdline=y`)
 * Initramfs images in `/boot/firmware/`
 
