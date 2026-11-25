@@ -42,7 +42,7 @@ meltingplot/
     mp-identity.d/customize.overlay/ mp-identity.service, mp-hostname.service, mp-growfs.service + Skripte unter /usr/sbin/ (inkl. mp-set-printer-name)
     mp-watchdog.yaml (+ .d/)         Hardware-Watchdog per systemd mit 15 s, für Duet-Pi und HMI über mp-base.yaml (2026-11-03)
     mp-duet-hw.yaml                  Pi-seitige SPI-Anbindung (config.txt, spidev, sysctl)
-    mp-duet-hw.d/customize.overlay/  etc/modprobe.d/spidev.conf, etc/sysctl.d/10-panic.conf
+    mp-duet-hw.d/customize.overlay/  etc/sysctl.d/10-panic.conf (spidev.bufsiz=8192 in der Kernel-Kommandozeile)
     mp-dsf.yaml                      Duet3D-Repo, DSF-Pakete (gepinnt), Persistenz, Seeding
     mp-dsf.d/
       apt/duet3d.sources             DEB822 (X-IG-Signed-By: /usr/share/keyrings/duet3d.gpg)
@@ -162,7 +162,7 @@ Nicht übernommen aus DuetPi: dnsmasq/hostapd/proftpd/telnetd/inetd (dort ohnehi
 ### `mp-duet-hw` (Kategorie hw)
 - `Requires: rpi-boot-firmware`; `RequiresProvider: hw:device:rpi:pi5`. Paket `gpiod` (Diagnose).
 - customize-hook: `sed -i 's/^#dtparam=spi=on/dtparam=spi=on/' $1/boot/firmware/config.txt` (Pi5: SPI0 am RP1 → `/dev/spidev0.0`).
-- Overlay: `/etc/modprobe.d/spidev.conf` (`options spidev bufsiz=8192`), `/etc/sysctl.d/10-panic.conf` (`kernel.panic=1`).
+- Overlay: `/etc/sysctl.d/10-panic.conf` (`kernel.panic=1`). Den spidev-Puffer setzt `spidev.bufsiz=8192` in der Kernel-Kommandozeile; eine Datei in `/etc/modprobe.d` (wie bei DuetPi) erreicht die dracut-Initramfs nicht, die spidev schon lädt (rc.85).
 - customize-hook: `lsm=apparmor` in `/boot/firmware/cmdline.txt` einfügen (vor `rootwait`; der Slot-Postprocess schreibt nur `root=` um) – Voraussetzung für die Plugin-Sperre in `mp-dsf`. `cgroup_enable=memory` aus DuetPi wird nicht übernommen.
 
 ### `mp-dsf` (Kategorie app)
@@ -298,7 +298,7 @@ Für den Durchstich ohne HMI-Netz zusätzlich `-- IGconf_mpnet_address=… IGcon
 
 Auf dem Gerät (Pi5 an Duet3, erst SD, dann derselbe Image-Stand auf NVMe):
 - `findmnt / /boot/firmware /persistent /opt/dsf/sd/sys`: `/` erofs ro aus `/dev/disk/by-slot/active/system`, `sd/sys` bind aus `/persistent/shared/...`; `journalctl -u persistent-shared-init -u mp-dsf-seed`; `ls -ln /opt/dsf/sd/sys` → UID 992, GID 986, `config.g` vorhanden; `/opt/dsf/sd/firmware/Duet3Firmware_*.bin` vorhanden.
-- `ls -l /dev/spidev0.0 /dev/gpiochip0` (Gruppe gpio, 0660), `cat /sys/module/spidev/parameters/bufsiz` = 8192 (falls spidev built-in: `spidev.bufsiz=8192` in cmdline).
+- `ls -l /dev/spidev0.0 /dev/gpiochip0` (Gruppe gpio, 0660), `cat /sys/module/spidev/parameters/bufsiz` = 8192 (aus `spidev.bufsiz=8192` in der Kernel-Kommandozeile).
 - `systemctl status duetcontrolserver duetwebserver`; `journalctl -u duetcontrolserver` zeigt „Connection to Duet established“; DWC über `http://10.42.0.2/` und `http://<hostname>.local/`; `M115` liefert Board-Version; `journalctl -u mp-dsf-firmware` zeigt den Vergleich und ggf. den Flash („All boards are up-to-date!“ oder „Updating firmware on mainboard…“).
 - Zugang: `ssh meltingplot@10.42.0.2` nur mit Key; Passwort-Login per SSH abgelehnt (`PasswordAuthentication no`), lokaler Login am Konto gesperrt (`passwd -S meltingplot` → `L`), `sudo -n true` als `meltingplot` scheitert (seit 2026-09-28). `ssh -J meltingplot@<HMI> mpadmin@10.42.0.2` mit Nitrokey → `sudo -n true` klappt; `ssh mpadmin@127.0.0.1` und `ssh mpadmin@10.42.0.2` vom Gerät selbst (Connect-Shell) werden abgewiesen.
 - `ip a`: nur eth0 mit 10.42.0.2, kein wlan0; `resolvectl status` DNS 10.42.0.1; `timedatectl` synchron; `rfkill list` leer.
