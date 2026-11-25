@@ -7,7 +7,7 @@
 #  not sit dead, and the memory cgroup controller so the Memory* directives
 #  of the DuetControlServer unit take effect. Also turns on AppArmor, which
 #  the plugin policy relies on.
-# X-Env-Layer-Version: 1.2.0
+# X-Env-Layer-Version: 1.3.0
 # X-Env-Layer-Requires: rpi-boot-firmware
 # X-Env-Layer-RequiresProvider: hw:device:rpi:pi5
 # METAEND
@@ -24,7 +24,20 @@ mmdebstrap:
 #   rpi-boot-firmware/config.txt.d/80-mp-duet-hw
 #      dtparam=spi=on, the link to the Duet mainboard
 #   linux-base/cmdline.d/80-mp-duet-hw
-#      two kernel parameters, both as DuetPi sets them
+#      three kernel parameters; DuetPi sets the first two the same way and
+#      the spidev buffer size in /etc/modprobe.d
+#
+# spidev.bufsiz=8192: DuetControlServer exchanges up to SpiBufferSize bytes
+# per transfer (8 KiB, what RepRapFirmware requires) and stops on the first
+# transfer that does not fit ("Error 90. SPI transfer failed", EMSGSIZE),
+# while spidev allows 4 KiB by default. It is a kernel parameter rather than
+# an /etc/modprobe.d file, because the dracut initramfs (since upstream
+# 1291513) loads spidev already: udev in the initramfs binds the SPI devices
+# of the device tree, and dracut copies /etc/modprobe.d into the initramfs
+# only for host-only images. The module then keeps 4 KiB for the whole boot
+# (the parameter is read-only), and rc.85 restarted DuetControlServer in a
+# loop. kmod takes module.option= from the kernel command line wherever the
+# module is loaded, in the initramfs or later.
 #
 # lsm=apparmor: AppArmor confines DuetPluginService so third party plugins
 # cannot run code on the printer. The LSM has to be selected on the kernel
@@ -37,5 +50,5 @@ mmdebstrap:
 # DuetControlServer pages being reclaimed and re-read from the card, and
 # DuetPi enabled the controller the same day (commit ba98dbb7).
 #
-# hooks/late/preimage90-boot-check makes sure all three reached the files the
-# boot partition gets.
+# hooks/late/preimage90-boot-check makes sure SPI and the three parameters
+# reached the files the boot partition gets.

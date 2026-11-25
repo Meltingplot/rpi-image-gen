@@ -218,9 +218,9 @@ if [[ -n ${bundled[CHX350]:-} && ${bundled[CHX350]} != "$dwc_ver" ]]; then
 fi
 
 # --- boot configuration ---------------------------------------------------
-# SPI, lsm=apparmor and cgroup_enable=memory are checked by mp-duet-hw once
-# config.txt and the kernel command line are assembled, which happens after
-# this (hooks/late/preimage90-boot-check there).
+# SPI, lsm=apparmor, cgroup_enable=memory and spidev.bufsiz are checked by
+# mp-duet-hw once config.txt and the kernel command line are assembled, which
+# happens after this (hooks/late/preimage90-boot-check there).
 
 # --- shared paths ---------------------------------------------------------
 # What the image ships below the shared paths has to be put back on boot
