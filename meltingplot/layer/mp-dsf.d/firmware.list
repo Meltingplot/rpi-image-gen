@@ -14,15 +14,22 @@
 #
 # Example:
 #   Duet3Firmware_TOOL1LC.bin sha256:0123...cdef https://github.com/Meltingplot/RepRapFirmware/releases/download/v3.7.0-rc.1+mp1/Duet3Firmware_TOOL1LC.bin
-# Expansion boards: Duet3Expansion 3.7-dev at upstream 3.7.0+1 (02000a7c),
+# Expansion boards: Duet3Expansion 3.7-dev at upstream 3.7.1-rc.1 (8fe8918b),
 # built by us against the same library forks as the mainboard build below.
-# Since 3.7.0+1.mp.5 both sides use CANlib 608ac48, whose receivers check the
-# length of every CAN message; the message formats stay the same.
-Duet3Firmware_TOOL1LC.bin sha256:bc0f1319a782fd7f72216cd5dce9d9c77260475fdea6e78dd0bd203617bc0e50 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.5/Duet3Firmware_TOOL1LC.bin
-Duet3Firmware_EXP1HCL.bin sha256:5d0f48c888f1217ac09c1f10e37cfa76305caf05783599cb5af2e676b573099d https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.5/Duet3Firmware_EXP1HCL.bin
-Duet3Firmware_SZP.bin sha256:e06bb7b5669351940e394fa4d0320cc6b503f68f3c330c68def7d383264baae4 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.0%2B1.mp.5/Duet3Firmware_SZP.bin
-# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.0+1 (a507cb8f0, with
-# Duet3D's 3.7-ch at eed7cf1fc), built by us against the Meltingplot library
+# Since 3.7.0+1.mp.5 the receivers on both sides check the length of every CAN
+# message; since 3.7.1-rc.1+mp.1 both use CANlib c9120ff, whose checks no
+# longer reject valid messages. The message formats stay the same. On the
+# TOOL1LC our fixes keep ADC conversions from timing out while a TMC UART
+# transfer runs. The printer configuration reads the hotend PT1000 through
+# the TOOL1LC's second ADC (*20.temp0, the SDADC), which on the lab printer
+# removed the offset of that reading. A tool board heater no longer switches
+# off while it resyncs, and the reset data of the SAMC21 survives a reset right
+# after it was saved.
+Duet3Firmware_TOOL1LC.bin sha256:f36d7caf56da46d351124282addfd55686e96cafca569658ceaaa73721c2edf7 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.1-rc.1%2Bmp.1/Duet3Firmware_TOOL1LC.bin
+Duet3Firmware_EXP1HCL.bin sha256:1bd199593d11ccf29aa6d5d56f45b2a6d27064cdf06f20286f6299758d1c4485 https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.1-rc.1%2Bmp.1/Duet3Firmware_EXP1HCL.bin
+Duet3Firmware_SZP.bin sha256:031b337b14ac23a2881590d3f518c5a3cf1881f497988aa07d766b6a363fb3eb https://github.com/Meltingplot/Duet3Expansion/releases/download/3.7.1-rc.1%2Bmp.1/Duet3Firmware_SZP.bin
+# Mainboard: RepRapFirmware 3.7-dev at upstream 3.7.1-rc.1 (2092f4148), built
+# by us against the Meltingplot library
 # forks with a version string of its own, so DuetControlServer flashes it on
 # an image update. The firmware reports its
 # accelerometers under sensors.accelerometers, where DuetSoftwareFramework
@@ -82,10 +89,19 @@ Duet3Firmware_SZP.bin sha256:e06bb7b5669351940e394fa4d0320cc6b503f68f3c330c68def
 # (M25.1, status held, which DuetSoftwareFramework 3.7.0+mp.14 and later
 # know; the printer configuration does not use it). G30 stops with an error
 # when the probe does not trigger, as G29 does, instead of tapping again from
-# where the axis stalled. Expansion boards on CAN0 are gone again, and the
-# current loop temperature sensor is switched off. Our fixes since mp.9 keep
+# where the axis stalled. Our fixes since mp.9 keep
 # other tasks from using freed object model data, heap memory in use by
 # another task or interrupts unmasked inside protected regions; FreeRTOS ends
 # a critical section with the interrupt mask of its caller, and a task that
-# blocks while it holds one stops in vAssertCalled, a software reset.
-Duet3Firmware_MB6HC.bin sha256:c8920953385c470cc66140d59c405ebfb746f8c9d6f67af67cd6866fced858b4 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.0%2B1.mp.11/Duet3Firmware_MB6HC.bin
+# blocks while it holds one stops in vAssertCalled, a software reset. Since
+# 3.7.1-rc.1 CAN0 can be a second CAN-FD bus (M953 I0 C1), which the printer
+# configuration does not enable, M952 B0 is gone, the current loop temperature
+# sensor is gone, an aborted tool change macro ends the tool change, and M906
+# and M917 report the configured currents; M581 K selects what a trigger does,
+# next to our M581.1 actions. Our fixes since 3.7.0+1.mp.11 end the G28 or tool
+# change of a macro that the SBC aborts, stop an answer longer than a transfer
+# from being sent again for ever, keep the object model going when a global
+# variable is too long to report, keep file and macro requests from timing out
+# while the requesting task holds the object model, and stop reads and writes
+# beyond packets, binary codes and the driver data of expansion boards.
+Duet3Firmware_MB6HC.bin sha256:cfcae8271141640128d47d356d31aecbbe82e3e2d3bff90e7f4aad7220f693a1 https://github.com/Meltingplot/RepRapFirmware/releases/download/3.7.1-rc.1%2Bmp.1/Duet3Firmware_MB6HC.bin

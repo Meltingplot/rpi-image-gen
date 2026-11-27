@@ -288,9 +288,9 @@ The artefacts are the `.deb` files that the upstream packaging in the fork
 builds from the modified source, what Duet3D would have put in its archive:
 
 ```bash
-# in the fork, on the branch of the pinned generation (v3.7-dev for 3.7.0)
-# Directory.Build.props: <Version>3.7.0+mp.15</Version>
-# pkg/dwc-version:       v3.7.0+mp.8
+# in the fork, on the branch of the pinned generation (v3.7-dev for 3.7.1-rc.1)
+# Directory.Build.props: <Version>3.7.1-rc.1+mp.1</Version>
+# pkg/dwc-version:       v3.7.1-rc.1+mp.1
 pkg/build.sh --target-arch=aarch64 --packages=progs,dwc,meta deb
 ```
 
